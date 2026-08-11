@@ -203,6 +203,46 @@ func checkDrift(_ reasoning: String, done: @escaping ([Fired], Double) -> Void) 
     }.resume()
 }
 
+/// What the drift check sends, and where. Shown in the window verbatim so it is
+/// never a mystery which text left the machine.
+let CHECK_MODEL = "meta-llama/llama-3.3-70b-instruct"
+let CHECK_LABEL = "OpenRouter → Groq · " + CHECK_MODEL
+
+/// Why the drift check is or is not running, in words fit for the status bar.
+func driftStatus() -> (ready: Bool, detail: String) {
+    let triggers = loadTriggers()
+    if triggers.isEmpty { return (false, "no triggers in \((TRIGGERS_FILE as NSString).lastPathComponent)") }
+    if openRouterKey() == nil { return (false, "no API key in \(KEYFILE)") }
+    return (true, "\(triggers.count) triggers → \(CHECK_LABEL)")
+}
+
+// MARK: - Sessions
+
+struct SessionInfo {
+    let path: String
+    let id: String        // first 8 chars of the uuid
+    let project: String   // slugified cwd, as Claude Code names it
+    let modified: Date
+}
+
+/// Every session touched recently, newest first. Cheap: stat only, no parsing.
+func recentSessions(within hours: Double = 12, limit: Int = 25) -> [SessionInfo] {
+    let fm = FileManager.default
+    let cutoff = Date().addingTimeInterval(-hours * 3600)
+    var out: [SessionInfo] = []
+    for dir in (try? fm.contentsOfDirectory(atPath: PROJECTS)) ?? [] {
+        let sub = PROJECTS + "/" + dir
+        for file in (try? fm.contentsOfDirectory(atPath: sub)) ?? [] where file.hasSuffix(".jsonl") {
+            let path = sub + "/" + file
+            guard let attrs = try? fm.attributesOfItem(atPath: path),
+                  let when = attrs[.modificationDate] as? Date, when > cutoff else { continue }
+            out.append(SessionInfo(path: path, id: String(file.prefix(8)),
+                                   project: dir, modified: when))
+        }
+    }
+    return Array(out.sorted { $0.modified > $1.modified }.prefix(limit))
+}
+
 // MARK: - Single instance
 
 /// Terminate any other running thinkpeek before this one opens a window.
@@ -241,7 +281,12 @@ final class HUD: NSObject, NSApplicationDelegate {
     private var panel: NSPanel!
     private var textView: NSTextView!
     private var tailer: Tailer?
+    private var picker: NSPopUpButton!
+    private var status: NSTextField!
+    private var sessions: [SessionInfo] = []
+    private var pinned: String?              // nil = follow newest
     private var lastScan = Date.distantPast
+    private var lastPickerRefresh = Date.distantPast
     private var alertCount = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -257,7 +302,30 @@ final class HUD: NSObject, NSApplicationDelegate {
         panel.backgroundColor = BG
         panel.isReleasedWhenClosed = false
 
-        let scroll = NSScrollView(frame: panel.contentView!.bounds)
+        let content = panel.contentView!
+        let barHeight: CGFloat = 52
+
+        // Session picker: "Auto" follows whatever is newest, or pin one session
+        // so a chattier window elsewhere cannot steal the view.
+        picker = NSPopUpButton(frame: NSRect(x: 8, y: content.bounds.height - 28,
+                                             width: content.bounds.width - 16, height: 22))
+        picker.autoresizingMask = [.width, .minYMargin]
+        picker.target = self
+        picker.action = #selector(sessionPicked(_:))
+        picker.font = NSFont(name: "Menlo", size: 10)
+        content.addSubview(picker)
+
+        // Everything sent off this machine is named here, always visible.
+        status = NSTextField(labelWithString: "")
+        status.frame = NSRect(x: 11, y: content.bounds.height - 47,
+                              width: content.bounds.width - 22, height: 15)
+        status.autoresizingMask = [.width, .minYMargin]
+        status.font = NSFont(name: "Menlo", size: 9)
+        status.textColor = DIM
+        content.addSubview(status)
+
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: content.bounds.width,
+                                                height: content.bounds.height - barHeight))
         scroll.autoresizingMask = [.width, .height]
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
@@ -270,14 +338,58 @@ final class HUD: NSObject, NSApplicationDelegate {
         textView.textContainerInset = NSSize(width: 9, height: 9)
         scroll.documentView = textView
 
-        panel.contentView!.addSubview(scroll)
+        content.addSubview(scroll)
         panel.orderFrontRegardless()
 
+        refreshPicker()
+        refreshStatus()
         emit("waiting for a session…\n", ACCENT, 10, bold: true)
         Timer.scheduledTimer(withTimeInterval: POLL, repeats: true) { [weak self] _ in
             self?.tick()
         }
         tick()
+    }
+
+    // MARK: session picker
+
+    @objc private func sessionPicked(_ sender: NSPopUpButton) {
+        let i = sender.indexOfSelectedItem
+        pinned = (i == 0) ? nil : sessions[i - 1].path
+        if let pinned {
+            attach(pinned, note: "pinned")
+        } else {
+            emit("\nfollowing whichever session is newest\n", ACCENT, 10, bold: true)
+            lastScan = .distantPast          // re-pick immediately
+        }
+    }
+
+    private func refreshPicker() {
+        sessions = recentSessions()
+        let keep = pinned
+        picker.removeAllItems()
+        picker.addItem(withTitle: "Auto — newest session")
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        for s in sessions {
+            let project = s.project.hasPrefix("-") ? String(s.project.dropFirst()) : s.project
+            picker.addItem(withTitle: "\(fmt.string(from: s.modified))  \(s.id)  \(project)")
+        }
+        if let keep, let i = sessions.firstIndex(where: { $0.path == keep }) {
+            picker.selectItem(at: i + 1)
+        } else {
+            picker.selectItem(at: 0)
+        }
+    }
+
+    private func refreshStatus() {
+        let d = driftStatus()
+        status.stringValue = d.ready ? "drift check: \(d.detail)" : "drift check OFF — \(d.detail)"
+        status.textColor = d.ready ? DIM : SEALED
+    }
+
+    private func attach(_ path: String, note: String) {
+        tailer = Tailer(path: path)
+        emit("\n── session \(tailer!.session) (\(note)) ──\n", ACCENT, 10, bold: true)
     }
 
     private func styled(_ s: String, _ color: NSColor, _ size: CGFloat, bold: Bool,
@@ -332,13 +444,19 @@ final class HUD: NSObject, NSApplicationDelegate {
     }
 
     private func tick() {
-        if Date().timeIntervalSince(lastScan) > RESCAN {
-            lastScan = Date()
+        let now = Date()
+        if now.timeIntervalSince(lastPickerRefresh) > 5 {
+            lastPickerRefresh = now
+            refreshPicker()
+            refreshStatus()
+        }
+        if pinned == nil, now.timeIntervalSince(lastScan) > RESCAN {
+            lastScan = now
             if let path = newestTranscript(), path != tailer?.path {
-                tailer = Tailer(path: path)
-                emit("\n── session \(tailer!.session) ──\n", ACCENT, 10, bold: true)
+                attach(path, note: "auto")
             }
         }
+
         guard let tailer else { return }
         for block in tailer.drain() {
             let stamp = block.ts.count > 19
@@ -349,13 +467,24 @@ final class HUD: NSObject, NSApplicationDelegate {
                 emit("⟨sealed — signature only⟩\n\n", SEALED, 10, italic: true)
                 continue
             }
-            let end = emit(block.text + "\n\n", FG, 11.5)
+            let end = emit(block.text + "\n", FG, 11.5)
             // Backfilled history is not re-checked: it would alert on reasoning
-            // the user has already seen, every single launch.
-            if !block.backfilled {
-                checkDrift(block.text) { [weak self] hits, ms in
-                    guard let self, !hits.isEmpty else { return }
-                    self.showAlert(hits, ms, at: end)
+            // the user has already seen, on every launch.
+            guard !block.backfilled else { emit("\n", FG, 11.5); continue }
+
+            let state = driftStatus()
+            guard state.ready else {
+                emit("· not checked — \(state.detail)\n\n", SEALED, 9, italic: true)
+                continue
+            }
+            // Say what leaves the machine, before it leaves.
+            let at = insert("↗ sending \(block.text.count) chars to \(CHECK_LABEL)\n", DIM, 9, at: end)
+            checkDrift(block.text) { [weak self] hits, ms in
+                guard let self else { return }
+                if hits.isEmpty {
+                    _ = self.insert("↘ no drift · \(Int(ms)) ms\n\n", DIM, 9, at: at)
+                } else {
+                    self.showAlert(hits, ms, at: at)
                 }
             }
         }
@@ -376,8 +505,6 @@ if CommandLine.arguments.contains("--selftest") {
     exit(0)
 }
 
-killOtherInstances()
-
 // Headless check of the alarm path: no window, no transcript, just the model.
 if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.arguments.count {
     print("triggers: \(loadTriggers().count) from \(TRIGGERS_FILE)")
@@ -394,6 +521,8 @@ if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.
     }
     exit(finished ? 0 : 1)
 }
+
+killOtherInstances()
 
 let app = NSApplication.shared
 let hud = HUD()
