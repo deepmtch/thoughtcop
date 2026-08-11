@@ -1,11 +1,10 @@
 # thinkpeek
 
-See what Claude Code is thinking, live — and get shouted at when the thinking
-goes wrong.
+See Claude Code and Codex reasoning summaries live — and get shouted at when the
+reasoning goes wrong.
 
-Claude Code appends every message to a JSONL transcript as the turn happens, not
-when it ends. Both halves of thinkpeek tail that file and react the moment a
-`thinking` block lands on disk.
+Claude Code and Codex append live JSONL session events as turns run. thinkpeek
+tails both sources and reacts when a readable reasoning summary lands on disk.
 
 | | | |
 |---|---|---|
@@ -30,6 +29,21 @@ Claude Code writes one JSON object per line to:
 ```
 ~/.claude/projects/<slugified-cwd>/<session-uuid>.jsonl
 ```
+
+Codex tasks write rollout events to:
+
+```
+~/.codex/sessions/<year>/<month>/<day>/rollout-<timestamp>-<task-uuid>.jsonl
+```
+
+Codex readable summaries arrive as `event_msg/agent_reasoning`; task starts and
+encrypted-only reasoning records are also represented. Task names come from
+`~/.codex/session_index.jsonl`. Auto mode follows both Claude and Codex, and the
+picker labels every source explicitly.
+
+This covers Codex CLI/app agent tasks that create local rollout files. It does
+not claim access to ordinary consumer ChatGPT conversations that do not create
+those files.
 
 Assistant records carry a `message.content` array; reasoning appears as:
 
@@ -107,8 +121,9 @@ is enabled and name the exact direct provider. Every live card changes from
 ### Functional
 
 1. **Follow every active operation.** Auto mode tails every recently touched
-   transcript, including concurrent sessions and nested sub-agents. Each reasoning
-   block is labeled with its source session; a session can still be pinned manually.
+   Claude and Codex transcript, including concurrent sessions and nested Claude
+   sub-agents. Each reasoning block is labeled with its platform and source task;
+   a session can still be pinned manually.
 2. **Stream incrementally.** Tail by byte offset; never re-read the file from the
    start. New reasoning must appear within ~0.5 s of being written.
 3. **Survive partial writes.** A line still being flushed must be buffered, not

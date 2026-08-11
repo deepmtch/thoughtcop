@@ -1,4 +1,4 @@
-// thinkpeek — always-on-top window streaming Claude Code's reasoning in real time.
+// thinkpeek — always-on-top window streaming Claude and Codex reasoning summaries.
 //
 // AppKit rather than Tk: the system Tk (8.5) is deprecated on macOS 26+ and
 // renders a blank content area.
@@ -13,7 +13,9 @@ import AppKit
 import Foundation
 import Network
 
-let PROJECTS = ("~/.claude/projects" as NSString).expandingTildeInPath
+let CLAUDE_PROJECTS = ("~/.claude/projects" as NSString).expandingTildeInPath
+let CODEX_SESSIONS = ("~/.codex/sessions" as NSString).expandingTildeInPath
+let CODEX_INDEX = ("~/.codex/session_index.jsonl" as NSString).expandingTildeInPath
 let POLL = 0.2          // seconds between drains of active files
 let RESCAN = 0.5        // seconds between discovering newly active sessions
 let BACKFILL = Int.max  // selected session shows its complete reasoning history
@@ -62,7 +64,7 @@ struct UIEvent {
 func uiEvent(for block: Block) -> UIEvent {
     if block.kind == .activity {
         return UIEvent(timestamp: block.ts, kind: "activity",
-                       text: "● Claude operation started — waiting for analysis…",
+                       text: "● \(block.text)",
                        readableAnalysis: false)
     }
     if block.sealed {
@@ -70,7 +72,7 @@ func uiEvent(for block: Block) -> UIEvent {
             ? "\(block.signatureChars)-character encrypted signature received"
             : "no readable text received"
         return UIEvent(timestamp: block.ts, kind: "omitted-analysis",
-                       text: "⟨Claude omitted the readable analysis summary — \(received)⟩",
+                       text: "⟨No readable analysis summary — \(received)⟩",
                        readableAnalysis: false)
     }
     return UIEvent(timestamp: block.ts, kind: "analysis", text: block.text,
@@ -127,12 +129,24 @@ final class UIStateServer {
 }
 
 /// The transcript Claude Code wrote most recently, including nested sub-agents.
+func transcriptFiles(under root: String) -> [String] {
+    let fm = FileManager.default
+    guard let files = fm.enumerator(atPath: root) else { return [] }
+    var result: [String] = []
+    for case let relative as String in files where relative.hasSuffix(".jsonl") {
+        result.append(root + "/" + relative)
+    }
+    return result
+}
+
+func allTranscriptFiles() -> [String] {
+    transcriptFiles(under: CLAUDE_PROJECTS) + transcriptFiles(under: CODEX_SESSIONS)
+}
+
 func newestTranscript() -> String? {
     let fm = FileManager.default
-    guard let files = fm.enumerator(atPath: PROJECTS) else { return nil }
     var best: (path: String, when: Date)?
-    for case let relative as String in files where relative.hasSuffix(".jsonl") {
-        let path = PROJECTS + "/" + relative
+    for path in allTranscriptFiles() {
         guard let attrs = try? fm.attributesOfItem(atPath: path),
               let when = attrs[.modificationDate] as? Date else { continue }
         if best == nil || when > best!.when { best = (path, when) }
@@ -148,8 +162,31 @@ func blocks(in line: String) -> [Block] {
     let ts = obj["timestamp"] as? String ?? ""
     if obj["type"] as? String == "queue-operation",
        obj["operation"] as? String == "dequeue" {
-        return [Block(ts: ts, text: "Claude operation started…", sealed: false,
+        return [Block(ts: ts, text: "Claude operation started", sealed: false,
                       signatureChars: 0, kind: .activity)]
+    }
+    if obj["type"] as? String == "event_msg",
+       let payload = obj["payload"] as? [String: Any] {
+        if payload["type"] as? String == "task_started" {
+            return [Block(ts: ts, text: "Codex operation started", sealed: false,
+                          signatureChars: 0, kind: .activity)]
+        }
+        if payload["type"] as? String == "agent_reasoning" {
+            let text = (payload["text"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return [] }
+            return [Block(ts: ts, text: text, sealed: false,
+                          signatureChars: 0, kind: .thinking)]
+        }
+    }
+    if obj["type"] as? String == "response_item",
+       let payload = obj["payload"] as? [String: Any],
+       payload["type"] as? String == "reasoning",
+       let encrypted = payload["encrypted_content"] as? String,
+       !encrypted.isEmpty,
+       (payload["summary"] as? [[String: Any]] ?? []).isEmpty {
+        return [Block(ts: ts, text: "", sealed: true,
+                      signatureChars: encrypted.count, kind: .thinking)]
     }
     guard let message = obj["message"] as? [String: Any],
           let content = message["content"] as? [[String: Any]] else { return [] }
@@ -424,11 +461,42 @@ struct SessionInfo {
     let modified: Date
 }
 
-/// The name shown in Claude Code's own sidebar, so the picker matches what the
-/// user sees. Both titles are plain records in the transcript; the one the user
-/// set wins over the one the model generated. Scanned from the end — titles are
-/// written late and re-written on rename.
+func isCodexTranscript(_ path: String) -> Bool {
+    path.hasPrefix(CODEX_SESSIONS + "/")
+}
+
+func codexSessionID(from path: String) -> String {
+    let stem = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+    return String(stem.suffix(36)).lowercased()
+}
+
+private var codexTitleCache: [String: String] = [:]
+private var codexTitleCacheTime = Date.distantPast
+
+func codexTitles() -> [String: String] {
+    if Date().timeIntervalSince(codexTitleCacheTime) < 3 { return codexTitleCache }
+    codexTitleCacheTime = Date()
+    guard let text = try? String(contentsOfFile: CODEX_INDEX, encoding: .utf8) else { return [:] }
+    var result: [String: String] = [:]
+    for line in text.components(separatedBy: "\n") {
+        guard let data = line.data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let id = object["id"] as? String,
+              let title = object["thread_name"] as? String,
+              !title.isEmpty else { continue }
+        result[id.lowercased()] = title
+    }
+    codexTitleCache = result
+    return result
+}
+
+/// Match the title shown by the owning app. Claude titles live in its transcript;
+/// Codex task names live in ~/.codex/session_index.jsonl.
 func sessionTitle(of path: String) -> String? {
+    if isCodexTranscript(path) {
+        let id = codexSessionID(from: path)
+        return codexTitles()[id] ?? "task \(id.prefix(8))"
+    }
     // Title records are appended near the end. Reading only the tail avoids
     // repeatedly loading multi-megabyte transcripts on the AppKit main thread.
     guard let fh = FileHandle(forReadingAtPath: path) else { return nil }
@@ -458,10 +526,8 @@ func sessionTitle(of path: String) -> String? {
 func activeTranscriptPaths(within hours: Double = ACTIVE_HOURS) -> [String] {
     let fm = FileManager.default
     let cutoff = Date().addingTimeInterval(-hours * 3600)
-    guard let files = fm.enumerator(atPath: PROJECTS) else { return [] }
     var out: [(String, Date)] = []
-    for case let relative as String in files where relative.hasSuffix(".jsonl") {
-        let path = PROJECTS + "/" + relative
+    for path in allTranscriptFiles() {
         guard let attrs = try? fm.attributesOfItem(atPath: path),
               let when = attrs[.modificationDate] as? Date, when > cutoff else { continue }
         out.append((path, when))
@@ -474,10 +540,8 @@ func activeTranscriptPaths(within hours: Double = ACTIVE_HOURS) -> [String] {
 /// so analysis written between discovery scans is still delivered exactly once.
 func transcriptSizes() -> [String: UInt64] {
     let fm = FileManager.default
-    guard let files = fm.enumerator(atPath: PROJECTS) else { return [:] }
     var out: [String: UInt64] = [:]
-    for case let relative as String in files where relative.hasSuffix(".jsonl") {
-        let path = PROJECTS + "/" + relative
+    for path in allTranscriptFiles() {
         guard let attrs = try? fm.attributesOfItem(atPath: path),
               let size = attrs[.size] as? NSNumber else { continue }
         out[path] = size.uint64Value
@@ -500,21 +564,30 @@ func sameTranscript(_ lhs: String, _ rhs: String) -> Bool {
     lhs.caseInsensitiveCompare(rhs) == .orderedSame
 }
 
-/// Every session touched recently, newest first. Cheap: stat only, no parsing.
+func platformName(for path: String) -> String {
+    isCodexTranscript(path) ? "Codex" : "Claude"
+}
+
+func sessionID(for path: String) -> String {
+    if isCodexTranscript(path) { return String(codexSessionID(from: path).prefix(8)) }
+    return String((path as NSString).lastPathComponent.prefix(8))
+}
+
+/// Every Claude and Codex session touched recently, newest first.
 func recentSessions(within hours: Double = 12, limit: Int = 25) -> [SessionInfo] {
     let fm = FileManager.default
     let cutoff = Date().addingTimeInterval(-hours * 3600)
-    var out: [SessionInfo] = []
-    for dir in (try? fm.contentsOfDirectory(atPath: PROJECTS)) ?? [] {
-        let sub = PROJECTS + "/" + dir
-        for file in (try? fm.contentsOfDirectory(atPath: sub)) ?? [] where file.hasSuffix(".jsonl") {
-            let path = sub + "/" + file
-            guard let attrs = try? fm.attributesOfItem(atPath: path),
-                  let when = attrs[.modificationDate] as? Date, when > cutoff else { continue }
-            out.append(SessionInfo(path: path, id: String(file.prefix(8)),
-                                   title: sessionTitle(of: path) ?? "untitled",
-                                   project: dir, modified: when))
-        }
+    var newestByRoot: [String: Date] = [:]
+    for path in allTranscriptFiles() {
+        guard let attrs = try? fm.attributesOfItem(atPath: path),
+              let when = attrs[.modificationDate] as? Date, when > cutoff else { continue }
+        let root = rootSessionPath(for: path)
+        if newestByRoot[root] == nil || when > newestByRoot[root]! { newestByRoot[root] = when }
+    }
+    let out = newestByRoot.map { path, when in
+        SessionInfo(path: path, id: sessionID(for: path),
+                    title: sessionTitle(of: path) ?? "untitled",
+                    project: platformName(for: path), modified: when)
     }
     return Array(out.sorted { $0.modified > $1.modified }.prefix(limit))
 }
@@ -535,8 +608,13 @@ func killOtherInstances() {
     pgrep.standardOutput = pipe
     pgrep.standardError = Pipe()
     guard (try? pgrep.run()) != nil else { return }
+    let deadline = Date().addingTimeInterval(0.5)
+    while pgrep.isRunning, Date() < deadline { usleep(10_000) }
+    guard !pgrep.isRunning else {
+        pgrep.terminate()
+        return
+    }
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    pgrep.waitUntilExit()
 
     let others = (String(data: data, encoding: .utf8) ?? "")
         .split(separator: "\n")
@@ -780,7 +858,8 @@ final class HUD: NSObject, NSApplicationDelegate {
         api.start()
         refreshPicker()
         refreshStatus()
-        addSystemCard("Watching all active Claude sessions", detail: "New analysis appears here automatically.")
+        addSystemCard("Watching active Claude and Codex sessions",
+                      detail: "New reasoning summaries appear here automatically.")
         Timer.scheduledTimer(withTimeInterval: POLL, repeats: true) { [weak self] _ in
             self?.tick()
         }
@@ -903,7 +982,7 @@ final class HUD: NSObject, NSApplicationDelegate {
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm"
         for s in sessions {
-            picker.addItem(withTitle: "\(fmt.string(from: s.modified))  \(s.title)")
+            picker.addItem(withTitle: "\(fmt.string(from: s.modified))  \(s.project) · \(s.title)")
             names[s.path] = s.title
         }
         if let keep, let i = sessions.firstIndex(where: { sameTranscript($0.path, keep) }) {
@@ -921,9 +1000,10 @@ final class HUD: NSObject, NSApplicationDelegate {
 
     private func sourceName(for path: String) -> String {
         let root = rootSessionPath(for: path)
-        let rootID = String((root as NSString).lastPathComponent.prefix(8))
-        let title = names[root] ?? sessionTitle(of: root) ?? rootID
-        names[root] = title
+        let rootID = sessionID(for: root)
+        let rawTitle = names[root] ?? sessionTitle(of: root) ?? rootID
+        names[root] = rawTitle
+        let title = "\(platformName(for: root)) · \(rawTitle)"
         guard root != path else { return title }
         let agent = String((path as NSString).lastPathComponent
             .replacingOccurrences(of: "agent-", with: "").prefix(8))
@@ -968,7 +1048,7 @@ final class HUD: NSObject, NSApplicationDelegate {
         card.setAlert("⚠ Drift detected · \(Int(ms)) ms\n\(reasons)")
         NSSound.beep()
         alertCount += 1
-        panel.title = "⚠ Claude reasoning — \(alertCount)"
+        panel.title = "⚠ AI reasoning — \(alertCount)"
         apiEvents.append([
             "kind": "drift-alert", "text": hits.map(\.trigger).joined(separator: "; "),
             "latencyMs": Int(ms),
@@ -1093,13 +1173,15 @@ if let i = CommandLine.arguments.firstIndex(of: "--ui-json"),
 if CommandLine.arguments.contains("--sessions") {
     let fmt = DateFormatter(); fmt.dateFormat = "HH:mm"
     print("Auto — all active sessions")
-    for s in recentSessions() { print("\(fmt.string(from: s.modified))  \(s.title)") }
+    for s in recentSessions() {
+        print("\(fmt.string(from: s.modified))  \(s.project) · \(s.title)")
+    }
     exit(0)
 }
 
 if CommandLine.arguments.contains("--selftest") {
     guard let path = newestTranscript() else {
-        FileHandle.standardError.write("no transcripts under \(PROJECTS)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("no Claude or Codex transcripts found\n".data(using: .utf8)!)
         exit(1)
     }
     print("active: \(path)")
