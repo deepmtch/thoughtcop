@@ -221,8 +221,28 @@ func driftStatus() -> (ready: Bool, detail: String) {
 struct SessionInfo {
     let path: String
     let id: String        // first 8 chars of the uuid
+    let title: String     // what the sidebar calls it
     let project: String   // slugified cwd, as Claude Code names it
     let modified: Date
+}
+
+/// The name shown in Claude Code's own sidebar, so the picker matches what the
+/// user sees. Both titles are plain records in the transcript; the one the user
+/// set wins over the one the model generated. Scanned from the end — titles are
+/// written late and re-written on rename.
+func sessionTitle(of path: String) -> String? {
+    guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+    var custom: String?, ai: String?
+    for line in text.components(separatedBy: "\n").reversed() {
+        guard line.contains("-title\""),
+              let data = line.data(using: .utf8),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { continue }
+        if custom == nil, let t = obj["customTitle"] as? String { custom = t }
+        if ai == nil, let t = obj["aiTitle"] as? String { ai = t }
+        if custom != nil { break }
+    }
+    return custom ?? ai
 }
 
 /// Every session touched recently, newest first. Cheap: stat only, no parsing.
@@ -237,6 +257,7 @@ func recentSessions(within hours: Double = 12, limit: Int = 25) -> [SessionInfo]
             guard let attrs = try? fm.attributesOfItem(atPath: path),
                   let when = attrs[.modificationDate] as? Date, when > cutoff else { continue }
             out.append(SessionInfo(path: path, id: String(file.prefix(8)),
+                                   title: sessionTitle(of: path) ?? "untitled",
                                    project: dir, modified: when))
         }
     }
@@ -371,8 +392,7 @@ final class HUD: NSObject, NSApplicationDelegate {
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm"
         for s in sessions {
-            let project = s.project.hasPrefix("-") ? String(s.project.dropFirst()) : s.project
-            picker.addItem(withTitle: "\(fmt.string(from: s.modified))  \(s.id)  \(project)")
+            picker.addItem(withTitle: "\(fmt.string(from: s.modified))  \(s.title)")
         }
         if let keep, let i = sessions.firstIndex(where: { $0.path == keep }) {
             picker.selectItem(at: i + 1)
@@ -389,7 +409,9 @@ final class HUD: NSObject, NSApplicationDelegate {
 
     private func attach(_ path: String, note: String) {
         tailer = Tailer(path: path)
-        emit("\n── session \(tailer!.session) (\(note)) ──\n", ACCENT, 10, bold: true)
+        let name = sessionTitle(of: path) ?? tailer!.session
+        emit("\n── \(name) (\(note)) ──\n", ACCENT, 10, bold: true)
+        panel.title = name
     }
 
     private func styled(_ s: String, _ color: NSColor, _ size: CGFloat, bold: Bool,
@@ -492,6 +514,13 @@ final class HUD: NSObject, NSApplicationDelegate {
 }
 
 // MARK: - Entry point
+
+if CommandLine.arguments.contains("--sessions") {
+    let fmt = DateFormatter(); fmt.dateFormat = "HH:mm"
+    print("Auto — newest session")
+    for s in recentSessions() { print("\(fmt.string(from: s.modified))  \(s.title)") }
+    exit(0)
+}
 
 if CommandLine.arguments.contains("--selftest") {
     guard let path = newestTranscript() else {
