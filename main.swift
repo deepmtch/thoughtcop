@@ -863,7 +863,8 @@ final class HUD: NSObject, NSApplicationDelegate {
         Timer.scheduledTimer(withTimeInterval: POLL, repeats: true) { [weak self] _ in
             self?.tick()
         }
-        tick()
+        // Let AppKit present the first frame before any transcript backfill.
+        // The repeating timer performs the first scan after POLL seconds.
     }
 
     private func publishAPI() {
@@ -919,13 +920,16 @@ final class HUD: NSObject, NSApplicationDelegate {
     }
 
     @discardableResult
-    private func addCard(source: String, event: UIEvent) -> EventCard {
-        let follow = nearBottom() || feedStack.arrangedSubviews.isEmpty
+    private func addCard(source: String, event: UIEvent,
+                         deferScrollAndLayout: Bool = false) -> EventCard {
+        let follow = !deferScrollAndLayout &&
+            (nearBottom() || feedStack.arrangedSubviews.isEmpty)
         let card = EventCard(source: source, time: displayTime(event.timestamp), event: event)
         feedStack.addArrangedSubview(card)
         card.widthAnchor.constraint(equalTo: feedStack.widthAnchor,
                                     constant: -feedStack.edgeInsets.left - feedStack.edgeInsets.right)
             .isActive = true
+        if deferScrollAndLayout { return card }
         feedView.layoutSubtreeIfNeeded()
         if follow {
             DispatchQueue.main.async { [weak self] in self?.scrollToLatest(nil) }
@@ -1073,6 +1077,7 @@ final class HUD: NSObject, NSApplicationDelegate {
             arrived += tailer.drain().map { (path, $0) }
         }
         arrived.sort { $0.block.ts < $1.block.ts }
+        let isInitialHistoryBatch = arrived.count > 20 && feedStack.arrangedSubviews.count <= 1
         for event in arrived {
             let block = event.block
             let source = sourceName(for: event.path)
@@ -1081,7 +1086,8 @@ final class HUD: NSObject, NSApplicationDelegate {
             var apiItem = ui.json
             apiItem["source"] = source
             apiEvents.append(apiItem)
-            let card = addCard(source: source, event: ui)
+            let card = addCard(source: source, event: ui,
+                               deferScrollAndLayout: isInitialHistoryBatch)
             if ui.kind == "activity" {
                 continue
             }
@@ -1129,6 +1135,10 @@ final class HUD: NSObject, NSApplicationDelegate {
                     self.publishAPI()
                 }
             }
+        }
+        if isInitialHistoryBatch {
+            feedView.layoutSubtreeIfNeeded()
+            scrollToLatest(nil)
         }
         publishAPI()
     }
