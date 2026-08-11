@@ -1,19 +1,26 @@
 # thinkpeek
 
-An always-on-top macOS window that streams Claude Code's reasoning in real time.
+See what Claude Code is thinking, live — and get shouted at when the thinking
+goes wrong.
 
 Claude Code appends every message to a JSONL transcript as the turn happens, not
-when it ends. `thinkpeek` tails the active transcript and renders each `thinking`
-block the moment it lands on disk.
+when it ends. Both halves of thinkpeek tail that file and react the moment a
+`thinking` block lands on disk.
+
+| | | |
+|---|---|---|
+| **`thinkpeek`** | always-on-top window | shows the reasoning |
+| **`watch.py`** | drift alarm | shouts when it matches your triggers |
 
 ```bash
 swiftc -O -swift-version 5 -o thinkpeek main.swift   # build once
-./thinkpeek
+./thinkpeek                                          # the window
+python3 watch.py --project /private/tmp -v           # the alarm (second terminal)
 ```
 
-Swift/AppKit, no dependencies. An earlier Python/Tk version is gone: the system
-Tk is 8.5, deprecated on macOS 26+, and rendered a blank white content area —
-window and title drew, content never did. See [History](#history).
+Swift/AppKit + stdlib Python, no dependencies. **Nothing is ever written under
+`~/.claude/`** — that directory is Claude Code's, and thinkpeek only ever reads
+`~/.claude/projects/`.
 
 ## What it reads
 
@@ -42,6 +49,30 @@ Observed inside a single unfinished turn: the transcript grew 50,350 → 64,814 
 that preceded each call was already on disk, timestamped, before the turn's reply
 was sent. Per-record `timestamp` fields advance monotonically within the turn.
 
+## The drift alarm
+
+`watch.py` sends each new reasoning block, plus your `triggers.txt`, to a very
+fast model and fires a terminal banner + bell + macOS notification if anything
+matches — typically 300–550 ms after the reasoning hits disk, well before the
+turn ends.
+
+`triggers.txt` is the whole configuration: one plain-English rule per line, `#`
+for comments, re-read on every check so edits take effect with no restart.
+
+```
+Claude is guessing or assuming instead of verifying against the actual code
+Claude is about to run a destructive or irreversible command (rm -rf, force push)
+Claude misunderstood the request and is solving a different problem
+```
+
+Backend is Cerebras direct when its key works, otherwise OpenRouter pinned to
+Groq's `llama-3.3-70b` — measured fastest *and* most accurate of 8 candidates
+(325 ms median; `gpt-oss-120b`/Cerebras 504 ms, `gemini-2.5-flash-lite` 584 ms,
+`claude-haiku-4.5` 2308 ms). Benchmarks in `bench/`.
+
+Keys are read from `/tmp/key` (line 1 OpenRouter, line 2 Cerebras) inside the
+process only — never printed, never logged, never written to `alerts.log`.
+
 ## Requirements
 
 ### Functional
@@ -61,7 +92,11 @@ was sent. Per-record `timestamp` fields advance monotonically within the turn.
    never as empty space — the user must be able to tell "Claude thought nothing"
    from "the content was not persisted".
 7. **Always on top,** across Spaces and over full-screen apps, without stealing focus.
-8. **Read-only.** Never write to, lock, or truncate a transcript.
+8. **Read-only.** Never write to, lock, or truncate a transcript, and never
+   create anything under `~/.claude/`.
+9. **Never silently drop a block.** A reasoning block that arrives split across
+   two writes must still be shown and still be scored — a missed block is a
+   missed alarm.
 
 ### Non-functional
 
@@ -83,6 +118,13 @@ prints the active transcript and its last 5 reasoning blocks — no window invol
 Engine tests cover: backfill, live append, sealed-block flagging, partial-line
 safety, and partial-line rejoin. All 5 pass against a real transcript.
 
+For the alarm:
+
+```bash
+python3 watch.py --selftest                     # backend, model, latency, triggers
+python3 watch.py --once "I'll rm -rf the build dir without checking"
+```
+
 ## History
 
 The first implementation was Python + Tk, chosen for zero-install (system Python
@@ -98,7 +140,14 @@ macOS 27 with Tk 8.5 (a 2009-era Aqua build): the window chrome draws, the
 content area does not. Not fixable from the Python side, so the UI was rewritten
 in AppKit. The tailing logic was ported unchanged — it was never the problem.
 
-Two things made this slow to diagnose and are worth remembering: `tk.Tk()` blocks
+The drift alarm was built separately, in `~/.claude/reasoning-watch/`, and moved
+here. Two bugs came with it: it wrote its own state into `~/.claude/`, and its
+tailer called `splitlines()` on each chunk while advancing the file offset — so a
+record still being flushed parsed as truncated JSON and was **silently dropped
+forever**. Reproduced against the pre-fix copy (block lost), fixed by holding the
+trailing partial line in a buffer, re-tested (block scored).
+
+Two things made the window bug slow to diagnose and are worth remembering: `tk.Tk()` blocks
 forever from a sandboxed/background shell (ignoring even `SIGALRM`), and
 `screencapture` there fails with *"could not create image from display"*. Any GUI
 change has to be verified by launching from a real Terminal in an Aqua session.
