@@ -15,6 +15,7 @@ when it ends. Both halves of thinkpeek tail that file and react the moment a
 ```bash
 swiftc -O -swift-version 5 -o thinkpeek main.swift   # build once
 ./thinkpeek                                          # the window
+./thinkpeek --local-only                             # never send reasoning externally
 python3 watch.py --project /private/tmp -v           # the alarm (second terminal)
 ```
 
@@ -38,9 +39,29 @@ Assistant records carry a `message.content` array; reasoning appears as:
 
 **The stored text is Claude's *summarized* reasoning, not raw chain-of-thought.**
 A 250-character `thinking` string can represent a much longer reasoning pass, and
-some blocks arrive with `thinking: ""` and only a 2,600-char opaque `signature` —
-those are rendered as `⟨sealed — signature only⟩`. thinkpeek shows exactly what is
-on disk; it cannot recover what was never written.
+some blocks arrive with `thinking: ""` and only an opaque `signature`. Opus 5
+does this by default unless Claude Code is configured to request summaries:
+
+```json
+{"showThinkingSummaries": true}
+```
+
+Add that key to `~/.claude/settings.json`. Existing omitted blocks cannot be
+recovered retroactively. thinkpeek reports operation start immediately and then
+shows either the readable summary or an explicit omitted-summary marker.
+
+## Native window
+
+The AppKit window is a resizable, always-on-top card feed rather than a terminal
+view. It loads the complete reasoning history for the selected session, keeps all
+text selectable, and scrolls normally. Live events follow the bottom only while
+you are already near it; if you scroll upward, a **Latest** counter reports new
+items without moving your reading position.
+
+Auto mode follows every active session and nested agent. Use the session picker
+to pin one session and inspect its complete history. Cards show the local time,
+source session, readable summary, and a clear marker when Claude persisted only
+an encrypted signature.
 
 ### Evidence the writes are live
 
@@ -65,29 +86,37 @@ Claude is about to run a destructive or irreversible command (rm -rf, force push
 Claude misunderstood the request and is solving a different problem
 ```
 
-Backend is Cerebras direct when its key works, otherwise OpenRouter pinned to
-Groq's `llama-3.3-70b` — measured fastest *and* most accurate of 8 candidates
-(325 ms median; `gpt-oss-120b`/Cerebras 504 ms, `gemini-2.5-flash-lite` 584 ms,
-`claude-haiku-4.5` 2308 ms). Benchmarks in `bench/`.
+The integrated window calls providers directly: Groq first, then Cerebras as a
+fallback when both are configured. There is no OpenRouter intermediary. Copy the
+example and add one or both keys:
 
-Keys are read from `/tmp/key` (line 1 OpenRouter, line 2 Cerebras) inside the
-process only — never printed, never logged, never written to `alerts.log`.
+```bash
+cp .env.example .env
+# edit .env: GROQ_API_KEY=... and/or CEREBRAS_API_KEY=...
+./thinkpeek --drift-status
+```
+
+`.env` is ignored by git; `.env.example` contains only empty placeholders and
+model defaults. Normal launches read it and `--local-only` is the explicit
+no-network mode. The status line and `/ui` API report whether external analysis
+is enabled and name the exact direct provider. Every live card changes from
+**Sending…** to either **AI checked**, **Drift detected**, or **AI check failed**.
 
 ## Requirements
 
 ### Functional
 
-1. **Follow the active session.** Poll `~/.claude/projects/*/*.jsonl` and attach to
-   the most recently modified file. Re-check every 2 s and switch automatically when
-   the user moves to a different session — no restart, no configuration.
+1. **Follow every active operation.** Auto mode tails every recently touched
+   transcript, including concurrent sessions and nested sub-agents. Each reasoning
+   block is labeled with its source session; a session can still be pinned manually.
 2. **Stream incrementally.** Tail by byte offset; never re-read the file from the
    start. New reasoning must appear within ~0.5 s of being written.
 3. **Survive partial writes.** A line still being flushed must be buffered, not
    parsed as truncated JSON, and must render correctly once the newline arrives.
 4. **Survive truncation/rotation.** If the file shrinks below the current offset,
    reset to 0 rather than seeking past the end.
-5. **Backfill on attach.** Show the last 3 reasoning blocks so the window is never
-   empty on launch.
+5. **Complete history on attach.** Load every reasoning block for a pinned or
+   selected session so the full conversation remains inspectable and scrollable.
 6. **Distinguish sealed blocks.** Signature-only reasoning is displayed as such,
    never as empty space — the user must be able to tell "Claude thought nothing"
    from "the content was not persisted".
@@ -107,7 +136,7 @@ process only — never printed, never logged, never written to `alerts.log`.
 
 ## Testing
 
-The tailing engine is testable headlessly; the window is not.
+The tailing engine and the actual native window presentation are both testable.
 
 ```bash
 ./thinkpeek --selftest
@@ -117,6 +146,22 @@ prints the active transcript and its last 5 reasoning blocks — no window invol
 
 Engine tests cover: backfill, live append, sealed-block flagging, partial-line
 safety, and partial-line rejoin. All 5 pass against a real transcript.
+
+The window presentation is also exposed as a headless JSON API. The AppKit
+renderer and automated tests consume the same `UIEvent` objects:
+
+```bash
+./thinkpeek --ui-json ~/.claude/projects/<project>/<session>.jsonl
+```
+
+The running window publishes the state it actually consumed at the local,
+read-only endpoint `http://127.0.0.1:17321/ui` (override with
+`THINKPEEK_API_PORT`). This makes window title, selection, status, analysis,
+omitted blocks, activity, and drift results assertable without screen capture.
+The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
+by the running AppKit window, so layout and scrolling can be checked end to end.
+Use `./thinkpeek --transcript /absolute/session.jsonl` to pin a deterministic
+input for an end-to-end UI test.
 
 For the alarm:
 

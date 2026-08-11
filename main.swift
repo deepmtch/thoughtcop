@@ -4,16 +4,27 @@
 // renders a blank content area.
 //
 //   swiftc -O -swift-version 5 -o thinkpeek main.swift
-//   ./thinkpeek            # normal
-//   ./thinkpeek --selftest # parse-only, no window
+//   ./thinkpeek                         # drift analysis using .env
+//   ./thinkpeek --local-only            # no external reasoning upload
+//   ./thinkpeek --selftest              # parse-only, no window
+//   ./thinkpeek --drift-status          # print configured analysis mode
 
 import AppKit
 import Foundation
+import Network
 
 let PROJECTS = ("~/.claude/projects" as NSString).expandingTildeInPath
-let POLL = 0.4          // seconds between drains of the active file
-let RESCAN = 2.0        // seconds between re-picking the active session
-let BACKFILL = 3        // reasoning blocks of history shown on attach
+let POLL = 0.2          // seconds between drains of active files
+let RESCAN = 0.5        // seconds between discovering newly active sessions
+let BACKFILL = Int.max  // selected session shows its complete reasoning history
+let ACTIVE_HOURS = 12.0 // auto mode watches every transcript touched in this window
+let API_PORT = UInt16(ProcessInfo.processInfo.environment["THINKPEEK_API_PORT"] ?? "17321") ?? 17321
+let LOCAL_ONLY = CommandLine.arguments.contains("--local-only")
+let INITIAL_TRANSCRIPT: String? = {
+    guard let i = CommandLine.arguments.firstIndex(of: "--transcript"),
+          i + 1 < CommandLine.arguments.count else { return nil }
+    return CommandLine.arguments[i + 1]
+}()
 
 let BG = NSColor(srgbRed: 0.07, green: 0.08, blue: 0.10, alpha: 1)
 let FG = NSColor(srgbRed: 0.84, green: 0.86, blue: 0.89, alpha: 1)
@@ -25,26 +36,106 @@ let ALERT = NSColor(srgbRed: 0.95, green: 0.33, blue: 0.31, alpha: 1)
 // MARK: - Transcript reading
 
 struct Block {
+    enum Kind { case activity, thinking }
     let ts: String
     let text: String
     let sealed: Bool
+    let signatureChars: Int
+    let kind: Kind
     var backfilled = false      // history shown on attach; never re-alerted
 }
 
-/// The session Claude Code is writing to right now: newest .jsonl under any project.
+/// Stable presentation API shared by the AppKit window and headless tests.
+/// If this payload is correct, the window receives the exact same text/kind.
+struct UIEvent {
+    let timestamp: String
+    let kind: String
+    let text: String
+    let readableAnalysis: Bool
+
+    var json: [String: Any] {
+        ["timestamp": timestamp, "kind": kind, "text": text,
+         "readableAnalysis": readableAnalysis]
+    }
+}
+
+func uiEvent(for block: Block) -> UIEvent {
+    if block.kind == .activity {
+        return UIEvent(timestamp: block.ts, kind: "activity",
+                       text: "● Claude operation started — waiting for analysis…",
+                       readableAnalysis: false)
+    }
+    if block.sealed {
+        let received = block.signatureChars > 0
+            ? "\(block.signatureChars)-character encrypted signature received"
+            : "no readable text received"
+        return UIEvent(timestamp: block.ts, kind: "omitted-analysis",
+                       text: "⟨Claude omitted the readable analysis summary — \(received)⟩",
+                       readableAnalysis: false)
+    }
+    return UIEvent(timestamp: block.ts, kind: "analysis", text: block.text,
+                   readableAnalysis: true)
+}
+
+/// Local read-only API for the running window. Automated tests can inspect the
+/// actual state AppKit consumed instead of relying on screenshots or OCR.
+final class UIStateServer {
+    private let lock = NSLock()
+    private var body = Data("{\"schemaVersion\":1,\"ready\":false}".utf8)
+    private var listener: NWListener?
+    var captureHandler: (() -> Data?)?
+
+    func publish(_ object: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: object,
+                                                       options: [.sortedKeys]) else { return }
+        lock.lock(); body = data; lock.unlock()
+    }
+
+    func start() {
+        guard let port = NWEndpoint.Port(rawValue: API_PORT),
+              let listener = try? NWListener(using: .tcp, on: port) else { return }
+        self.listener = listener
+        listener.newConnectionHandler = { [weak self] connection in
+            connection.start(queue: DispatchQueue.global(qos: .utility))
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) {
+                [weak self] request, _, _, _ in
+                guard let self else { connection.cancel(); return }
+                let wantsImage = request.flatMap { String(data: $0, encoding: .utf8) }?
+                    .hasPrefix("GET /screenshot ") == true
+                if wantsImage {
+                    DispatchQueue.main.async {
+                        let image = self.captureHandler?() ?? Data()
+                        self.send(connection, payload: image, type: "image/png")
+                    }
+                    return
+                }
+                self.lock.lock(); let payload = self.body; self.lock.unlock()
+                self.send(connection, payload: payload, type: "application/json")
+            }
+        }
+        listener.start(queue: DispatchQueue(label: "thinkpeek.ui-api"))
+    }
+
+    private func send(_ connection: NWConnection, payload: Data, type: String) {
+        let header = "HTTP/1.1 200 OK\r\nContent-Type: \(type)\r\n" +
+            "Content-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
+        var response = Data(header.utf8); response.append(payload)
+        connection.send(content: response, completion: .contentProcessed { _ in
+            connection.cancel()
+        })
+    }
+}
+
+/// The transcript Claude Code wrote most recently, including nested sub-agents.
 func newestTranscript() -> String? {
     let fm = FileManager.default
-    guard let dirs = try? fm.contentsOfDirectory(atPath: PROJECTS) else { return nil }
+    guard let files = fm.enumerator(atPath: PROJECTS) else { return nil }
     var best: (path: String, when: Date)?
-    for dir in dirs {
-        let sub = PROJECTS + "/" + dir
-        guard let files = try? fm.contentsOfDirectory(atPath: sub) else { continue }
-        for file in files where file.hasSuffix(".jsonl") {
-            let path = sub + "/" + file
-            guard let attrs = try? fm.attributesOfItem(atPath: path),
-                  let when = attrs[.modificationDate] as? Date else { continue }
-            if best == nil || when > best!.when { best = (path, when) }
-        }
+    for case let relative as String in files where relative.hasSuffix(".jsonl") {
+        let path = PROJECTS + "/" + relative
+        guard let attrs = try? fm.attributesOfItem(atPath: path),
+              let when = attrs[.modificationDate] as? Date else { continue }
+        if best == nil || when > best!.when { best = (path, when) }
     }
     return best?.path
 }
@@ -52,15 +143,23 @@ func newestTranscript() -> String? {
 /// Reasoning blocks carried by one JSONL record. Unparseable lines yield nothing.
 func blocks(in line: String) -> [Block] {
     guard let data = line.data(using: .utf8),
-          let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-          let message = obj["message"] as? [String: Any],
-          let content = message["content"] as? [[String: Any]] else { return [] }
+          let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    else { return [] }
     let ts = obj["timestamp"] as? String ?? ""
+    if obj["type"] as? String == "queue-operation",
+       obj["operation"] as? String == "dequeue" {
+        return [Block(ts: ts, text: "Claude operation started…", sealed: false,
+                      signatureChars: 0, kind: .activity)]
+    }
+    guard let message = obj["message"] as? [String: Any],
+          let content = message["content"] as? [[String: Any]] else { return [] }
     return content.compactMap { block in
         guard block["type"] as? String == "thinking" else { return nil }
         let text = ((block["thinking"] as? String) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return Block(ts: ts, text: text, sealed: text.isEmpty)
+        let signatureChars = (block["signature"] as? String)?.count ?? 0
+        return Block(ts: ts, text: text, sealed: text.isEmpty,
+                     signatureChars: signatureChars, kind: .thinking)
     }
 }
 
@@ -72,14 +171,31 @@ final class Tailer {
     private var buf = ""
     private var pending: [Block] = []
 
-    init(path: String, backfill: Int = BACKFILL) {
+    /// Safe byte position for recreating this tailer. If the last JSONL record
+    /// is still partial, rewind over the buffer so it will be joined correctly.
+    var resumeOffset: UInt64 {
+        let buffered = UInt64(buf.utf8.count)
+        return buffered < offset ? offset - buffered : 0
+    }
+
+    init(path: String, backfill: Int = BACKFILL, startOffset: UInt64? = nil) {
         self.path = path
         self.session = String((path as NSString).lastPathComponent.prefix(8))
+        let size = fileSize() ?? 0
+        if let startOffset {
+            // A smaller file was truncated/rotated while it was not actively
+            // monitored. Start from zero; seeking to its new EOF would drop it.
+            offset = size < startOffset ? 0 : startOffset
+            return
+        }
+        offset = size
+        guard backfill > 0 else { return }
         let text = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-        offset = fileSize() ?? 0
         let all = text.components(separatedBy: "\n").flatMap { blocks(in: $0) }
-        pending = (backfill > 0 ? Array(all.suffix(backfill)) : []).map {
-            Block(ts: $0.ts, text: $0.text, sealed: $0.sealed, backfilled: true)
+            .filter { $0.kind == .thinking }
+        pending = Array(all.suffix(backfill)).map {
+            Block(ts: $0.ts, text: $0.text, sealed: $0.sealed,
+                  signatureChars: $0.signatureChars, kind: $0.kind, backfilled: true)
         }
     }
 
@@ -114,6 +230,19 @@ struct Fired {
     let why: String
 }
 
+enum DriftOutcome {
+    case scored([Fired], String)
+    case failed(String)
+}
+
+struct DriftBackend {
+    let name: String
+    let url: URL
+    let key: String
+    let model: String
+    var label: String { "\(name) · \(model)" }
+}
+
 /// Where this binary lives — triggers.txt sits beside it, never under ~/.claude.
 /// argv[0] is often relative ("./thinkpeek"), which resolves to nothing useful —
 /// ask the loader for the real executable path instead.
@@ -126,7 +255,7 @@ let BASE: String = {
 }()
 let TRIGGERS_FILE = ProcessInfo.processInfo.environment["THINKPEEK_TRIGGERS"]
     ?? BASE + "/triggers.txt"
-let KEYFILE = ProcessInfo.processInfo.environment["RW_KEYFILE"] ?? "/tmp/key"
+let ENV_FILE = BASE + "/.env"
 
 /// One plain-English rule per line; `#` comments. Re-read per check, so edits are live.
 func loadTriggers() -> [String] {
@@ -135,11 +264,56 @@ func loadTriggers() -> [String] {
         .filter { !$0.isEmpty && !$0.hasPrefix("#") }
 }
 
-/// Line 1 = OpenRouter key. Read into memory only; never rendered, never logged.
-func openRouterKey() -> String? {
-    guard let text = try? String(contentsOfFile: KEYFILE, encoding: .utf8) else { return nil }
-    return text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }
-        .first { !$0.isEmpty && !$0.hasPrefix("#") }
+/// Read one dotenv value without mutating the process environment. Existing
+/// environment variables take precedence; otherwise use .env beside the binary.
+func dotenv(_ name: String) -> String? {
+    if let value = ProcessInfo.processInfo.environment[name], !value.isEmpty {
+        return value
+    }
+    guard let text = try? String(contentsOfFile: ENV_FILE, encoding: .utf8) else { return nil }
+    for raw in text.components(separatedBy: .newlines) {
+        var line = raw.trimmingCharacters(in: .whitespaces)
+        if line.isEmpty || line.hasPrefix("#") { continue }
+        if line.hasPrefix("export ") {
+            line = String(line.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+        }
+        guard let equals = line.firstIndex(of: "=") else { continue }
+        let key = line[..<equals].trimmingCharacters(in: .whitespaces)
+        guard key == name else { continue }
+        var value = String(line[line.index(after: equals)...])
+            .trimmingCharacters(in: .whitespaces)
+        if value.count >= 2,
+           (value.hasPrefix("\"") && value.hasSuffix("\"") ||
+            value.hasPrefix("'") && value.hasSuffix("'")) {
+            value.removeFirst(); value.removeLast()
+        }
+        return value.isEmpty ? nil : value
+    }
+    return nil
+}
+
+/// Direct providers only. Groq is attempted first; Cerebras is the fallback.
+/// Credentials remain in memory and are never rendered or logged.
+func driftBackends() -> [DriftBackend] {
+    guard !LOCAL_ONLY else { return [] }
+    var result: [DriftBackend] = []
+    if let key = dotenv("GROQ_API_KEY"),
+       let url = URL(string: "https://api.groq.com/openai/v1/chat/completions") {
+        result.append(DriftBackend(
+            name: "Groq", url: url, key: key,
+            model: dotenv("GROQ_MODEL") ?? "llama-3.3-70b-versatile"))
+    }
+    if let key = dotenv("CEREBRAS_API_KEY"),
+       let url = URL(string: "https://api.cerebras.ai/v1/chat/completions") {
+        result.append(DriftBackend(
+            name: "Cerebras", url: url, key: key,
+            model: dotenv("CEREBRAS_MODEL") ?? "gpt-oss-120b"))
+    }
+    return result
+}
+
+func checkLabel() -> String {
+    driftBackends().map(\.label).joined(separator: " → fallback: ")
 }
 
 let CHECK_SYSTEM = """
@@ -153,67 +327,91 @@ If nothing fires reply exactly {"fired":[]}.
 """
 
 /// Score one reasoning block against the triggers. Async — never blocks the UI.
-/// Groq's llama-3.3-70b: fastest and most accurate of 8 benchmarked (see bench/).
-func checkDrift(_ reasoning: String, done: @escaping ([Fired], Double) -> Void) {
+/// Groq direct is primary; a request failure falls back to Cerebras direct.
+func checkDrift(_ reasoning: String, done: @escaping (DriftOutcome, Double) -> Void) {
     let triggers = loadTriggers()
-    guard !triggers.isEmpty, let key = openRouterKey() else { return }
+    guard !triggers.isEmpty else {
+        done(.failed("no triggers configured"), 0)
+        return
+    }
+    let backends = driftBackends()
+    guard !backends.isEmpty else {
+        done(.failed(LOCAL_ONLY ? "local-only mode" : "no Groq or Cerebras key in .env"), 0)
+        return
+    }
     let numbered = triggers.enumerated().map { "\($0.offset + 1). \($0.element)" }
         .joined(separator: "\n")
 
-    let payload: [String: Any] = [
-        "model": "meta-llama/llama-3.3-70b-instruct",
-        "provider": ["order": ["Groq"], "allow_fallbacks": true],
-        "temperature": 0,
-        "max_tokens": 250,
-        "messages": [
-            ["role": "system", "content": CHECK_SYSTEM],
-            ["role": "user", "content": "TRIGGERS:\n\(numbered)\n\nREASONING:\n"
-                + String(reasoning.prefix(6000))],
-        ],
-    ]
-    var req = URLRequest(url: URL(string: "https://openrouter.ai/api/v1/chat/completions")!)
-    req.httpMethod = "POST"
-    req.timeoutInterval = 12
-    req.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
-    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
-
     let started = Date()
-    URLSession.shared.dataTask(with: req) { data, _, _ in
-        let ms = Date().timeIntervalSince(started) * 1000
-        guard let data,
-              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let choices = root["choices"] as? [[String: Any]],
-              let message = choices.first?["message"] as? [String: Any],
-              var txt = message["content"] as? String else { return }
+    var failures: [String] = []
 
-        // Models occasionally wrap the JSON in a fence or a sentence of prose.
-        txt = txt.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let open = txt.firstIndex(of: "{"), let close = txt.lastIndex(of: "}") {
-            txt = String(txt[open...close])
+    func attempt(_ index: Int) {
+        guard index < backends.count else {
+            let ms = Date().timeIntervalSince(started) * 1000
+            DispatchQueue.main.async { done(.failed(failures.joined(separator: "; ")), ms) }
+            return
         }
-        guard let obj = (try? JSONSerialization.jsonObject(with: Data(txt.utf8))) as? [String: Any],
-              let fired = obj["fired"] as? [[String: Any]] else { return }
+        let backend = backends[index]
+        let payload: [String: Any] = [
+            "model": backend.model,
+            "temperature": 0,
+            "max_tokens": 250,
+            "messages": [
+                ["role": "system", "content": CHECK_SYSTEM],
+                ["role": "user", "content": "TRIGGERS:\n\(numbered)\n\nREASONING:\n"
+                    + String(reasoning.prefix(6000))],
+            ],
+        ]
+        var request = URLRequest(url: backend.url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        request.setValue("Bearer " + backend.key, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
-        let hits: [Fired] = fired.compactMap {
-            guard let n = $0["n"] as? Int, n >= 1, n <= triggers.count else { return nil }
-            return Fired(trigger: triggers[n - 1], why: $0["why"] as? String ?? "")
-        }
-        DispatchQueue.main.async { done(hits, ms) }
-    }.resume()
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            func fail(_ message: String) {
+                failures.append("\(backend.name): \(message)")
+                attempt(index + 1)
+            }
+            if let error { fail(error.localizedDescription); return }
+            guard let http = response as? HTTPURLResponse else { fail("no HTTP response"); return }
+            guard (200..<300).contains(http.statusCode) else {
+                fail("HTTP \(http.statusCode)"); return
+            }
+            guard let data,
+                  let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let choices = root["choices"] as? [[String: Any]],
+                  let message = choices.first?["message"] as? [String: Any],
+                  var text = message["content"] as? String else {
+                fail("invalid response"); return
+            }
+            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let open = text.firstIndex(of: "{"), let close = text.lastIndex(of: "}") {
+                text = String(text[open...close])
+            }
+            guard let object = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any],
+                  let fired = object["fired"] as? [[String: Any]] else {
+                fail("checker returned invalid JSON"); return
+            }
+            let hits: [Fired] = fired.compactMap {
+                guard let n = $0["n"] as? Int, n >= 1, n <= triggers.count else { return nil }
+                return Fired(trigger: triggers[n - 1], why: $0["why"] as? String ?? "")
+            }
+            let ms = Date().timeIntervalSince(started) * 1000
+            DispatchQueue.main.async { done(.scored(hits, backend.label), ms) }
+        }.resume()
+    }
+    attempt(0)
 }
-
-/// What the drift check sends, and where. Shown in the window verbatim so it is
-/// never a mystery which text left the machine.
-let CHECK_MODEL = "meta-llama/llama-3.3-70b-instruct"
-let CHECK_LABEL = "OpenRouter → Groq · " + CHECK_MODEL
 
 /// Why the drift check is or is not running, in words fit for the status bar.
 func driftStatus() -> (ready: Bool, detail: String) {
     let triggers = loadTriggers()
     if triggers.isEmpty { return (false, "no triggers in \((TRIGGERS_FILE as NSString).lastPathComponent)") }
-    if openRouterKey() == nil { return (false, "no API key in \(KEYFILE)") }
-    return (true, "\(triggers.count) triggers → \(CHECK_LABEL)")
+    if LOCAL_ONLY { return (false, "local-only mode") }
+    if driftBackends().isEmpty { return (false, "GROQ_API_KEY and CEREBRAS_API_KEY missing from .env") }
+    return (true, "\(triggers.count) triggers → \(checkLabel())")
 }
 
 // MARK: - Sessions
@@ -231,7 +429,17 @@ struct SessionInfo {
 /// set wins over the one the model generated. Scanned from the end — titles are
 /// written late and re-written on rename.
 func sessionTitle(of path: String) -> String? {
-    guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+    // Title records are appended near the end. Reading only the tail avoids
+    // repeatedly loading multi-megabyte transcripts on the AppKit main thread.
+    guard let fh = FileHandle(forReadingAtPath: path) else { return nil }
+    defer { try? fh.close() }
+    let size = (try? fh.seekToEnd()) ?? 0
+    let start = size > 262_144 ? size - 262_144 : 0
+    try? fh.seek(toOffset: start)
+    var text = String(data: fh.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    if start > 0, let newline = text.firstIndex(of: "\n") {
+        text = String(text[text.index(after: newline)...])
+    }
     var custom: String?, ai: String?
     for line in text.components(separatedBy: "\n").reversed() {
         guard line.contains("-title\""),
@@ -243,6 +451,53 @@ func sessionTitle(of path: String) -> String? {
         if custom != nil { break }
     }
     return custom ?? ai
+}
+
+/// All transcripts that may currently be producing output. Unlike the old
+/// single-newest-file design, this includes concurrent sessions and sub-agents.
+func activeTranscriptPaths(within hours: Double = ACTIVE_HOURS) -> [String] {
+    let fm = FileManager.default
+    let cutoff = Date().addingTimeInterval(-hours * 3600)
+    guard let files = fm.enumerator(atPath: PROJECTS) else { return [] }
+    var out: [(String, Date)] = []
+    for case let relative as String in files where relative.hasSuffix(".jsonl") {
+        let path = PROJECTS + "/" + relative
+        guard let attrs = try? fm.attributesOfItem(atPath: path),
+              let when = attrs[.modificationDate] as? Date, when > cutoff else { continue }
+        out.append((path, when))
+    }
+    return out.sorted { $0.1 > $1.1 }.map(\.0)
+}
+
+/// Snapshot every existing file once at launch. When an old session becomes
+/// active later, its tailer starts at this exact byte rather than at the new EOF,
+/// so analysis written between discovery scans is still delivered exactly once.
+func transcriptSizes() -> [String: UInt64] {
+    let fm = FileManager.default
+    guard let files = fm.enumerator(atPath: PROJECTS) else { return [:] }
+    var out: [String: UInt64] = [:]
+    for case let relative as String in files where relative.hasSuffix(".jsonl") {
+        let path = PROJECTS + "/" + relative
+        guard let attrs = try? fm.attributesOfItem(atPath: path),
+              let size = attrs[.size] as? NSNumber else { continue }
+        out[path] = size.uint64Value
+    }
+    return out
+}
+
+/// A sub-agent transcript lives under <session uuid>/subagents/. Map it back to
+/// the owning top-level transcript so pinning a session also follows its agents.
+func rootSessionPath(for path: String) -> String {
+    let file = path as NSString
+    let parent = file.deletingLastPathComponent as NSString
+    guard parent.lastPathComponent == "subagents" else { return path }
+    let sessionDir = parent.deletingLastPathComponent as NSString
+    return (sessionDir.deletingLastPathComponent as NSString)
+        .appendingPathComponent(sessionDir.lastPathComponent + ".jsonl")
+}
+
+func sameTranscript(_ lhs: String, _ rhs: String) -> Bool {
+    lhs.caseInsensitiveCompare(rhs) == .orderedSame
 }
 
 /// Every session touched recently, newest first. Cheap: stat only, no parsing.
@@ -298,103 +553,360 @@ func killOtherInstances() {
 
 // MARK: - Window
 
+final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
+}
+
+final class EventCard: NSView {
+    private let footer = NSTextField(labelWithString: "")
+
+    init(source: String, time: String, event: UIEvent) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = 12
+        layer?.borderWidth = 1
+
+        let header = NSStackView()
+        header.orientation = .horizontal
+        header.alignment = .centerY
+        header.spacing = 8
+
+        let sourceLabel = NSTextField(labelWithString: source)
+        sourceLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        sourceLabel.textColor = .secondaryLabelColor
+        sourceLabel.lineBreakMode = .byTruncatingTail
+        sourceLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let timeLabel = NSTextField(labelWithString: time)
+        timeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        timeLabel.textColor = .tertiaryLabelColor
+        timeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        header.addArrangedSubview(sourceLabel)
+        header.addArrangedSubview(NSView())
+        header.addArrangedSubview(timeLabel)
+
+        let body = NSTextField(wrappingLabelWithString: event.text)
+        body.isSelectable = true
+        body.maximumNumberOfLines = 0
+        body.lineBreakMode = .byWordWrapping
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 3
+        body.attributedStringValue = NSAttributedString(string: event.text, attributes: [
+            .font: NSFont.systemFont(ofSize: event.kind == "analysis" ? 15 : 13,
+                                     weight: event.kind == "activity" ? .semibold : .regular),
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: paragraph,
+        ])
+
+        footer.font = .systemFont(ofSize: 11, weight: .medium)
+        footer.textColor = .secondaryLabelColor
+        footer.isHidden = true
+
+        let stack = NSStackView(views: [header, body, footer])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
+            header.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            body.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            footer.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+
+        switch event.kind {
+        case "activity":
+            layer?.backgroundColor = NSColor.systemYellow.withAlphaComponent(0.10).cgColor
+            layer?.borderColor = NSColor.systemYellow.withAlphaComponent(0.28).cgColor
+        case "omitted-analysis":
+            layer?.backgroundColor = NSColor.systemPurple.withAlphaComponent(0.08).cgColor
+            layer?.borderColor = NSColor.systemPurple.withAlphaComponent(0.22).cgColor
+            body.textColor = .secondaryLabelColor
+        default:
+            layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.28).cgColor
+        }
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func setFooter(_ text: String, color: NSColor = .secondaryLabelColor) {
+        footer.stringValue = text
+        footer.textColor = color
+        footer.isHidden = false
+    }
+
+    func setAlert(_ text: String) {
+        layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.08).cgColor
+        layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.38).cgColor
+        setFooter(text, color: .systemRed)
+    }
+}
+
 final class HUD: NSObject, NSApplicationDelegate {
     private var panel: NSPanel!
-    private var textView: NSTextView!
-    private var tailer: Tailer?
+    private var scrollView: NSScrollView!
+    private var feedView: FlippedView!
+    private var feedStack: NSStackView!
+    private var latestButton: NSButton!
+    private var unseenCount = 0
+    private var tailers: [String: Tailer] = [:]
     private var picker: NSPopUpButton!
     private var status: NSTextField!
     private var sessions: [SessionInfo] = []
-    private var pinned: String?              // nil = follow newest
+    private var pinned: String? = INITIAL_TRANSCRIPT // nil = watch all active
     private var lastScan = Date.distantPast
     private var lastPickerRefresh = Date.distantPast
+    private var monitorsReady = false
+    private var names: [String: String] = [:]
+    private var knownOffsets: [String: UInt64] = [:]
     private var alertCount = 0
+    private let api = UIStateServer()
+    private var apiEvents: [[String: Any]] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         panel = NSPanel(
-            contentRect: NSRect(x: 60, y: 200, width: 470, height: 340),
+            contentRect: NSRect(x: 60, y: 140, width: 700, height: 620),
             styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
             backing: .buffered, defer: false)
-        panel.title = "Claude reasoning"
+        panel.title = "Thinkpeek"
         panel.level = .floating
         panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.backgroundColor = BG
+        panel.backgroundColor = .windowBackgroundColor
         panel.isReleasedWhenClosed = false
+        panel.minSize = NSSize(width: 520, height: 360)
+        panel.setFrameAutosaveName("thinkpeek.main-window")
 
         let content = panel.contentView!
-        let barHeight: CGFloat = 52
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
-        // Session picker: "Auto" follows whatever is newest, or pin one session
-        // so a chattier window elsewhere cannot steal the view.
-        picker = NSPopUpButton(frame: NSRect(x: 8, y: content.bounds.height - 28,
-                                             width: content.bounds.width - 16, height: 22))
-        picker.autoresizingMask = [.width, .minYMargin]
+        let header = NSVisualEffectView()
+        header.material = .headerView
+        header.blendingMode = .withinWindow
+        header.state = .active
+        header.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(header)
+
+        picker = NSPopUpButton(frame: .zero, pullsDown: false)
+        picker.translatesAutoresizingMaskIntoConstraints = false
         picker.target = self
         picker.action = #selector(sessionPicked(_:))
-        picker.font = NSFont(name: "Menlo", size: 10)
-        content.addSubview(picker)
+        picker.font = .systemFont(ofSize: 14, weight: .semibold)
+        header.addSubview(picker)
 
-        // Everything sent off this machine is named here, always visible.
         status = NSTextField(labelWithString: "")
-        status.frame = NSRect(x: 11, y: content.bounds.height - 47,
-                              width: content.bounds.width - 22, height: 15)
-        status.autoresizingMask = [.width, .minYMargin]
-        status.font = NSFont(name: "Menlo", size: 9)
-        status.textColor = DIM
-        content.addSubview(status)
+        status.translatesAutoresizingMaskIntoConstraints = false
+        status.font = .systemFont(ofSize: 11, weight: .regular)
+        status.textColor = .secondaryLabelColor
+        status.lineBreakMode = .byTruncatingMiddle
+        header.addSubview(status)
 
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: content.bounds.width,
-                                                height: content.bounds.height - barHeight))
-        scroll.autoresizingMask = [.width, .height]
-        scroll.hasVerticalScroller = true
-        scroll.drawsBackground = false
+        latestButton = NSButton(title: "Latest ↓", target: self,
+                                action: #selector(scrollToLatest(_:)))
+        latestButton.bezelStyle = .rounded
+        latestButton.controlSize = .small
+        latestButton.translatesAutoresizingMaskIntoConstraints = false
+        latestButton.setContentHuggingPriority(.required, for: .horizontal)
+        latestButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        picker.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        header.addSubview(latestButton)
 
-        textView = NSTextView(frame: scroll.bounds)
-        textView.autoresizingMask = [.width]
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.backgroundColor = BG
-        textView.textContainerInset = NSSize(width: 9, height: 9)
-        scroll.documentView = textView
+        scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = .windowBackgroundColor
+        scrollView.borderType = .noBorder
+        content.addSubview(scrollView)
 
-        content.addSubview(scroll)
+        feedView = FlippedView(frame: .zero)
+        feedView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = feedView
+
+        feedStack = NSStackView()
+        feedStack.orientation = .vertical
+        feedStack.alignment = .leading
+        feedStack.spacing = 12
+        feedStack.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 24, right: 18)
+        feedStack.translatesAutoresizingMaskIntoConstraints = false
+        feedView.addSubview(feedStack)
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: content.topAnchor),
+            header.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            header.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            header.heightAnchor.constraint(equalToConstant: 74),
+
+            picker.topAnchor.constraint(equalTo: header.topAnchor, constant: 10),
+            picker.heightAnchor.constraint(equalToConstant: 30),
+            picker.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 14),
+            picker.trailingAnchor.constraint(equalTo: latestButton.leadingAnchor, constant: -12),
+            status.leadingAnchor.constraint(equalTo: picker.leadingAnchor, constant: 2),
+            status.trailingAnchor.constraint(equalTo: latestButton.leadingAnchor, constant: -12),
+            status.heightAnchor.constraint(equalToConstant: 16),
+            status.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -8),
+            latestButton.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14),
+            latestButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+
+            scrollView.topAnchor.constraint(equalTo: header.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+
+            feedView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            feedStack.topAnchor.constraint(equalTo: feedView.topAnchor),
+            feedStack.leadingAnchor.constraint(equalTo: feedView.leadingAnchor),
+            feedStack.trailingAnchor.constraint(equalTo: feedView.trailingAnchor),
+            feedStack.bottomAnchor.constraint(equalTo: feedView.bottomAnchor),
+        ])
+
         panel.orderFrontRegardless()
 
+        knownOffsets = transcriptSizes()
+        api.captureHandler = { [weak self] in self?.captureWindowPNG() }
+        api.start()
         refreshPicker()
         refreshStatus()
-        emit("waiting for a session…\n", ACCENT, 10, bold: true)
+        addSystemCard("Watching all active Claude sessions", detail: "New analysis appears here automatically.")
         Timer.scheduledTimer(withTimeInterval: POLL, repeats: true) { [weak self] _ in
             self?.tick()
         }
         tick()
     }
 
+    private func publishAPI() {
+        api.publish([
+            "schemaVersion": 1,
+            "ready": true,
+            "windowTitle": panel.title,
+            "selection": picker.titleOfSelectedItem ?? "",
+            "status": status.stringValue,
+            "externalAnalysisEnabled": driftStatus().ready,
+            "analysisDestination": driftStatus().ready ? checkLabel() : NSNull(),
+            "alwaysOnTop": panel.level == .floating,
+            "scrollable": scrollView.hasVerticalScroller,
+            "contentHeight": Int(feedView.bounds.height),
+            "viewportHeight": Int(scrollView.contentView.bounds.height),
+            "contentRequiresScroll": feedView.bounds.height > scrollView.contentView.bounds.height,
+            "smartAutoscroll": true,
+            "unseenCount": unseenCount,
+            "cardCount": feedStack.arrangedSubviews.count,
+            "uiStyle": "native-card-feed",
+            "events": Array(apiEvents.suffix(250)),
+        ])
+    }
+
+    private func captureWindowPNG() -> Data? {
+        guard let view = panel.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    private func displayTime(_ timestamp: String) -> String {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = iso.date(from: timestamp) else { return timestamp }
+        let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss"
+        return fmt.string(from: date)
+    }
+
+    private func nearBottom() -> Bool {
+        let visible = scrollView.contentView.bounds
+        return feedView.bounds.maxY - visible.maxY < 64
+    }
+
+    @objc private func scrollToLatest(_ sender: Any?) {
+        feedView.layoutSubtreeIfNeeded()
+        let y = max(0, feedView.bounds.height - scrollView.contentView.bounds.height)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        unseenCount = 0
+        latestButton.title = "Latest ↓"
+        publishAPI()
+    }
+
+    @discardableResult
+    private func addCard(source: String, event: UIEvent) -> EventCard {
+        let follow = nearBottom() || feedStack.arrangedSubviews.isEmpty
+        let card = EventCard(source: source, time: displayTime(event.timestamp), event: event)
+        feedStack.addArrangedSubview(card)
+        card.widthAnchor.constraint(equalTo: feedStack.widthAnchor,
+                                    constant: -feedStack.edgeInsets.left - feedStack.edgeInsets.right)
+            .isActive = true
+        feedView.layoutSubtreeIfNeeded()
+        if follow {
+            DispatchQueue.main.async { [weak self] in self?.scrollToLatest(nil) }
+        } else {
+            unseenCount += 1
+            latestButton.title = "\(unseenCount) new ↓"
+        }
+        return card
+    }
+
+    private func addSystemCard(_ title: String, detail: String) {
+        let text = detail.isEmpty ? title : "\(title)\n\(detail)"
+        let event = UIEvent(timestamp: ISO8601DateFormatter().string(from: Date()),
+                            kind: "activity", text: text, readableAnalysis: false)
+        _ = addCard(source: "Thinkpeek", event: event)
+    }
+
+    private func clearFeed() {
+        for view in feedStack.arrangedSubviews {
+            feedStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        unseenCount = 0
+        latestButton.title = "Latest ↓"
+        apiEvents.removeAll()
+    }
+
     // MARK: session picker
 
     @objc private func sessionPicked(_ sender: NSPopUpButton) {
         let i = sender.indexOfSelectedItem
-        pinned = (i == 0) ? nil : sessions[i - 1].path
+        pinned = (i <= 0 || i - 1 >= sessions.count) ? nil : sessions[i - 1].path
+        for (path, tailer) in tailers { knownOffsets[path] = tailer.resumeOffset }
+        tailers.removeAll()
+        clearFeed()
         if let pinned {
-            attach(pinned, note: "pinned")
+            tailers[pinned] = Tailer(path: pinned)
+            let name = sourceName(for: pinned)
+            addSystemCard(name, detail: "Pinned session · sub-agents included")
+            panel.title = name
+            monitorsReady = true
         } else {
-            emit("\nfollowing whichever session is newest\n", ACCENT, 10, bold: true)
-            lastScan = .distantPast          // re-pick immediately
+            addSystemCard("Auto mode", detail: "Watching all active sessions and sub-agents")
+            monitorsReady = false
         }
+        lastScan = .distantPast
     }
 
     private func refreshPicker() {
         sessions = recentSessions()
         let keep = pinned
         picker.removeAllItems()
-        picker.addItem(withTitle: "Auto — newest session")
+        picker.addItem(withTitle: "Auto — all active sessions")
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm"
         for s in sessions {
             picker.addItem(withTitle: "\(fmt.string(from: s.modified))  \(s.title)")
+            names[s.path] = s.title
         }
-        if let keep, let i = sessions.firstIndex(where: { $0.path == keep }) {
+        if let keep, let i = sessions.firstIndex(where: { sameTranscript($0.path, keep) }) {
             picker.selectItem(at: i + 1)
         } else {
             picker.selectItem(at: 0)
@@ -404,65 +916,64 @@ final class HUD: NSObject, NSApplicationDelegate {
     private func refreshStatus() {
         let d = driftStatus()
         status.stringValue = d.ready ? "drift check: \(d.detail)" : "drift check OFF — \(d.detail)"
-        status.textColor = d.ready ? DIM : SEALED
+        status.textColor = d.ready ? .secondaryLabelColor : .systemPurple
     }
 
-    private func attach(_ path: String, note: String) {
-        tailer = Tailer(path: path)
-        let name = sessionTitle(of: path) ?? tailer!.session
-        emit("\n── \(name) (\(note)) ──\n", ACCENT, 10, bold: true)
-        panel.title = name
+    private func sourceName(for path: String) -> String {
+        let root = rootSessionPath(for: path)
+        let rootID = String((root as NSString).lastPathComponent.prefix(8))
+        let title = names[root] ?? sessionTitle(of: root) ?? rootID
+        names[root] = title
+        guard root != path else { return title }
+        let agent = String((path as NSString).lastPathComponent
+            .replacingOccurrences(of: "agent-", with: "").prefix(8))
+        return "\(title) · agent \(agent)"
     }
 
-    private func styled(_ s: String, _ color: NSColor, _ size: CGFloat, bold: Bool,
-                        italic: Bool) -> NSAttributedString {
-        var font = NSFont(name: "Menlo", size: size) ?? .monospacedSystemFont(ofSize: size, weight: .regular)
-        if bold { font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
-        if italic { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
-        let para = NSMutableParagraphStyle()
-        para.lineSpacing = 1.5
-        return NSAttributedString(string: s, attributes: [
-            .foregroundColor: color, .font: font, .paragraphStyle: para,
-        ])
-    }
-
-    @discardableResult
-    private func emit(_ s: String, _ color: NSColor, _ size: CGFloat, bold: Bool = false,
-                      italic: Bool = false) -> Int {
-        textView.textStorage?.append(styled(s, color, size, bold: bold, italic: italic))
-        textView.scrollToEndOfDocument(nil)
-        return textView.textStorage?.length ?? 0
-    }
-
-    /// Alerts arrive a few hundred ms after their block, by which time more
-    /// reasoning may already be on screen — so insert at the block's own end
-    /// rather than appending, and keep the warning next to what caused it.
-    private func insert(_ s: String, _ color: NSColor, _ size: CGFloat, at location: Int,
-                        bold: Bool = false, italic: Bool = false) -> Int {
-        guard let storage = textView.textStorage else { return location }
-        let where_ = min(location, storage.length)
-        let text = styled(s, color, size, bold: bold, italic: italic)
-        storage.insert(text, at: where_)
-        return where_ + text.length
-    }
-
-    /// A trigger fired: red banner under the offending block, bell, and a
-    /// title-bar marker so it is obvious even if the window is not focused.
-    private func showAlert(_ hits: [Fired], _ ms: Double, at location: Int) {
-        var at = location
-        let bar = String(repeating: "━", count: 44)
-        at = insert("\n\(bar)\n", ALERT, 9, at: at)
-        at = insert("⚠  REASONING DRIFT  ", ALERT, 11, at: at, bold: true)
-        at = insert("(\(Int(ms)) ms)\n", DIM, 9, at: at)
-        for hit in hits {
-            at = insert("▸ \(hit.trigger)\n", ALERT, 10, at: at)
-            if !hit.why.isEmpty { at = insert("  \(hit.why)\n", ACCENT, 10, at: at, italic: true) }
+    /// Keep a tailer for every recently active transcript. On the first scan we
+    /// start old files at EOF (apart from three blocks of useful context). Files
+    /// discovered later resume from the launch snapshot, so complete or partial
+    /// reasoning written between discovery scans cannot be missed.
+    private func refreshMonitors() {
+        var wanted = activeTranscriptPaths()
+        if let pinned {
+            wanted = wanted.filter { sameTranscript(rootSessionPath(for: $0), pinned) }
+            if !wanted.contains(where: { sameTranscript($0, pinned) }) { wanted.append(pinned) }
         }
-        _ = insert("\(bar)\n", ALERT, 9, at: at)
+        let wantedSet = Set(wanted)
+        for path in tailers.keys.filter({ !wantedSet.contains($0) }) {
+            knownOffsets[path] = tailers[path]?.resumeOffset
+            tailers.removeValue(forKey: path)
+        }
 
+        let contextPath = wanted.first
+        for path in wanted where tailers[path] == nil {
+            if !monitorsReady {
+                tailers[path] = Tailer(path: path,
+                    backfill: path == contextPath ? BACKFILL : 0)
+            } else {
+                // Existing files resume from the launch/removal snapshot. Brand
+                // new files start at byte zero. Both paths preserve partial lines.
+                tailers[path] = Tailer(path: path, backfill: 0,
+                    startOffset: knownOffsets[path] ?? 0)
+            }
+        }
+        monitorsReady = true
+    }
+
+    private func showAlert(_ hits: [Fired], _ ms: Double, card: EventCard) {
+        let reasons = hits.map { hit in
+            hit.why.isEmpty ? hit.trigger : "\(hit.trigger) — \(hit.why)"
+        }.joined(separator: "\n")
+        card.setAlert("⚠ Drift detected · \(Int(ms)) ms\n\(reasons)")
         NSSound.beep()
         alertCount += 1
         panel.title = "⚠ Claude reasoning — \(alertCount)"
+        apiEvents.append([
+            "kind": "drift-alert", "text": hits.map(\.trigger).joined(separator: "; "),
+            "latencyMs": Int(ms),
+        ])
+        publishAPI()
     }
 
     private func tick() {
@@ -472,52 +983,116 @@ final class HUD: NSObject, NSApplicationDelegate {
             refreshPicker()
             refreshStatus()
         }
-        if pinned == nil, now.timeIntervalSince(lastScan) > RESCAN {
+        if now.timeIntervalSince(lastScan) > RESCAN {
             lastScan = now
-            if let path = newestTranscript(), path != tailer?.path {
-                attach(path, note: "auto")
-            }
+            refreshMonitors()
         }
 
-        guard let tailer else { return }
-        for block in tailer.drain() {
-            let stamp = block.ts.count > 19
-                ? String(block.ts[block.ts.index(block.ts.startIndex, offsetBy: 11)..<block.ts.index(block.ts.startIndex, offsetBy: 19)])
-                : block.ts
-            emit("\(stamp)\n", DIM, 9)
-            if block.sealed {
-                emit("⟨sealed — signature only⟩\n\n", SEALED, 10, italic: true)
+        var arrived: [(path: String, block: Block)] = []
+        for (path, tailer) in tailers {
+            arrived += tailer.drain().map { (path, $0) }
+        }
+        arrived.sort { $0.block.ts < $1.block.ts }
+        for event in arrived {
+            let block = event.block
+            let source = sourceName(for: event.path)
+            panel.title = source
+            let ui = uiEvent(for: block)
+            var apiItem = ui.json
+            apiItem["source"] = source
+            apiEvents.append(apiItem)
+            let card = addCard(source: source, event: ui)
+            if ui.kind == "activity" {
                 continue
             }
-            let end = emit(block.text + "\n", FG, 11.5)
+            if ui.kind == "omitted-analysis" {
+                continue
+            }
             // Backfilled history is not re-checked: it would alert on reasoning
             // the user has already seen, on every launch.
-            guard !block.backfilled else { emit("\n", FG, 11.5); continue }
+            guard !block.backfilled else {
+                card.setFooter("History · already seen")
+                continue
+            }
 
             let state = driftStatus()
             guard state.ready else {
-                emit("· not checked — \(state.detail)\n\n", SEALED, 9, italic: true)
+                card.setFooter("Local display only · \(state.detail)")
                 continue
             }
-            // Say what leaves the machine, before it leaves.
-            let at = insert("↗ sending \(block.text.count) chars to \(CHECK_LABEL)\n", DIM, 9, at: end)
-            checkDrift(block.text) { [weak self] hits, ms in
+            let destination = checkLabel()
+            card.setFooter("Sending \(block.text.count) characters to \(destination)…")
+            apiEvents.append([
+                "kind": "drift-request-started", "text": "sent for analysis",
+                "destination": destination,
+            ])
+            publishAPI()
+            checkDrift(block.text) { [weak self] outcome, ms in
                 guard let self else { return }
-                if hits.isEmpty {
-                    _ = self.insert("↘ no drift · \(Int(ms)) ms\n\n", DIM, 9, at: at)
-                } else {
-                    self.showAlert(hits, ms, at: at)
+                switch outcome {
+                case .scored(let hits, let provider) where hits.isEmpty:
+                    card.setFooter("✓ \(provider) checked · no drift · \(Int(ms)) ms",
+                                   color: .systemGreen)
+                    self.apiEvents.append([
+                        "kind": "drift-clean", "text": "no drift", "provider": provider,
+                        "latencyMs": Int(ms),
+                    ])
+                    self.publishAPI()
+                case .scored(let hits, _):
+                    self.showAlert(hits, ms, card: card)
+                case .failed(let message):
+                    card.setFooter("AI check failed · \(message) · \(Int(ms)) ms",
+                                   color: .systemRed)
+                    self.apiEvents.append([
+                        "kind": "drift-error", "text": message, "latencyMs": Int(ms),
+                    ])
+                    self.publishAPI()
                 }
             }
         }
+        publishAPI()
     }
 }
 
 // MARK: - Entry point
 
+if CommandLine.arguments.contains("--drift-status") {
+    let state = driftStatus()
+    print(state.ready ? "ready: \(state.detail)" : "disabled: \(state.detail)")
+    exit(state.ready ? 0 : 1)
+}
+
+// Headless API for tests and integrations. It returns the exact presentation
+// objects consumed by the AppKit renderer, not a second test-only parser.
+
+if let i = CommandLine.arguments.firstIndex(of: "--ui-json"),
+   i + 1 < CommandLine.arguments.count {
+    let path = CommandLine.arguments[i + 1]
+    guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+        FileHandle.standardError.write("cannot read \(path)\n".data(using: .utf8)!)
+        exit(1)
+    }
+    let events = text.components(separatedBy: "\n")
+        .flatMap { blocks(in: $0) }
+        .map { uiEvent(for: $0).json }
+    let payload: [String: Any] = [
+        "schemaVersion": 1,
+        "sourcePath": path,
+        "sourceTitle": sessionTitle(of: rootSessionPath(for: path)) ?? NSNull(),
+        "events": events,
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload,
+                                                   options: [.prettyPrinted, .sortedKeys]) else {
+        exit(1)
+    }
+    FileHandle.standardOutput.write(data)
+    FileHandle.standardOutput.write("\n".data(using: .utf8)!)
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--sessions") {
     let fmt = DateFormatter(); fmt.dateFormat = "HH:mm"
-    print("Auto — newest session")
+    print("Auto — all active sessions")
     for s in recentSessions() { print("\(fmt.string(from: s.modified))  \(s.title)") }
     exit(0)
 }
@@ -538,10 +1113,16 @@ if CommandLine.arguments.contains("--selftest") {
 if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.arguments.count {
     print("triggers: \(loadTriggers().count) from \(TRIGGERS_FILE)")
     var finished = false
-    checkDrift(CommandLine.arguments[i + 1]) { hits, ms in
+    checkDrift(CommandLine.arguments[i + 1]) { outcome, ms in
         print("latency : \(Int(ms)) ms")
-        print("fired   : \(hits.count)")
-        for h in hits { print("          ▸ \(h.trigger)  — \(h.why)") }
+        switch outcome {
+        case .scored(let hits, let provider):
+            print("provider: \(provider)")
+            print("fired   : \(hits.count)")
+            for h in hits { print("          ▸ \(h.trigger)  — \(h.why)") }
+        case .failed(let message):
+            print("failed  : \(message)")
+        }
         finished = true
     }
     let deadline = Date().addingTimeInterval(15)

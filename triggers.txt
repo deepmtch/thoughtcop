@@ -1,5 +1,1 @@
-# Reasoning drift triggers — one per line, plain English.
-# Lines starting with # are ignored. Edit freely; reloaded on every check.
-# The watcher warns you the moment Claude's live reasoning matches one of these.
-
-Claude is about to guess 
+Claude is confused 

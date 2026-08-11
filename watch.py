@@ -3,8 +3,8 @@
 reasoning-watch — live drift alarm for Claude Code.
 
 Tails the active session transcript, and the instant a new reasoning (thinking)
-block is written, sends it to a very fast model (Cerebras direct, OpenRouter as
-fallback) together with your triggers file. If any trigger fires you get a
+block is written, sends it directly to Groq or Cerebras together with your
+triggers file. If any trigger fires you get a
 terminal warning + bell + macOS notification within ~200-400ms.
 
 The alarm half of thinkpeek: the window shows you the reasoning, this shouts when
@@ -16,8 +16,8 @@ Usage:
     python3 watch.py --selftest      # verify backend + model, no tailing
     python3 watch.py --once "<text>" # score one snippet and exit
 
-Key file: /tmp/key   line 1 = OpenRouter key, line 2 = Cerebras key.
-The key is read inside this process only and is never printed or logged.
+Keys are read from GROQ_API_KEY and CEREBRAS_API_KEY in .env beside this file.
+They are held in memory only and are never printed or logged.
 """
 
 import argparse
@@ -33,32 +33,14 @@ HOME = os.path.expanduser("~")
 BASE = os.path.dirname(os.path.abspath(__file__))    # beside the code, never under ~/.claude
 TRIGGERS = os.path.join(BASE, "triggers.txt")
 PROJECTS = os.path.join(HOME, ".claude", "projects")  # read-only; Claude Code owns this
-KEYFILE = os.environ.get("RW_KEYFILE", "/tmp/key")
+ENV_FILE = os.path.join(BASE, ".env")
 LOG = os.path.join(BASE, "alerts.log")
 
 POLL_SEC = 0.25
 TIMEOUT = 12
 
-# Preference order: fastest capable models on Cerebras.
-CEREBRAS_PREF = [
-    "llama-3.3-70b",
-    "qwen-3-32b",
-    "gpt-oss-120b",
-    "qwen-3-235b-a22b-instruct-2507",
-    "llama3.1-8b",
-]
-# Measured end-to-end on the real drift-check prompt (3 runs, median):
-#   llama-3.3-70b  / Groq      325 ms   <- primary: fastest AND correct
-#   gpt-oss-120b   / Cerebras  504 ms   <- fallback (needs reasoning excluded, else ~2.6 s)
-#   gemini-2.5-flash-lite      584 ms
-#   qwen3-32b      / Groq      818 ms   (wrong answers)
-#   claude-haiku-4.5          2308 ms
-# Only gpt-oss-120b and glm-4.7 are served by Cerebras on OpenRouter at all.
-OPENROUTER_PREF = [
-    ("meta-llama/llama-3.3-70b-instruct", ["Groq"], {}),
-    ("openai/gpt-oss-120b", ["Cerebras"], {"reasoning": {"effort": "low", "exclude": True}}),
-    ("google/gemini-2.5-flash-lite", None, {}),
-]
+GROQ_MODEL = "llama-3.3-70b-versatile"
+CEREBRAS_MODEL = "gpt-oss-120b"
 
 RED = "\033[1;31m"
 YEL = "\033[1;33m"
@@ -68,15 +50,25 @@ OFF = "\033[0m"
 
 # ---------------------------------------------------------------- keys / model
 
-def _keys():
-    """Return (openrouter, cerebras). Never printed anywhere."""
+def _dotenv(name):
+    """Environment wins; otherwise read one value from the adjacent .env."""
+    if os.environ.get(name):
+        return os.environ[name]
     try:
-        lines = [l.strip() for l in open(KEYFILE) if l.strip() and not l.startswith("#")]
-    except OSError as e:
-        sys.exit(f"cannot read key file {KEYFILE}: {e}")
-    orr = lines[0] if len(lines) > 0 else None
-    cbr = lines[1] if len(lines) > 1 else None
-    return orr, cbr
+        lines = open(ENV_FILE)
+    except OSError:
+        return None
+    with lines:
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[7:].lstrip()
+            key, value = line.split("=", 1)
+            if key.strip() == name:
+                return value.strip().strip("\"'") or None
+    return None
 
 
 def _post(url, key, payload):
@@ -102,36 +94,16 @@ class Backend:
 
 
 def pick_backend(model_override=None):
-    """Cerebras direct if its key works, else OpenRouter with a provider-pinned fast model."""
-    orr, cbr = _keys()
-
-    if cbr:
-        try:
-            req = urllib.request.Request(
-                "https://api.cerebras.ai/v1/models",
-                headers={"Authorization": "Bearer " + cbr},
-            )
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-                have = {m["id"] for m in json.load(r).get("data", [])}
-            for m in CEREBRAS_PREF:
-                if m in have:
-                    return Backend("cerebras", "https://api.cerebras.ai/v1/chat/completions", cbr, m)
-            if have:
-                return Backend("cerebras", "https://api.cerebras.ai/v1/chat/completions",
-                               cbr, sorted(have)[0])
-        except Exception as e:
-            if os.environ.get("RW_DEBUG"):
-                print(f"{DIM}cerebras direct unavailable ({type(e).__name__}: {e}); "
-                      f"falling back to openrouter{OFF}", file=sys.stderr)
-
-    if orr:
-        url = "https://openrouter.ai/api/v1/chat/completions"
-        if model_override:
-            return Backend("openrouter", url, orr, model_override)
-        model, prov, extra = OPENROUTER_PREF[0]
-        return Backend("openrouter", url, orr, model, prov, extra)
-
-    sys.exit("no usable key found in " + KEYFILE)
+    """Use Groq direct when configured, otherwise Cerebras direct."""
+    groq = _dotenv("GROQ_API_KEY")
+    cerebras = _dotenv("CEREBRAS_API_KEY")
+    if groq:
+        return Backend("groq", "https://api.groq.com/openai/v1/chat/completions",
+                       groq, model_override or _dotenv("GROQ_MODEL") or GROQ_MODEL)
+    if cerebras:
+        return Backend("cerebras", "https://api.cerebras.ai/v1/chat/completions",
+                       cerebras, model_override or _dotenv("CEREBRAS_MODEL") or CEREBRAS_MODEL)
+    sys.exit("no GROQ_API_KEY or CEREBRAS_API_KEY found in " + ENV_FILE)
 
 
 # ---------------------------------------------------------------- scoring
@@ -323,7 +295,7 @@ def main():
     ap.add_argument("--project", help="project dir, e.g. /private/tmp (default: most recent session)")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--once", metavar="TEXT")
-    ap.add_argument("--model", help="override the OpenRouter model slug")
+    ap.add_argument("--model", help="override the selected direct-provider model")
     ap.add_argument("-v", "--verbose", action="store_true", help="also log clean checks")
     a = ap.parse_args()
 
