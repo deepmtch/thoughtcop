@@ -18,7 +18,6 @@ let CODEX_SESSIONS = ("~/.codex/sessions" as NSString).expandingTildeInPath
 let CODEX_INDEX = ("~/.codex/session_index.jsonl" as NSString).expandingTildeInPath
 let POLL = 0.2          // seconds between drains of active files
 let RESCAN = 0.5        // seconds between discovering newly active sessions
-let BACKFILL = Int.max  // selected session shows its complete reasoning history
 let ACTIVE_HOURS = 12.0 // auto mode watches every transcript touched in this window
 let API_PORT = UInt16(ProcessInfo.processInfo.environment["THINKPEEK_API_PORT"] ?? "17321") ?? 17321
 let LOCAL_ONLY = CommandLine.arguments.contains("--local-only")
@@ -79,13 +78,14 @@ func uiEvent(for block: Block) -> UIEvent {
                    readableAnalysis: true)
 }
 
-/// Local read-only API for the running window. Automated tests can inspect the
-/// actual state AppKit consumed instead of relying on screenshots or OCR.
+/// Local API for the running window. Automated tests can inspect the actual
+/// AppKit state and drive navigation instead of relying on screenshots or OCR.
 final class UIStateServer {
     private let lock = NSLock()
     private var body = Data("{\"schemaVersion\":1,\"ready\":false}".utf8)
     private var listener: NWListener?
     var captureHandler: (() -> Data?)?
+    var actionHandler: ((String) -> Void)?
 
     func publish(_ object: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: object,
@@ -108,6 +108,26 @@ final class UIStateServer {
                     DispatchQueue.main.async {
                         let image = self.captureHandler?() ?? Data()
                         self.send(connection, payload: image, type: "image/png")
+                    }
+                    return
+                }
+                let requestLine = request.flatMap { String(data: $0, encoding: .utf8) }?
+                    .components(separatedBy: "\r\n").first ?? ""
+                let path = requestLine.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+                let actions = ["/previous": "previous", "/next": "next",
+                               "/toggle-expanded": "toggle-expanded",
+                               "/reveal": "reveal", "/hide": "hide",
+                               "/position/top-left": "position/top-left",
+                               "/position/top-center": "position/top-center",
+                               "/position/top-right": "position/top-right",
+                               "/position/bottom-left": "position/bottom-left",
+                               "/position/bottom-center": "position/bottom-center",
+                               "/position/bottom-right": "position/bottom-right"]
+                if let action = actions[path] {
+                    DispatchQueue.main.async {
+                        self.actionHandler?(action)
+                        let payload = Data("{\"ok\":true,\"action\":\"\(action)\"}".utf8)
+                        self.send(connection, payload: payload, type: "application/json")
                     }
                     return
                 }
@@ -227,13 +247,38 @@ final class Tailer {
         }
         offset = size
         guard backfill > 0 else { return }
-        let text = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-        let all = text.components(separatedBy: "\n").flatMap { blocks(in: $0) }
-            .filter { $0.kind == .thinking }
+        let all = backfillBlocks(limit: backfill)
         pending = Array(all.suffix(backfill)).map {
             Block(ts: $0.ts, text: $0.text, sealed: $0.sealed,
                   signatureChars: $0.signatureChars, kind: $0.kind, backfilled: true)
         }
+    }
+
+    /// Read backwards in bounded chunks until enough visible history is found.
+    /// This avoids loading multi-megabyte rollout files just to show three cards.
+    private func backfillBlocks(limit: Int) -> [Block] {
+        guard let fh = FileHandle(forReadingAtPath: path) else { return [] }
+        defer { try? fh.close() }
+        let size = (try? fh.seekToEnd()) ?? 0
+        let chunkSize: UInt64 = 262_144
+        var start = size
+        var accumulated = Data()
+        var found: [Block] = []
+        repeat {
+            let next = limit == Int.max ? 0 : (start > chunkSize ? start - chunkSize : 0)
+            try? fh.seek(toOffset: next)
+            var chunk = fh.readData(ofLength: Int(start - next))
+            chunk.append(accumulated)
+            accumulated = chunk
+            start = next
+            var text = String(data: accumulated, encoding: .utf8) ?? ""
+            if start > 0, let newline = text.firstIndex(of: "\n") {
+                text = String(text[text.index(after: newline)...])
+            }
+            found = text.components(separatedBy: "\n").flatMap { blocks(in: $0) }
+                .filter { $0.kind == .thinking && (SHOW_ENCRYPTED || !$0.sealed) }
+        } while start > 0 && found.count < limit
+        return found
     }
 
     private func fileSize() -> UInt64? {
@@ -328,6 +373,17 @@ func dotenv(_ name: String) -> String? {
     }
     return nil
 }
+
+let BACKFILL: Int = {
+    guard let raw = dotenv("THINKPEEK_HISTORY_COUNT")?.lowercased() else { return 3 }
+    if ["all", "unlimited", "infinite"].contains(raw) { return Int.max }
+    return max(0, Int(raw) ?? 3)
+}()
+
+let SHOW_ENCRYPTED: Bool = {
+    guard let raw = dotenv("THINKPEEK_SHOW_ENCRYPTED")?.lowercased() else { return false }
+    return ["1", "true", "yes", "on"].contains(raw)
+}()
 
 /// Direct providers only. Groq is attempted first; Cerebras is the fallback.
 /// Credentials remain in memory and are never rendered or logged.
@@ -635,6 +691,122 @@ final class FlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
+final class ConstrainedPanel: NSPanel {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        guard let visible = (screen ?? self.screen ?? NSScreen.main)?.visibleFrame else {
+            return frameRect
+        }
+        var frame = frameRect
+        frame.size.width = min(frame.width, min(visible.width, maxSize.width))
+        frame.size.height = min(frame.height, min(visible.height, maxSize.height))
+        frame.origin.x = min(max(frame.origin.x, visible.minX), visible.maxX - frame.width)
+        frame.origin.y = min(max(frame.origin.y, visible.minY), visible.maxY - frame.height)
+        return frame
+    }
+}
+
+final class HoverView: NSView {
+    var hoverChanged: ((Bool) -> Void)?
+    var doubleClicked: (() -> Void)?
+    var draggingChanged: ((Bool) -> Void)?
+    var dragOnly = false {
+        didSet { discardCursorRects(); resetCursorRects() }
+    }
+    private var hoverArea: NSTrackingArea?
+    private var dragging = false
+
+    override var mouseDownCanMoveWindow: Bool { dragOnly }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        dragOnly && bounds.contains(point) ? self : super.hitTest(point)
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if dragOnly { addCursorRect(bounds, cursor: .openHand) }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard dragOnly else { super.mouseDown(with: event); return }
+        if event.clickCount == 2 {
+            doubleClicked?()
+            return
+        }
+        dragging = true
+        draggingChanged?(true)
+        NSCursor.closedHand.push()
+        window?.performDrag(with: event)
+        NSCursor.pop()
+        dragging = false
+        draggingChanged?(false)
+    }
+
+    override func updateTrackingAreas() {
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeAlways,
+                                            .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverArea = area
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if !dragging { hoverChanged?(true) }
+    }
+    override func mouseExited(with event: NSEvent) {
+        if !dragging { hoverChanged?(false) }
+    }
+}
+
+func renderedBody(_ text: String, kind: String) -> NSAttributedString {
+    let size: CGFloat = kind == "analysis" ? 15 : 13
+    let weight: NSFont.Weight = kind == "activity" ? .semibold : .regular
+    let baseFont = NSFont.systemFont(ofSize: size, weight: weight)
+    let color: NSColor = kind == "omitted-analysis" ? .secondaryLabelColor : .labelColor
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineSpacing = 3
+
+    let result: NSMutableAttributedString
+    if kind == "analysis" {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        if let parsed = try? AttributedString(markdown: text, options: options) {
+            result = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
+        } else {
+            result = NSMutableAttributedString(string: text)
+        }
+    } else {
+        result = NSMutableAttributedString(string: text)
+    }
+
+    let full = NSRange(location: 0, length: result.length)
+    result.addAttributes([.font: baseFont, .foregroundColor: color,
+                          .paragraphStyle: paragraph], range: full)
+    result.enumerateAttribute(.inlinePresentationIntent, in: full) { value, range, _ in
+        guard let number = value as? NSNumber else { return }
+        let intent = InlinePresentationIntent(rawValue: number.uintValue)
+        var font = baseFont
+        if intent.contains(.stronglyEmphasized) {
+            font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+        }
+        if intent.contains(.emphasized) {
+            font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+        }
+        if intent.contains(.code) {
+            font = .monospacedSystemFont(ofSize: size - 1, weight: .regular)
+        }
+        result.addAttribute(.font, value: font, range: range)
+        if intent.contains(.strikethrough) {
+            result.addAttribute(.strikethroughStyle,
+                                value: NSUnderlineStyle.single.rawValue, range: range)
+        }
+    }
+    result.removeAttribute(.inlinePresentationIntent, range: full)
+    return result
+}
+
 final class EventCard: NSView {
     private let footer = NSTextField(labelWithString: "")
 
@@ -669,25 +841,28 @@ final class EventCard: NSView {
         body.isSelectable = true
         body.maximumNumberOfLines = 0
         body.lineBreakMode = .byWordWrapping
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = 3
-        body.attributedStringValue = NSAttributedString(string: event.text, attributes: [
-            .font: NSFont.systemFont(ofSize: event.kind == "analysis" ? 15 : 13,
-                                     weight: event.kind == "activity" ? .semibold : .regular),
-            .foregroundColor: NSColor.labelColor,
-            .paragraphStyle: paragraph,
-        ])
+        body.preferredMaxLayoutWidth = 500
+        body.cell?.wraps = true
+        body.cell?.isScrollable = false
+        body.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        body.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        body.attributedStringValue = renderedBody(event.text, kind: event.kind)
 
         footer.font = .systemFont(ofSize: 11, weight: .medium)
         footer.textColor = .secondaryLabelColor
         footer.isHidden = true
+        footer.lineBreakMode = .byTruncatingMiddle
+        footer.preferredMaxLayoutWidth = 500
+        footer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let stack = NSStackView(views: [header, body, footer])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         addSubview(stack)
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 14),
@@ -728,12 +903,35 @@ final class EventCard: NSView {
     }
 }
 
-final class HUD: NSObject, NSApplicationDelegate {
+final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panel: NSPanel!
     private var scrollView: NSScrollView!
     private var feedView: FlippedView!
     private var feedStack: NSStackView!
+    private var detailHeader: NSVisualEffectView!
+    private var peekBar: NSVisualEffectView!
+    private var peekLabel: NSTextField!
     private var latestButton: NSButton!
+    private var previousButton: NSButton!
+    private var nextButton: NSButton!
+    private var positionLabel: NSTextField!
+    private var positionButton: NSPopUpButton!
+    private var expandButton: NSButton!
+    private var eventCards: [EventCard] = []
+    private var eventPreviews: [NSAttributedString] = []
+    private var systemCards: [EventCard] = []
+    private var compactIndex = -1
+    private var compactMode = true
+    private var peekMode = true
+    private var compactHeight: CGFloat = 210
+    private let peekWidth: CGFloat = 460
+    private let compactWidth: CGFloat = 560
+    private var expandedHeight: CGFloat = 620
+    private let expandedWidth: CGFloat = 700
+    private var presentationKeys = Set<String>()
+    private var peekHideWorkItem: DispatchWorkItem?
+    private var peekRevealWorkItem: DispatchWorkItem?
+    private var apiRevealLocked = false
     private var unseenCount = 0
     private var tailers: [String: Tailer] = [:]
     private var picker: NSPopUpButton!
@@ -750,8 +948,8 @@ final class HUD: NSObject, NSApplicationDelegate {
     private var apiEvents: [[String: Any]] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        panel = NSPanel(
-            contentRect: NSRect(x: 60, y: 140, width: 700, height: 620),
+        panel = ConstrainedPanel(
+            contentRect: NSRect(x: 60, y: 140, width: 560, height: 210),
             styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
             backing: .buffered, defer: false)
         panel.title = "Thinkpeek"
@@ -762,33 +960,62 @@ final class HUD: NSObject, NSApplicationDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.backgroundColor = .windowBackgroundColor
         panel.isReleasedWhenClosed = false
-        panel.minSize = NSSize(width: 520, height: 360)
+        panel.animationBehavior = .none
+        panel.minSize = NSSize(width: 340, height: 62)
+        panel.maxSize = NSSize(width: 560, height: 360)
         panel.setFrameAutosaveName("thinkpeek.main-window")
+        panel.delegate = self
+        panel.acceptsMouseMovedEvents = true
+        panel.isMovableByWindowBackground = true
 
-        let content = panel.contentView!
+        let content = HoverView(frame: NSRect(x: 0, y: 0, width: compactWidth,
+                                               height: compactHeight))
+        content.autoresizingMask = [.width, .height]
+        panel.contentView = content
         content.wantsLayer = true
         content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        content.hoverChanged = { [weak self] inside in self?.hoverChanged(inside) }
+        content.doubleClicked = { [weak self] in self?.applyPeekMode(false) }
+        content.draggingChanged = { [weak self] dragging in
+            if dragging { self?.peekRevealWorkItem?.cancel() }
+        }
 
-        let header = NSVisualEffectView()
-        header.material = .headerView
-        header.blendingMode = .withinWindow
-        header.state = .active
-        header.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(header)
+        peekBar = NSVisualEffectView()
+        peekBar.material = .headerView
+        peekBar.blendingMode = .withinWindow
+        peekBar.state = .active
+        peekBar.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(peekBar)
+
+        peekLabel = NSTextField(labelWithString: "Watching Claude and Codex…")
+        peekLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        peekLabel.textColor = .labelColor
+        peekLabel.lineBreakMode = .byTruncatingTail
+        peekLabel.maximumNumberOfLines = 1
+        peekLabel.translatesAutoresizingMaskIntoConstraints = false
+        peekBar.addSubview(peekLabel)
+
+        detailHeader = NSVisualEffectView()
+        detailHeader.material = .headerView
+        detailHeader.blendingMode = .withinWindow
+        detailHeader.state = .active
+        detailHeader.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(detailHeader)
 
         picker = NSPopUpButton(frame: .zero, pullsDown: false)
         picker.translatesAutoresizingMaskIntoConstraints = false
         picker.target = self
         picker.action = #selector(sessionPicked(_:))
         picker.font = .systemFont(ofSize: 14, weight: .semibold)
-        header.addSubview(picker)
+        detailHeader.addSubview(picker)
 
         status = NSTextField(labelWithString: "")
         status.translatesAutoresizingMaskIntoConstraints = false
         status.font = .systemFont(ofSize: 11, weight: .regular)
         status.textColor = .secondaryLabelColor
         status.lineBreakMode = .byTruncatingMiddle
-        header.addSubview(status)
+        status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        detailHeader.addSubview(status)
 
         latestButton = NSButton(title: "Latest ↓", target: self,
                                 action: #selector(scrollToLatest(_:)))
@@ -799,7 +1026,67 @@ final class HUD: NSObject, NSApplicationDelegate {
         latestButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         picker.setContentHuggingPriority(.defaultLow, for: .horizontal)
         picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        header.addSubview(latestButton)
+
+        previousButton = NSButton(title: "‹", target: self, action: #selector(showPrevious(_:)))
+        nextButton = NSButton(title: "›", target: self, action: #selector(showNext(_:)))
+        for button in [previousButton!, nextButton!] {
+            button.bezelStyle = .rounded
+            button.controlSize = .small
+            button.font = .systemFont(ofSize: 17, weight: .semibold)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.widthAnchor.constraint(equalToConstant: 32).isActive = true
+        }
+        positionLabel = NSTextField(labelWithString: "—")
+        positionLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        positionLabel.textColor = .secondaryLabelColor
+        positionLabel.alignment = .center
+        positionLabel.translatesAutoresizingMaskIntoConstraints = false
+        positionLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 42).isActive = true
+
+        expandButton = NSButton(title: "Show all", target: self,
+                                action: #selector(toggleExpanded(_:)))
+        expandButton.bezelStyle = .rounded
+        expandButton.controlSize = .small
+        latestButton.isHidden = true
+
+        positionButton = NSPopUpButton(frame: .zero, pullsDown: true)
+        positionButton.addItems(withTitles: ["", "Top Left", "Top Center",
+                                              "Top Right", "Bottom Left",
+                                              "Bottom Center", "Bottom Right"])
+        positionButton.item(at: 0)?.image = NSImage(
+            systemSymbolName: "move.3d", accessibilityDescription: "Position")
+            ?? NSImage(systemSymbolName: "arrow.up.and.down.and.arrow.left.and.right",
+                       accessibilityDescription: "Position")
+        let positionSymbols = [
+            (1, "arrow.up.left", "Top Left"),
+            (2, "arrow.up", "Top Center"),
+            (3, "arrow.up.right", "Top Right"),
+            (4, "arrow.down.left", "Bottom Left"),
+            (5, "arrow.down", "Bottom Center"),
+            (6, "arrow.down.right", "Bottom Right"),
+        ]
+        for (index, symbol, description) in positionSymbols {
+            guard let item = positionButton.item(at: index) else { continue }
+            item.title = ""
+            item.toolTip = description
+            item.image = NSImage(systemSymbolName: symbol,
+                                 accessibilityDescription: description)
+        }
+        positionButton.target = self
+        positionButton.action = #selector(positionPicked(_:))
+        positionButton.controlSize = .small
+        positionButton.toolTip = "Move HUD to a screen corner or edge"
+        positionButton.widthAnchor.constraint(equalToConstant: 36).isActive = true
+
+        let controls = NSStackView(views: [previousButton, positionLabel, nextButton,
+                                           positionButton, expandButton, latestButton])
+        controls.orientation = .horizontal
+        controls.alignment = .centerY
+        controls.spacing = 6
+        controls.translatesAutoresizingMaskIntoConstraints = false
+        controls.setContentHuggingPriority(.required, for: .horizontal)
+        controls.setContentCompressionResistancePriority(.required, for: .horizontal)
+        detailHeader.addSubview(controls)
 
         scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -808,10 +1095,14 @@ final class HUD: NSObject, NSApplicationDelegate {
         scrollView.drawsBackground = true
         scrollView.backgroundColor = .windowBackgroundColor
         scrollView.borderType = .noBorder
+        scrollView.hasHorizontalScroller = false
+        scrollView.horizontalScrollElasticity = .none
+        scrollView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         content.addSubview(scrollView)
 
         feedView = FlippedView(frame: .zero)
         feedView.translatesAutoresizingMaskIntoConstraints = false
+        feedView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         scrollView.documentView = feedView
 
         feedStack = NSStackView()
@@ -820,41 +1111,52 @@ final class HUD: NSObject, NSApplicationDelegate {
         feedStack.spacing = 12
         feedStack.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 24, right: 18)
         feedStack.translatesAutoresizingMaskIntoConstraints = false
+        feedStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         feedView.addSubview(feedStack)
 
         NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: content.topAnchor),
-            header.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            header.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            header.heightAnchor.constraint(equalToConstant: 74),
+            peekBar.topAnchor.constraint(equalTo: content.topAnchor),
+            peekBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            peekBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            peekBar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            peekLabel.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor, constant: 14),
+            peekLabel.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor, constant: -14),
+            peekLabel.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
 
-            picker.topAnchor.constraint(equalTo: header.topAnchor, constant: 10),
+            detailHeader.topAnchor.constraint(equalTo: content.topAnchor),
+            detailHeader.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            detailHeader.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            detailHeader.heightAnchor.constraint(equalToConstant: 74),
+
+            picker.topAnchor.constraint(equalTo: detailHeader.topAnchor, constant: 10),
             picker.heightAnchor.constraint(equalToConstant: 30),
-            picker.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 14),
-            picker.trailingAnchor.constraint(equalTo: latestButton.leadingAnchor, constant: -12),
+            picker.leadingAnchor.constraint(equalTo: detailHeader.leadingAnchor, constant: 14),
+            picker.trailingAnchor.constraint(equalTo: controls.leadingAnchor, constant: -12),
             status.leadingAnchor.constraint(equalTo: picker.leadingAnchor, constant: 2),
-            status.trailingAnchor.constraint(equalTo: latestButton.leadingAnchor, constant: -12),
+            status.trailingAnchor.constraint(equalTo: controls.leadingAnchor, constant: -12),
             status.heightAnchor.constraint(equalToConstant: 16),
-            status.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -8),
-            latestButton.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14),
-            latestButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            status.bottomAnchor.constraint(equalTo: detailHeader.bottomAnchor, constant: -8),
+            controls.trailingAnchor.constraint(equalTo: detailHeader.trailingAnchor, constant: -14),
+            controls.centerYAnchor.constraint(equalTo: detailHeader.centerYAnchor),
 
-            scrollView.topAnchor.constraint(equalTo: header.bottomAnchor),
+            scrollView.topAnchor.constraint(equalTo: detailHeader.bottomAnchor),
             scrollView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
 
-            feedView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
             feedStack.topAnchor.constraint(equalTo: feedView.topAnchor),
             feedStack.leadingAnchor.constraint(equalTo: feedView.leadingAnchor),
             feedStack.trailingAnchor.constraint(equalTo: feedView.trailingAnchor),
             feedStack.bottomAnchor.constraint(equalTo: feedView.bottomAnchor),
+            feedStack.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
         ])
 
         panel.orderFrontRegardless()
+        applyPeekMode(true, animated: false)
 
         knownOffsets = transcriptSizes()
         api.captureHandler = { [weak self] in self?.captureWindowPNG() }
+        api.actionHandler = { [weak self] action in self?.handleAction(action) }
         api.start()
         refreshPicker()
         refreshStatus()
@@ -868,6 +1170,7 @@ final class HUD: NSObject, NSApplicationDelegate {
     }
 
     private func publishAPI() {
+        let visibleFrame = (panel.screen ?? NSScreen.main)?.visibleFrame
         api.publish([
             "schemaVersion": 1,
             "ready": true,
@@ -876,22 +1179,248 @@ final class HUD: NSObject, NSApplicationDelegate {
             "status": status.stringValue,
             "externalAnalysisEnabled": driftStatus().ready,
             "analysisDestination": driftStatus().ready ? checkLabel() : NSNull(),
+            "historyCount": BACKFILL == Int.max ? "all" : String(BACKFILL),
+            "showEncrypted": SHOW_ENCRYPTED,
             "alwaysOnTop": panel.level == .floating,
+            "windowWidth": Int(panel.frame.width),
+            "windowHeight": Int(panel.frame.height),
+            "windowX": Int(panel.frame.minX),
+            "windowY": Int(panel.frame.minY),
+            "fullyOnScreen": visibleFrame.map { NSContainsRect($0, panel.frame) } ?? false,
+            "contentViewWidth": Int(panel.contentView?.bounds.width ?? 0),
+            "scrollViewportWidth": Int(scrollView.contentView.frame.width),
             "scrollable": scrollView.hasVerticalScroller,
             "contentHeight": Int(feedView.bounds.height),
             "viewportHeight": Int(scrollView.contentView.bounds.height),
-            "contentRequiresScroll": feedView.bounds.height > scrollView.contentView.bounds.height,
+            "contentRequiresScroll": !peekMode &&
+                feedView.bounds.height > scrollView.contentView.bounds.height,
             "smartAutoscroll": true,
             "unseenCount": unseenCount,
             "cardCount": feedStack.arrangedSubviews.count,
-            "uiStyle": "native-card-feed",
+            "visibleCardCount": peekMode ? 0 : eventCards.filter { !$0.isHidden }.count,
+            "compactMode": compactMode,
+            "peekMode": peekMode,
+            "peekText": peekLabel?.stringValue ?? "",
+            "hoverDisclosure": true,
+            "currentIndex": compactIndex,
+            "navigableCount": eventCards.count,
+            "uiStyle": peekMode ? "one-line-peek"
+                : (compactMode ? "compact-carousel" : "expanded-card-feed"),
             "events": Array(apiEvents.suffix(250)),
         ])
     }
 
+    func windowDidResize(_ notification: Notification) {
+        guard panel != nil else { return }
+        if peekMode {
+            publishAPI()
+            return
+        } else if compactMode {
+            compactHeight = panel.frame.height
+        } else {
+            expandedHeight = panel.frame.height
+        }
+        publishAPI()
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        publishAPI()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        publishAPI()
+    }
+
+    private func resizePanel(to height: CGFloat, width: CGFloat? = nil,
+                             animated: Bool = true) {
+        var frame = panel.frame
+        let top = frame.maxY
+        let center = frame.midX
+        frame.size.height = height
+        frame.origin.y = top - height
+        if let width {
+            frame.size.width = width
+            frame.origin.x = center - width / 2
+        }
+        if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
+            frame.origin.x = min(max(frame.origin.x, visible.minX),
+                                 max(visible.minX, visible.maxX - frame.width))
+            frame.origin.y = min(max(frame.origin.y, visible.minY),
+                                 max(visible.minY, visible.maxY - frame.height))
+        }
+        panel.setFrame(frame, display: true, animate: animated)
+    }
+
+    private func handleAction(_ action: String) {
+        switch action {
+        case "previous": showPrevious(nil)
+        case "next": showNext(nil)
+        case "toggle-expanded": toggleExpanded(nil)
+        case "reveal":
+            apiRevealLocked = true
+            applyPeekMode(false)
+        case "hide":
+            apiRevealLocked = false
+            if compactMode { applyPeekMode(true) }
+        case let value where value.hasPrefix("position/"):
+            movePanel(to: String(value.dropFirst("position/".count)))
+        default: break
+        }
+    }
+
+    @objc private func positionPicked(_ sender: NSPopUpButton) {
+        let presets = ["top-left", "top-center", "top-right", "bottom-left",
+                       "bottom-center", "bottom-right"]
+        let index = sender.indexOfSelectedItem - 1
+        guard presets.indices.contains(index) else { return }
+        movePanel(to: presets[index])
+        sender.selectItem(at: 0)
+    }
+
+    private func movePanel(to preset: String) {
+        guard let visible = (panel.screen ?? NSScreen.main)?.visibleFrame else { return }
+        let inset: CGFloat = 12
+        var frame = panel.frame
+        if preset.hasSuffix("left") { frame.origin.x = visible.minX + inset }
+        else if preset.hasSuffix("right") { frame.origin.x = visible.maxX - frame.width - inset }
+        else { frame.origin.x = visible.midX - frame.width / 2 }
+        if preset.hasPrefix("top") { frame.origin.y = visible.maxY - frame.height - inset }
+        else { frame.origin.y = visible.minY + inset }
+        panel.setFrame(panel.constrainFrameRect(frame, to: panel.screen), display: true)
+        publishAPI()
+    }
+
+    private func hoverChanged(_ inside: Bool) {
+        peekHideWorkItem?.cancel()
+        peekRevealWorkItem?.cancel()
+        if inside {
+            guard peekMode else { return }
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, self.panel.frame.contains(NSEvent.mouseLocation),
+                      self.peekMode else { return }
+                self.applyPeekMode(false)
+            }
+            peekRevealWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+            return
+        }
+        guard compactMode, !apiRevealLocked else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.panel.frame.contains(NSEvent.mouseLocation),
+                  self.compactMode, !self.apiRevealLocked else { return }
+            self.applyPeekMode(true)
+        }
+        peekHideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
+    }
+
+    private func applyPeekMode(_ peek: Bool, animated: Bool = false) {
+        peekMode = peek
+        (panel.contentView as? HoverView)?.dragOnly = peek
+        peekBar.isHidden = !peek
+        detailHeader.isHidden = peek
+        scrollView.isHidden = peek
+        if peek {
+            panel.minSize = NSSize(width: 340, height: 62)
+            panel.maxSize = NSSize(width: peekWidth, height: 110)
+            resizePanel(to: 68, width: peekWidth, animated: animated)
+        } else {
+            panel.minSize = compactMode ? NSSize(width: 430, height: 190)
+                : NSSize(width: 520, height: 360)
+            if compactMode {
+                panel.maxSize = NSSize(width: compactWidth, height: 360)
+            } else if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
+                panel.maxSize = NSSize(width: min(expandedWidth, visible.width),
+                                       height: visible.height)
+            }
+            resizePanel(to: compactMode ? max(190, compactHeight)
+                                       : max(520, expandedHeight),
+                        width: compactMode ? compactWidth : expandedWidth,
+                        animated: animated)
+        }
+        publishAPI()
+    }
+
+    @objc private func showPrevious(_ sender: Any?) {
+        guard compactMode, compactIndex > 0 else { return }
+        compactIndex -= 1
+        updateCardVisibility()
+    }
+
+    @objc private func showNext(_ sender: Any?) {
+        guard compactMode, compactIndex + 1 < eventCards.count else { return }
+        compactIndex += 1
+        updateCardVisibility()
+    }
+
+    @objc private func toggleExpanded(_ sender: Any?) {
+        if peekMode { applyPeekMode(false) }
+        if compactMode {
+            compactHeight = panel.frame.height
+            compactMode = false
+            panel.minSize = NSSize(width: 520, height: 360)
+            if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
+                panel.maxSize = NSSize(width: min(expandedWidth, visible.width),
+                                       height: visible.height)
+            }
+            resizePanel(to: max(520, expandedHeight), width: expandedWidth)
+        } else {
+            expandedHeight = panel.frame.height
+            compactMode = true
+            panel.minSize = NSSize(width: 430, height: 190)
+            panel.maxSize = NSSize(width: compactWidth, height: 360)
+            compactIndex = max(0, eventCards.count - 1)
+            resizePanel(to: min(320, max(190, compactHeight)), width: compactWidth)
+        }
+        updateCardVisibility()
+    }
+
+    private func updateCardVisibility() {
+        if compactMode {
+            if !eventCards.isEmpty {
+                compactIndex = min(max(0, compactIndex), eventCards.count - 1)
+            }
+            for (index, card) in eventCards.enumerated() {
+                card.isHidden = index != compactIndex
+            }
+            for card in systemCards { card.isHidden = !eventCards.isEmpty }
+            positionLabel.stringValue = eventCards.isEmpty
+                ? "—" : "\(compactIndex + 1) / \(eventCards.count)"
+            if compactIndex >= 0 && compactIndex < eventPreviews.count {
+                peekLabel.attributedStringValue = eventPreviews[compactIndex]
+            }
+            previousButton.isEnabled = compactIndex > 0
+            nextButton.isEnabled = compactIndex >= 0 && compactIndex + 1 < eventCards.count
+            expandButton.title = "Show all"
+            latestButton.isHidden = true
+        } else {
+            for card in eventCards { card.isHidden = false }
+            for card in systemCards { card.isHidden = !eventCards.isEmpty }
+            positionLabel.stringValue = "All \(eventCards.count)"
+            previousButton.isEnabled = false
+            nextButton.isEnabled = false
+            expandButton.title = "Collapse"
+            latestButton.isHidden = false
+        }
+        feedView.layoutSubtreeIfNeeded()
+        if compactMode {
+            scrollView.contentView.scroll(to: .zero)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+        publishAPI()
+    }
+
     private func captureWindowPNG() -> Data? {
-        guard let view = panel.contentView,
-              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        guard let view = panel.contentView else { return nil }
+        let scale = panel.backingScaleFactor
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: max(1, Int(view.bounds.width * scale)),
+            pixelsHigh: max(1, Int(view.bounds.height * scale)),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+            isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        rep.size = view.bounds.size
         view.cacheDisplay(in: view.bounds, to: rep)
         return rep.representation(using: .png, properties: [:])
     }
@@ -921,7 +1450,8 @@ final class HUD: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func addCard(source: String, event: UIEvent,
-                         deferScrollAndLayout: Bool = false) -> EventCard {
+                         deferScrollAndLayout: Bool = false,
+                         navigable: Bool = true) -> EventCard {
         let follow = !deferScrollAndLayout &&
             (nearBottom() || feedStack.arrangedSubviews.isEmpty)
         let card = EventCard(source: source, time: displayTime(event.timestamp), event: event)
@@ -929,6 +1459,15 @@ final class HUD: NSObject, NSApplicationDelegate {
         card.widthAnchor.constraint(equalTo: feedStack.widthAnchor,
                                     constant: -feedStack.edgeInsets.left - feedStack.edgeInsets.right)
             .isActive = true
+        if navigable {
+            let wasFollowingLatest = eventCards.isEmpty || compactIndex == eventCards.count - 1
+            eventCards.append(card)
+            eventPreviews.append(renderedBody(event.text, kind: event.kind))
+            if wasFollowingLatest { compactIndex = eventCards.count - 1 }
+        } else {
+            systemCards.append(card)
+        }
+        updateCardVisibility()
         if deferScrollAndLayout { return card }
         feedView.layoutSubtreeIfNeeded()
         if follow {
@@ -944,7 +1483,7 @@ final class HUD: NSObject, NSApplicationDelegate {
         let text = detail.isEmpty ? title : "\(title)\n\(detail)"
         let event = UIEvent(timestamp: ISO8601DateFormatter().string(from: Date()),
                             kind: "activity", text: text, readableAnalysis: false)
-        _ = addCard(source: "Thinkpeek", event: event)
+        _ = addCard(source: "Thinkpeek", event: event, navigable: false)
     }
 
     private func clearFeed() {
@@ -955,6 +1494,12 @@ final class HUD: NSObject, NSApplicationDelegate {
         unseenCount = 0
         latestButton.title = "Latest ↓"
         apiEvents.removeAll()
+        eventCards.removeAll()
+        eventPreviews.removeAll()
+        systemCards.removeAll()
+        presentationKeys.removeAll()
+        compactIndex = -1
+        updateCardVisibility()
     }
 
     // MARK: session picker
@@ -1030,11 +1575,13 @@ final class HUD: NSObject, NSApplicationDelegate {
             tailers.removeValue(forKey: path)
         }
 
-        let contextPath = wanted.first
         for path in wanted where tailers[path] == nil {
             if !monitorsReady {
-                tailers[path] = Tailer(path: path,
-                    backfill: path == contextPath ? BACKFILL : 0)
+                // Read a few extra summaries so presentation deduplication can
+                // still deliver the configured number of unique history cards.
+                let scanLimit = BACKFILL == Int.max ? Int.max
+                    : (BACKFILL >= 13 ? 100 : BACKFILL * 8)
+                tailers[path] = Tailer(path: path, backfill: scanLimit)
             } else {
                 // Existing files resume from the launch/removal snapshot. Brand
                 // new files start at byte zero. Both paths preserve partial lines.
@@ -1076,7 +1623,26 @@ final class HUD: NSObject, NSApplicationDelegate {
         for (path, tailer) in tailers {
             arrived += tailer.drain().map { (path, $0) }
         }
+        if !SHOW_ENCRYPTED {
+            arrived.removeAll { $0.block.sealed }
+        }
         arrived.sort { $0.block.ts < $1.block.ts }
+        arrived.removeAll { event in
+            let normalized = event.block.text
+                .split(whereSeparator: { $0.isWhitespace })
+                .joined(separator: " ")
+            let timestampPart = event.block.kind == .activity ? "\u{1f}" + event.block.ts : ""
+            let key = sourceName(for: event.path) + "\u{1f}" + normalized + timestampPart
+            if presentationKeys.contains(key) { return true }
+            presentationKeys.insert(key)
+            return false
+        }
+        if BACKFILL != Int.max {
+            let history = arrived.filter { $0.block.backfilled }
+                .sorted { $0.block.ts < $1.block.ts }
+            let live = arrived.filter { !$0.block.backfilled }
+            arrived = live + Array(history.suffix(BACKFILL))
+        }
         let isInitialHistoryBatch = arrived.count > 20 && feedStack.arrangedSubviews.count <= 1
         for event in arrived {
             let block = event.block

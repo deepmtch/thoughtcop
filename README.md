@@ -36,8 +36,8 @@ Codex tasks write rollout events to:
 ~/.codex/sessions/<year>/<month>/<day>/rollout-<timestamp>-<task-uuid>.jsonl
 ```
 
-Codex readable summaries arrive as `event_msg/agent_reasoning`; task starts and
-encrypted-only reasoning records are also represented. Task names come from
+Codex readable summaries arrive as `event_msg/agent_reasoning`; task starts are
+also represented. Encrypted-only records are hidden by default. Task names come from
 `~/.codex/session_index.jsonl`. Auto mode follows both Claude and Codex, and the
 picker labels every source explicitly.
 
@@ -66,16 +66,22 @@ shows either the readable summary or an explicit omitted-summary marker.
 
 ## Native window
 
-The AppKit window is a resizable, always-on-top card feed rather than a terminal
-view. It loads the complete reasoning history for the selected session, keeps all
-text selectable, and scrolls normally. Live events follow the bottom only while
-you are already near it; if you scroll upward, a **Latest** counter reports new
-items without moving your reading position.
+The AppKit window is a resizable, always-on-top HUD rather than a terminal view.
+Its resting state is one truncated summary line (460 points wide; user-resizable
+down to 340 × 62). Pause the pointer over the HUD for 350 ms to reveal the current
+card, session selector, provider status, and left/right history controls; moving
+away collapses it after a short delay. The pause leaves time to drag immediately
+with the hand cursor. The move icon provides Top/Bottom × Left/Center/Right presets.
+**Show all** explicitly locks open the full scrollable feed until **Collapse** is
+selected. Compact and full-feed widths are hard-capped at 560 and 700 points, so
+long reasoning wraps and scrolls vertically instead of stretching the window.
 
 Auto mode follows every active session and nested agent. Use the session picker
-to pin one session and inspect its complete history. Cards show the local time,
-source session, readable summary, and a clear marker when Claude persisted only
-an encrypted signature.
+to pin one session. Cards show the local time, source session, and readable summary.
+Set `THINKPEEK_HISTORY_COUNT` in `.env` to an integer, `0`, or `all`. Encrypted
+signature-only cards are hidden unless `THINKPEEK_SHOW_ENCRYPTED=true`.
+Repeated identical summaries from the same source are presented once even when
+the transcript records them at multiple timestamps.
 
 ### Evidence the writes are live
 
@@ -130,11 +136,11 @@ is enabled and name the exact direct provider. Every live card changes from
    parsed as truncated JSON, and must render correctly once the newline arrives.
 4. **Survive truncation/rotation.** If the file shrinks below the current offset,
    reset to 0 rather than seeking past the end.
-5. **Complete history on attach.** Load every reasoning block for a pinned or
-   selected session so the full conversation remains inspectable and scrollable.
-6. **Distinguish sealed blocks.** Signature-only reasoning is displayed as such,
-   never as empty space — the user must be able to tell "Claude thought nothing"
-   from "the content was not persisted".
+5. **Configurable history on attach.** Load the latest three readable summaries
+   by default; allow an integer, zero, or the complete history through `.env`.
+6. **Handle sealed blocks explicitly.** Signature-only reasoning is hidden by
+   default and can be displayed as an omitted-summary card through `.env`; it is
+   never presented as if readable analysis existed.
 7. **Always on top,** across Spaces and over full-screen apps, without stealing focus.
 8. **Read-only.** Never write to, lock, or truncate a transcript, and never
    create anything under `~/.claude/`.
@@ -169,12 +175,15 @@ renderer and automated tests consume the same `UIEvent` objects:
 ./thinkpeek --ui-json ~/.claude/projects/<project>/<session>.jsonl
 ```
 
-The running window publishes the state it actually consumed at the local,
-read-only endpoint `http://127.0.0.1:17321/ui` (override with
+The running window publishes the state it actually consumed at the local
+endpoint `http://127.0.0.1:17321/ui` (override with
 `THINKPEEK_API_PORT`). This makes window title, selection, status, analysis,
 omitted blocks, activity, and drift results assertable without screen capture.
 The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
 by the running AppKit window, so layout and scrolling can be checked end to end.
+`/reveal`, `/hide`, `/previous`, `/next`, and `/toggle-expanded` exercise the
+same disclosure and carousel paths as the visible UI, allowing compact, hover,
+and expanded interactions to be tested through the complete running window.
 Use `./thinkpeek --transcript /absolute/session.jsonl` to pin a deterministic
 input for an end-to-end UI test.
 
