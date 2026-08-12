@@ -184,12 +184,12 @@ if CommandLine.arguments.contains("--message-view-selftest") {
 
 if CommandLine.arguments.contains("--window-position-selftest") {
     let visible = NSRect(x: 0, y: 0, width: 1440, height: 900)
-    let bottomRightPeek = NSRect(x: 968, y: 12, width: 460, height: 98)
+    let bottomRightPeek = NSRect(x: 968, y: 12, width: 460, height: 70)
     let expanded = resizedWindowFrame(bottomRightPeek, toHeight: 210,
                                       width: 560, within: visible)
-    let collapsed = resizedWindowFrame(expanded, toHeight: 98,
+    let collapsed = resizedWindowFrame(expanded, toHeight: 70,
                                        width: 460, within: visible)
-    let floating = NSRect(x: 400, y: 300, width: 460, height: 98)
+    let floating = NSRect(x: 400, y: 300, width: 460, height: 70)
     let floatingExpanded = resizedWindowFrame(floating, toHeight: 210,
                                               width: 560, within: visible)
     let close: (CGFloat, CGFloat) -> Bool = { abs($0 - $1) < 0.5 }
@@ -203,6 +203,22 @@ if CommandLine.arguments.contains("--window-position-selftest") {
         exit(1)
     }
     print("window position: bottom/right insets and floating center preserved")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--window-chrome-selftest") {
+    let testPanel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 70),
+                            styleMask: [.borderless, .resizable, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
+    let content = testPanel.contentRect(forFrameRect: testPanel.frame)
+    let chrome = testPanel.frame.height - content.height
+    guard abs(chrome) < 0.5, abs(content.height - 70) < 0.5 else {
+        FileHandle.standardError.write(
+            "window chrome self-test failed: frame=\(testPanel.frame) content=\(content)\n"
+                .data(using: .utf8)!)
+        exit(1)
+    }
+    print("window chrome: borderless=true chromeHeight=0 restingHeight=70")
     exit(0)
 }
 

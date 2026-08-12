@@ -17,3 +17,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-010](BUG-010-markdown-markers-in-ticker.md) | Markdown markers appeared literally in the ticker | Fixed |
 | [BUG-011](BUG-011-hover-conflated-reading-and-controls.md) | Hover conflated reading a message with opening controls | Fixed |
 | [BUG-012](BUG-012-ticker-speed-not-configurable.md) | Ticker reading speed was not configurable | Fixed |
+| [BUG-013](BUG-013-title-bar-wasted-compact-height.md) | Title bar wasted compact HUD height | Fixed |

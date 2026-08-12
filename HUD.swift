@@ -31,7 +31,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var compactHeight: CGFloat = 210
     private var messageHeight: CGFloat = 300
     private let peekWidth: CGFloat = 460
-    private let peekHeight: CGFloat = 98
+    private let peekHeight: CGFloat = 70
     private let compactWidth: CGFloat = 560
     private var expandedHeight: CGFloat = 620
     private let expandedWidth: CGFloat = 700
@@ -55,7 +55,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         panel = ConstrainedPanel(
             contentRect: NSRect(x: 60, y: 140, width: 560, height: 210),
-            styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
+            styleMask: [.borderless, .resizable, .nonactivatingPanel],
             backing: .buffered, defer: false)
         panel.title = "Thinkpeek"
         panel.level = .floating
@@ -63,10 +63,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.backgroundColor = .windowBackgroundColor
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .none
-        panel.minSize = NSSize(width: 340, height: 62)
+        panel.minSize = NSSize(width: 340, height: 54)
         panel.maxSize = NSSize(width: 560, height: 360)
         panel.setFrameAutosaveName("thinkpeek.main-window")
         panel.delegate = self
@@ -79,6 +81,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.contentView = content
         content.wantsLayer = true
         content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        content.layer?.cornerRadius = 14
+        content.layer?.cornerCurve = .continuous
+        content.layer?.masksToBounds = true
         content.clicked = { [weak self] in self?.showCurrentMessage() }
         content.doubleClicked = { [weak self] in self?.applyPeekMode(false) }
 
@@ -343,6 +348,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "alwaysOnTop": panel.level == .floating,
             "windowWidth": Int(panel.frame.width),
             "windowHeight": Int(panel.frame.height),
+            "windowChromeHeight": Int(round(panel.frame.height -
+                panel.contentRect(forFrameRect: panel.frame).height)),
             "windowX": Int(panel.frame.minX),
             "windowY": Int(panel.frame.minY),
             "fullyOnScreen": visibleFrame.map { NSContainsRect($0, panel.frame) } ?? false,
@@ -528,7 +535,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekTicker.setActive(peek)
         if peek {
             transitionPanel(to: peekHeight, width: peekWidth,
-                            minSize: NSSize(width: 340, height: 62),
+                            minSize: NSSize(width: 340, height: 54),
                             maxSize: NSSize(width: peekWidth, height: peekHeight),
                             animated: animated)
         } else {

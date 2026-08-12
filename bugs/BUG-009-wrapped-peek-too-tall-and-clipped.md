@@ -40,5 +40,6 @@ ticker, so neither line can intrude into the title bar.
 `./thinkpeek --ticker-selftest` verifies that multiline input is normalized to one
 line, overflowing content is detected, and the label remains vertically inside
 its 26-point viewport. Live verification checks a fixed 460 × 98-point resting
-window, `uiStyle: single-line-ticker`, and the **↤** return-to-start path. The
+window (reduced to 460 × 70 points by BUG-013), `uiStyle: single-line-ticker`,
+and the **↤** return-to-start path. The
 later interaction split is recorded in BUG-011.

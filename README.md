@@ -69,7 +69,7 @@ shows either the readable summary or an explicit omitted-summary marker.
 ## Native window
 
 The AppKit window is a resizable, always-on-top HUD rather than a terminal view.
-Its resting state keeps a fixed 460 × 98-point frame: the exact source session on
+Its borderless resting state keeps a fixed 460 × 70-point frame: the exact source session on
 top and a single-line ticker below. Overflowing text pauses at the beginning,
 moves horizontally, pauses at the end, and quickly returns. With macOS Reduce
 Motion enabled, it remains clipped and stationary. Hover never changes the UI.
@@ -175,6 +175,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --ticker-selftest
 ./thinkpeek --message-view-selftest
 ./thinkpeek --window-position-selftest
+./thinkpeek --window-chrome-selftest
 ./thinkpeek --interaction-selftest
 ```
 
