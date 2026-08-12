@@ -27,5 +27,6 @@ do
     ./.build/thinkpeek "$test"
 done
 
-python3 -m py_compile Scripts/watch.py
+PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
+    python3 -m py_compile Scripts/watch.py
 echo "all Thinkpeek tests passed"
