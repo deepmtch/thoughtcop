@@ -11,6 +11,7 @@ swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o thinkpeek \
     DriftCheck.swift \
     SingleInstance.swift \
     UIStateServer.swift \
+    PresentationState.swift \
     Views.swift \
     HUD.swift \
     main.swift

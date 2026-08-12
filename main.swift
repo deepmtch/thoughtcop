@@ -88,6 +88,36 @@ if CommandLine.arguments.contains("--layout-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--presentation-selftest") {
+    var state = OperationPresentationState()
+    state.readableContentArrived(source: "Claude · useful summary")
+    let usefulTitle = state.windowTitle
+    state.operationStarted(source: "Claude · useful summary")
+    guard state.operationPending,
+          state.windowTitle == "● Claude · useful summary · working…",
+          usefulTitle == "Claude · useful summary" else {
+        FileHandle.standardError.write("presentation self-test failed at operation start\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    state.readableContentArrived(source: "Claude · next summary")
+    guard state.operationPending,
+          state.windowTitle == "● Claude · useful summary · working…" else {
+        FileHandle.standardError.write("presentation self-test lost concurrent pending work\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    state.readableContentArrived(source: "Claude · useful summary")
+    guard !state.operationPending,
+          state.windowTitle == "Claude · useful summary" else {
+        FileHandle.standardError.write("presentation self-test failed to clear pending work\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    print("presentation: useful summary preserved until readable content arrives")
+    exit(0)
+}
+
 // Headless check of the alarm path: no window, no transcript, just the model.
 if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.arguments.count {
     print("triggers: \(loadTriggers().count) from \(TRIGGERS_FILE)")

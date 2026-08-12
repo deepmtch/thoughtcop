@@ -37,7 +37,8 @@ Codex tasks write rollout events to:
 ```
 
 Codex readable summaries arrive as `event_msg/agent_reasoning`; task starts are
-also represented. Encrypted-only records are hidden by default. Task names come from
+also represented internally as progress only: they never replace a readable
+summary or enter card history. Encrypted-only records are hidden by default. Task names come from
 `~/.codex/session_index.jsonl`. Auto mode follows both Claude and Codex, and the
 picker labels every source explicitly.
 
@@ -165,6 +166,7 @@ The tailing engine and the actual native window presentation are both testable.
 ```bash
 ./thinkpeek --selftest
 ./thinkpeek --layout-selftest
+./thinkpeek --presentation-selftest
 ```
 
 prints the active transcript and its last 5 reasoning blocks — no window involved.

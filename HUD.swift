@@ -46,6 +46,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var names: [String: String] = [:]
     private var knownOffsets: [String: UInt64] = [:]
     private var alertCount = 0
+    private var operationState = OperationPresentationState()
     private let api = UIStateServer()
     private var apiEvents: [[String: Any]] = []
 
@@ -308,6 +309,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "compactMode": compactMode,
             "peekMode": peekMode,
             "peekText": peekLabel?.stringValue ?? "",
+            "operationPending": operationState.operationPending,
+            "pendingSource": operationState.latestPendingSource ?? NSNull(),
             "hoverDisclosure": true,
             "currentIndex": compactIndex,
             "navigableCount": eventCards.count,
@@ -643,8 +646,27 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         eventPreviews.removeAll()
         systemCards.removeAll()
         presentationKeys.removeAll()
+        operationState.resetPending()
         compactIndex = -1
         updateCardVisibility()
+    }
+
+    /// Operation-start records are progress signals, not useful content. Keep
+    /// the last readable summary in the card/peek/history and signal work only
+    /// through the window title and state API.
+    private func operationStarted(source: String) {
+        operationState.operationStarted(source: source)
+        updateWindowTitle()
+        publishAPI()
+    }
+
+    private func readableContentArrived(source: String) {
+        operationState.readableContentArrived(source: source)
+        updateWindowTitle()
+    }
+
+    private func updateWindowTitle() {
+        panel.title = operationState.windowTitle
     }
 
     // MARK: session picker
@@ -783,25 +805,31 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return false
         }
         if BACKFILL != Int.max {
-            let history = arrived.filter { $0.block.backfilled }
+            let history = arrived.filter {
+                $0.block.backfilled && $0.block.kind != .activity
+            }
                 .sorted { $0.block.ts < $1.block.ts }
             let live = arrived.filter { !$0.block.backfilled }
             arrived = live + Array(history.suffix(BACKFILL))
+        } else {
+            // Old operation-start records are neither content nor current status.
+            arrived.removeAll { $0.block.backfilled && $0.block.kind == .activity }
         }
         let isInitialHistoryBatch = arrived.count > 20 && feedStack.arrangedSubviews.count <= 1
         for event in arrived {
             let block = event.block
             let source = sourceName(for: event.path)
-            panel.title = source
             let ui = uiEvent(for: block)
+            if ui.kind == "activity" {
+                operationStarted(source: source)
+                continue
+            }
+            readableContentArrived(source: source)
             var apiItem = ui.json
             apiItem["source"] = source
             apiEvents.append(apiItem)
             let card = addCard(source: source, event: ui,
                                deferScrollAndLayout: isInitialHistoryBatch)
-            if ui.kind == "activity" {
-                continue
-            }
             if ui.kind == "omitted-analysis" {
                 continue
             }
