@@ -59,61 +59,59 @@ func visibleTickerTextWidth(textWidth: CGFloat, viewportWidth: CGFloat,
 }
 
 final class TickerView: NSView {
-    private let viewport = NSView()
-    private let label = NSTextField(labelWithString: "")
     private var active = false
     private var optionsObserver: NSObjectProtocol?
-    private var animationGeneration = 0
+    private var motionTimer: Timer?
+    private var cycleStartedAt: CFTimeInterval = 0
+    private var textStorage = ""
+    private var attributedText = NSAttributedString(string: "")
     private var measuredTextWidth: CGFloat = 0
+    private var measuredTextHeight: CGFloat = 0
+    private var translation: CGFloat = 0
     var speed: TickerSpeed = .normal { didSet { restart() } }
     var foregroundColor: NSColor = .labelColor {
-        didSet { label.textColor = foregroundColor }
+        didSet { rebuildAttributedText() }
     }
 
     var text: String {
-        get { label.stringValue }
+        get { textStorage }
         set {
             guard let normalized = presentableTickerText(newValue) else { return }
             resetToBeginning()
-            label.stringValue = normalized
+            textStorage = normalized
+            rebuildAttributedText()
+            setAccessibilityValue(normalized)
             needsLayout = true
             layoutSubtreeIfNeeded()
             restart()
         }
     }
 
-    var isOverflowing: Bool { label.frame.width > viewport.bounds.width + 0.5 }
+    private var textFrame: NSRect {
+        NSRect(x: translation,
+               y: floor((bounds.height - measuredTextHeight) / 2),
+               width: max(measuredTextWidth, bounds.width),
+               height: measuredTextHeight)
+    }
+    var isOverflowing: Bool { measuredTextWidth > bounds.width + 0.5 }
     var layoutMetrics: (viewport: NSRect, label: NSRect) {
-        (viewport.bounds, label.frame)
+        (bounds, textFrame)
     }
     var presentationMetrics: (translation: CGFloat, textWidth: CGFloat,
                               visibleWidth: CGFloat) {
-        let layer = label.layer?.presentation() ?? label.layer
-        let translation = (layer?.value(forKeyPath: "transform.translation.x")
-            as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
         return (translation, measuredTextWidth,
                 visibleTickerTextWidth(textWidth: measuredTextWidth,
-                                       viewportWidth: viewport.bounds.width,
+                                       viewportWidth: bounds.width,
                                        translation: translation))
     }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-
-        viewport.wantsLayer = true
-        viewport.layer?.masksToBounds = true
-        addSubview(viewport)
-
-        label.font = .systemFont(ofSize: 14, weight: .semibold)
-        label.textColor = .labelColor
-        label.usesSingleLineMode = true
-        label.maximumNumberOfLines = 1
-        label.lineBreakMode = .byClipping
-        label.cell?.wraps = false
-        label.cell?.isScrollable = false
-        label.wantsLayer = true
-        viewport.addSubview(label)
+        layer?.masksToBounds = true
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel("Scrolling message")
 
         optionsObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
@@ -123,6 +121,7 @@ final class TickerView: NSView {
     required init?(coder: NSCoder) { nil }
 
     deinit {
+        motionTimer?.invalidate()
         if let optionsObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(optionsObserver)
         }
@@ -130,14 +129,16 @@ final class TickerView: NSView {
 
     override func layout() {
         super.layout()
-        viewport.frame = bounds
-        measuredTextWidth = ceil(label.attributedStringValue.size().width)
-        let fitting = label.fittingSize
-        let labelHeight = min(bounds.height, ceil(fitting.height))
-        label.frame = NSRect(x: 0, y: floor((bounds.height - labelHeight) / 2),
-                             width: max(measuredTextWidth, bounds.width),
-                             height: labelHeight)
+        measureAttributedText()
         restart()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: bounds).addClip()
+        attributedText.draw(at: textFrame.origin)
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     func setActive(_ active: Bool) {
@@ -154,49 +155,76 @@ final class TickerView: NSView {
         guard active,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
               isOverflowing else { return }
-
-        let generation = animationGeneration
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.active, self.animationGeneration == generation else { return }
-            self.installAnimation(expectedGeneration: generation)
+        cycleStartedAt = CACurrentMediaTime()
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.advanceAnimation(now: CACurrentMediaTime())
         }
+        motionTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func resetToBeginning() {
-        animationGeneration += 1
-        label.layer?.removeAllAnimations()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        label.layer?.transform = CATransform3DIdentity
-        CATransaction.commit()
+        motionTimer?.invalidate()
+        motionTimer = nil
+        setTranslation(0)
     }
 
-    private func installAnimation(expectedGeneration: Int) {
-        guard animationGeneration == expectedGeneration,
-              active,
-              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-              measuredTextWidth > viewport.bounds.width + 0.5 else { return }
+    private func rebuildAttributedText() {
+        let font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        attributedText = NSAttributedString(
+            string: textStorage,
+            attributes: [.font: font, .foregroundColor: foregroundColor])
+        measureAttributedText()
+        needsDisplay = true
+    }
 
-        let distance = measuredTextWidth - viewport.bounds.width
+    private func measureAttributedText() {
+        let size = attributedText.size()
+        measuredTextWidth = ceil(size.width)
+        measuredTextHeight = min(bounds.height, ceil(size.height))
+    }
+
+    private func setTranslation(_ x: CGFloat) {
+        guard abs(translation - x) > 0.01 else { return }
+        translation = x
+        // Draw the visible string at its current offset every frame. This avoids
+        // moving a partially rasterized, clipped NSTextField backing store.
+        needsDisplay = true
+    }
+
+    private func advanceAnimation(now: CFTimeInterval) {
+        guard active,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              measuredTextWidth > bounds.width + 0.5 else {
+            resetToBeginning()
+            return
+        }
+
+        let distance = measuredTextWidth - bounds.width
         let travelDuration = TimeInterval(distance / speed.pointsPerSecond)
         let total = TickerTiming.startPause + travelDuration +
             TickerTiming.endPause + TickerTiming.returnDuration
-        guard total > 0 else { return }
+        guard total > 0 else {
+            resetToBeginning()
+            return
+        }
 
-        let reachedEnd = (TickerTiming.startPause + travelDuration) / total
-        let leaveEnd = (TickerTiming.startPause + travelDuration +
-                        TickerTiming.endPause) / total
-        let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
-        animation.values = [0, 0, -distance, -distance, 0]
-        animation.keyTimes = [0,
-                              NSNumber(value: TickerTiming.startPause / total),
-                              NSNumber(value: reachedEnd),
-                              NSNumber(value: leaveEnd),
-                              1]
-        animation.duration = total
-        animation.repeatCount = .infinity
-        animation.calculationMode = .linear
-        animation.isRemovedOnCompletion = false
-        label.layer?.add(animation, forKey: "ticker")
+        let elapsed = (now - cycleStartedAt).truncatingRemainder(dividingBy: total)
+        let translation: CGFloat
+        if elapsed < TickerTiming.startPause {
+            translation = 0
+        } else if elapsed < TickerTiming.startPause + travelDuration {
+            let travelElapsed = elapsed - TickerTiming.startPause
+            translation = -min(distance, CGFloat(travelElapsed) * speed.pointsPerSecond)
+        } else if elapsed < TickerTiming.startPause + travelDuration +
+                    TickerTiming.endPause {
+            translation = -distance
+        } else {
+            let returnElapsed = elapsed - TickerTiming.startPause - travelDuration -
+                TickerTiming.endPause
+            let progress = min(1, CGFloat(returnElapsed / TickerTiming.returnDuration))
+            translation = -distance * (1 - progress)
+        }
+        setTranslation(translation)
     }
 }

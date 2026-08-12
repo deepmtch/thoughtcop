@@ -23,3 +23,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-016](BUG-016-controls-width-was-fixed.md) | Controls window could not stay at a narrower width | Fixed |
 | [BUG-017](BUG-017-ticker-background-not-customizable.md) | Ticker background was not customizable | Fixed |
 | [BUG-018](BUG-018-ticker-animation-could-show-no-text.md) | Ticker animation could show no message text | Fixed |
+| [BUG-019](BUG-019-layer-animation-left-undrawn-ticker-regions.md) | Layer-only scrolling left parts of ticker text undrawn | Fixed |

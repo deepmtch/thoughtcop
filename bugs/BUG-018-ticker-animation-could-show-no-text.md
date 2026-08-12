@@ -39,3 +39,9 @@ long-message cycle; every ticker-mode response must report
 Recorded result: 96 rapid transitions produced zero blank samples. The live full
 cycle produced 240/240 visible samples, zero blanks, and a minimum visible width
 of 400 points while overflow animation was active.
+
+## Follow-up
+
+Those checks validated geometry, not whether AppKit had rasterized every glyph.
+BUG-019 records the separate rendering defect discovered by inspecting real
+screenshots throughout the animation.
