@@ -15,6 +15,7 @@ swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o thinkpeek \
     WindowGeometry.swift \
     TickerView.swift \
     Views.swift \
+    FullMessageView.swift \
     HUD.swift \
     main.swift
 

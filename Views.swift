@@ -3,9 +3,8 @@
 
 import AppKit
 
-enum HoverUX {
-    static let revealDelay: TimeInterval = 0.08
-    static let hideDelay: TimeInterval = 0.35
+enum CompactInteractionUX {
+    static let clickDecisionDelay: TimeInterval = 0.22
     static let dragTolerance: CGFloat = 2
 }
 
@@ -54,21 +53,22 @@ final class ConstrainedPanel: NSPanel {
     }
 }
 
-final class HoverView: NSView {
-    var hoverChanged: ((Bool) -> Void)?
+final class CompactInteractionView: NSView {
     var clicked: (() -> Void)?
     var doubleClicked: (() -> Void)?
     var draggingChanged: ((Bool) -> Void)?
     var dragOnly = false {
         didSet { discardCursorRects(); resetCursorRects() }
     }
-    private var hoverArea: NSTrackingArea?
     private var dragging = false
+    private var pendingClick: DispatchWorkItem?
 
     override var mouseDownCanMoveWindow: Bool { dragOnly }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        dragOnly && bounds.contains(point) ? self : super.hitTest(point)
+        guard dragOnly, bounds.contains(point) else { return super.hitTest(point) }
+        let hit = super.hitTest(point)
+        return hit is NSControl ? hit : self
     }
 
     override func resetCursorRects() {
@@ -79,6 +79,7 @@ final class HoverView: NSView {
     override func mouseDown(with event: NSEvent) {
         guard dragOnly else { super.mouseDown(with: event); return }
         if event.clickCount == 2 {
+            pendingClick?.cancel()
             doubleClicked?()
             return
         }
@@ -93,27 +94,14 @@ final class HoverView: NSView {
         draggingChanged?(false)
         if let startOrigin, let endOrigin,
            hypot(endOrigin.x - startOrigin.x, endOrigin.y - startOrigin.y)
-              < HoverUX.dragTolerance {
-            clicked?()
+              < CompactInteractionUX.dragTolerance {
+            let work = DispatchWorkItem { [weak self] in self?.clicked?() }
+            pendingClick?.cancel()
+            pendingClick = work
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + CompactInteractionUX.clickDecisionDelay,
+                execute: work)
         }
-    }
-
-    override func updateTrackingAreas() {
-        if let hoverArea { removeTrackingArea(hoverArea) }
-        let area = NSTrackingArea(rect: bounds,
-                                  options: [.mouseEnteredAndExited, .activeAlways,
-                                            .inVisibleRect],
-                                  owner: self, userInfo: nil)
-        addTrackingArea(area)
-        hoverArea = area
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        if !dragging { hoverChanged?(true) }
-    }
-    override func mouseExited(with event: NSEvent) {
-        if !dragging { hoverChanged?(false) }
     }
 }
 

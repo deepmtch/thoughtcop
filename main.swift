@@ -164,6 +164,22 @@ if CommandLine.arguments.contains("--ticker-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--message-view-selftest") {
+    let message = FullMessageView(frame: NSRect(x: 0, y: 0, width: 560, height: 300))
+    message.show(source: "Codex · Message test",
+                 text: "**Complete rendered summary** with `inline code`.",
+                 kind: "analysis")
+    message.layoutSubtreeIfNeeded()
+    guard message.source == "Codex · Message test",
+          message.text == "Complete rendered summary with inline code.",
+          !message.text.contains("**") else {
+        FileHandle.standardError.write("message view self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("message view: dedicated=true markdownRendered=true closeReturnsToTicker=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--window-position-selftest") {
     let visible = NSRect(x: 0, y: 0, width: 1440, height: 900)
     let bottomRightPeek = NSRect(x: 968, y: 12, width: 460, height: 98)
@@ -188,14 +204,16 @@ if CommandLine.arguments.contains("--window-position-selftest") {
     exit(0)
 }
 
-if CommandLine.arguments.contains("--hover-ux-selftest") {
-    guard HoverUX.revealDelay <= 0.10,
-          HoverUX.hideDelay >= 0.30,
-          HoverUX.dragTolerance >= 2 else {
-        FileHandle.standardError.write("hover UX self-test failed\n".data(using: .utf8)!)
+if CommandLine.arguments.contains("--interaction-selftest") ||
+   CommandLine.arguments.contains("--hover-ux-selftest") {
+    guard CompactInteractionUX.clickDecisionDelay >= 0.18,
+          CompactInteractionUX.clickDecisionDelay <= 0.30,
+          CompactInteractionUX.dragTolerance >= 2 else {
+        FileHandle.standardError.write("compact interaction self-test failed\n"
+            .data(using: .utf8)!)
         exit(1)
     }
-    print("hover UX: reveal=80ms clickFallback=true dragTolerance=2pt")
+    print("compact interaction: hover=false singleClick=message doubleClick=controls")
     exit(0)
 }
 

@@ -72,9 +72,10 @@ The AppKit window is a resizable, always-on-top HUD rather than a terminal view.
 Its resting state keeps a fixed 460 × 98-point frame: the exact source session on
 top and a single-line ticker below. Overflowing text pauses at the beginning,
 moves horizontally, pauses at the end, and quickly returns. With macOS Reduce
-Motion enabled, it remains clipped and stationary. Hover for 80 ms or click to
-reveal the complete card, session selector, provider status, and controls; moving
-away collapses it after a short delay. The **↤** control returns directly to the
+Motion enabled, it remains clipped and stationary. Hover never changes the UI.
+A single click opens a dedicated full-message reader; **Done** returns to the
+ticker. The visible controls button or a deliberate double-click opens the
+separate navigation/settings view. The **↤** control returns directly to the
 ticker's beginning. Dragging still uses the hand cursor. The move icon provides
 Top/Bottom × Left/Center/Right presets.
 **Show all** explicitly locks open the full scrollable feed until **Collapse** is
@@ -172,8 +173,9 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --presentation-selftest
 ./thinkpeek --source-context-selftest
 ./thinkpeek --ticker-selftest
+./thinkpeek --message-view-selftest
 ./thinkpeek --window-position-selftest
-./thinkpeek --hover-ux-selftest
+./thinkpeek --interaction-selftest
 ```
 
 prints the active transcript and its last 5 reasoning blocks — no window involved.
@@ -196,10 +198,10 @@ endpoint `http://127.0.0.1:17321/ui` (override with
 omitted blocks, activity, and drift results assertable without screen capture.
 The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
 by the running AppKit window, so layout and scrolling can be checked end to end.
-`/reveal`, `/hide`, `/previous`, `/next`, `/restart-ticker`, and
-`/toggle-expanded` exercise the same disclosure and carousel paths as the
-visible UI, allowing compact, hover, and expanded interactions to be tested
-through the complete running window.
+`/message`, `/controls`, `/hide`, `/previous`, `/next`, `/restart-ticker`, and
+`/toggle-expanded` exercise the same reader, settings, and carousel paths as the
+visible UI, allowing every presentation state to be tested through the complete
+running window. `/reveal` remains an alias for `/controls` for compatibility.
 Use `./thinkpeek --transcript /absolute/session.jsonl` to pin a deterministic
 input for an end-to-end UI test.
 

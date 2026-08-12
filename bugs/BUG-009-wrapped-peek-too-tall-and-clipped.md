@@ -24,7 +24,7 @@ The resting view now follows the conventional ticker pattern:
 - a pause at the beginning before movement;
 - constant-speed horizontal travel only when the text overflows;
 - a pause at the end and quick return to the beginning;
-- full content available by hover/click reveal;
+- full content available in a dedicated single-click reader;
 - a **↤** control in the revealed header to return immediately to the start;
 - no repetitive animation when macOS Reduce Motion is enabled.
 
@@ -40,4 +40,5 @@ ticker, so neither line can intrude into the title bar.
 `./thinkpeek --ticker-selftest` verifies that multiline input is normalized to one
 line, overflowing content is detected, and the label remains vertically inside
 its 26-point viewport. Live verification checks a fixed 460 × 98-point resting
-window, `uiStyle: single-line-ticker`, and the **↤** return-to-start path.
+window, `uiStyle: single-line-ticker`, and the **↤** return-to-start path. The
+later interaction split is recorded in BUG-011.

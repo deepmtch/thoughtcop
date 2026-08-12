@@ -41,6 +41,7 @@ final class UIStateServer {
                 let actions = ["/previous": "previous", "/next": "next",
                                "/toggle-expanded": "toggle-expanded",
                                "/restart-ticker": "restart-ticker",
+                               "/message": "message", "/controls": "controls",
                                "/reveal": "reveal", "/hide": "hide",
                                "/position/top-left": "position/top-left",
                                "/position/top-center": "position/top-center",

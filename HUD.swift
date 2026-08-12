@@ -10,8 +10,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var feedStack: NSStackView!
     private var detailHeader: NSVisualEffectView!
     private var peekBar: NSVisualEffectView!
+    private var fullMessageView: FullMessageView!
     private var peekSourceLabel: NSTextField!
     private var peekTicker: TickerView!
+    private var peekControlsButton: NSButton!
     private var latestButton: NSButton!
     private var previousButton: NSButton!
     private var nextButton: NSButton!
@@ -20,21 +22,20 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var positionButton: NSPopUpButton!
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
-    private var eventPreviews: [(source: String, text: String)] = []
+    private var eventPreviews: [(source: String, text: String, kind: String)] = []
     private var systemCards: [EventCard] = []
     private var compactIndex = -1
     private var compactMode = true
     private var peekMode = true
+    private var messageMode = false
     private var compactHeight: CGFloat = 210
+    private var messageHeight: CGFloat = 300
     private let peekWidth: CGFloat = 460
     private let peekHeight: CGFloat = 98
     private let compactWidth: CGFloat = 560
     private var expandedHeight: CGFloat = 620
     private let expandedWidth: CGFloat = 700
     private var presentationKeys = Set<String>()
-    private var peekHideWorkItem: DispatchWorkItem?
-    private var peekRevealWorkItem: DispatchWorkItem?
-    private var apiRevealLocked = false
     private var unseenCount = 0
     private var tailers: [String: Tailer] = [:]
     private var picker: NSPopUpButton!
@@ -72,18 +73,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.acceptsMouseMovedEvents = true
         panel.isMovableByWindowBackground = true
 
-        let content = HoverView(frame: NSRect(x: 0, y: 0, width: compactWidth,
-                                               height: compactHeight))
+        let content = CompactInteractionView(
+            frame: NSRect(x: 0, y: 0, width: compactWidth, height: compactHeight))
         content.autoresizingMask = [.width, .height]
         panel.contentView = content
         content.wantsLayer = true
         content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        content.hoverChanged = { [weak self] inside in self?.hoverChanged(inside) }
-        content.clicked = { [weak self] in self?.applyPeekMode(false) }
+        content.clicked = { [weak self] in self?.showCurrentMessage() }
         content.doubleClicked = { [weak self] in self?.applyPeekMode(false) }
-        content.draggingChanged = { [weak self] dragging in
-            if dragging { self?.peekRevealWorkItem?.cancel() }
-        }
 
         peekBar = NSVisualEffectView()
         peekBar.material = .headerView
@@ -103,6 +100,16 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekTicker = TickerView()
         peekTicker.text = "Watching Claude and Codex…"
 
+        peekControlsButton = NSButton(
+            image: NSImage(systemSymbolName: "slider.horizontal.3",
+                           accessibilityDescription: "Open controls") ?? NSImage(),
+            target: self, action: #selector(showControls(_:)))
+        peekControlsButton.bezelStyle = .accessoryBarAction
+        peekControlsButton.isBordered = false
+        peekControlsButton.toolTip = "Open navigation and ticker settings"
+        peekControlsButton.translatesAutoresizingMaskIntoConstraints = false
+        peekBar.addSubview(peekControlsButton)
+
         let peekStack = NSStackView(views: [peekSourceLabel, peekTicker])
         peekStack.orientation = .vertical
         peekStack.alignment = .leading
@@ -110,6 +117,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekStack.translatesAutoresizingMaskIntoConstraints = false
         peekStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         peekBar.addSubview(peekStack)
+
+        fullMessageView = FullMessageView(frame: .zero)
+        fullMessageView.closeRequested = { [weak self] in self?.applyPeekMode(true) }
+        fullMessageView.controlsRequested = { [weak self] in self?.applyPeekMode(false) }
+        content.addSubview(fullMessageView)
 
         detailHeader = NSVisualEffectView()
         detailHeader.material = .headerView
@@ -245,12 +257,23 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             peekBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             peekBar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
             peekStack.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor, constant: 14),
-            peekStack.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor, constant: -14),
+            peekStack.trailingAnchor.constraint(equalTo: peekControlsButton.leadingAnchor,
+                                                 constant: -8),
             peekStack.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
             peekSourceLabel.widthAnchor.constraint(equalTo: peekStack.widthAnchor),
             peekSourceLabel.heightAnchor.constraint(equalToConstant: 16),
             peekTicker.widthAnchor.constraint(equalTo: peekStack.widthAnchor),
             peekTicker.heightAnchor.constraint(equalToConstant: 26),
+            peekControlsButton.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor,
+                                                          constant: -10),
+            peekControlsButton.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
+            peekControlsButton.widthAnchor.constraint(equalToConstant: 28),
+            peekControlsButton.heightAnchor.constraint(equalToConstant: 28),
+
+            fullMessageView.topAnchor.constraint(equalTo: content.topAnchor),
+            fullMessageView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            fullMessageView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            fullMessageView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
 
             detailHeader.topAnchor.constraint(equalTo: content.topAnchor),
             detailHeader.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -323,26 +346,30 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "viewportHeight": Int(scrollView.contentView.bounds.height),
             "scrollY": Int(scrollView.contentView.bounds.minY),
             "contentRequiresScroll": !peekMode &&
-                feedView.bounds.height > scrollView.contentView.bounds.height,
+                (messageMode ? fullMessageView.requiresScroll
+                    : feedView.bounds.height > scrollView.contentView.bounds.height),
             "smartAutoscroll": true,
             "unseenCount": unseenCount,
             "cardCount": feedStack.arrangedSubviews.count,
-            "visibleCardCount": peekMode ? 0 : eventCards.filter { !$0.isHidden }.count,
+            "visibleCardCount": (peekMode || messageMode)
+                ? 0 : eventCards.filter { !$0.isHidden }.count,
             "compactMode": compactMode,
             "peekMode": peekMode,
+            "messageMode": messageMode,
             "peekSource": peekSourceLabel?.stringValue ?? "",
             "peekText": peekTicker?.text ?? "",
             "tickerOverflowing": peekTicker?.isOverflowing ?? false,
             "tickerReduceMotion": NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
             "operationPending": operationState.operationPending,
             "pendingSource": operationState.latestPendingSource ?? NSNull(),
-            "hoverDisclosure": true,
-            "hoverRevealDelayMs": Int(HoverUX.revealDelay * 1_000),
-            "clickToReveal": true,
+            "hoverDisclosure": false,
+            "singleClickOpensMessage": true,
+            "doubleClickOpensControls": true,
             "currentIndex": compactIndex,
             "navigableCount": eventCards.count,
             "uiStyle": peekMode ? "single-line-ticker"
-                : (compactMode ? "compact-carousel" : "expanded-card-feed"),
+                : (messageMode ? "full-message"
+                    : (compactMode ? "compact-controls" : "expanded-card-feed")),
             "events": Array(apiEvents.suffix(250)),
         ])
     }
@@ -352,6 +379,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if peekMode {
             publishAPI()
             return
+        } else if messageMode {
+            messageHeight = panel.frame.height
         } else if compactMode {
             compactHeight = panel.frame.height
         } else {
@@ -426,12 +455,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case "next": showNext(nil)
         case "toggle-expanded": toggleExpanded(nil)
         case "restart-ticker": restartTickerAtBeginning(nil)
+        case "message": showCurrentMessage()
+        case "controls": applyPeekMode(false)
         case "reveal":
-            apiRevealLocked = true
             applyPeekMode(false)
         case "hide":
-            apiRevealLocked = false
-            if compactMode { applyPeekMode(true) }
+            applyPeekMode(true)
         case let value where value.hasPrefix("position/"):
             movePanel(to: String(value.dropFirst("position/".count)))
         default: break
@@ -460,36 +489,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         publishAPI()
     }
 
-    private func hoverChanged(_ inside: Bool) {
-        peekHideWorkItem?.cancel()
-        peekRevealWorkItem?.cancel()
-        if inside {
-            guard peekMode else { return }
-            let work = DispatchWorkItem { [weak self] in
-                guard let self, self.panel.frame.contains(NSEvent.mouseLocation),
-                      self.peekMode else { return }
-                self.applyPeekMode(false)
-            }
-            peekRevealWorkItem = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + HoverUX.revealDelay,
-                                          execute: work)
-            return
-        }
-        guard compactMode, !apiRevealLocked else { return }
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.panel.frame.contains(NSEvent.mouseLocation),
-                  self.compactMode, !self.apiRevealLocked else { return }
-            self.applyPeekMode(true)
-        }
-        peekHideWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + HoverUX.hideDelay,
-                                      execute: work)
-    }
-
     private func applyPeekMode(_ peek: Bool, animated: Bool = false) {
         peekMode = peek
-        (panel.contentView as? HoverView)?.dragOnly = peek
+        messageMode = false
+        (panel.contentView as? CompactInteractionView)?.dragOnly = peek
         peekBar.isHidden = !peek
+        fullMessageView.isHidden = true
         detailHeader.isHidden = peek
         scrollView.isHidden = peek
         peekTicker.setActive(peek)
@@ -518,6 +523,26 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         publishAPI()
     }
 
+    private func showCurrentMessage() {
+        guard compactIndex >= 0, compactIndex < eventPreviews.count else { return }
+        let preview = eventPreviews[compactIndex]
+        fullMessageView.show(source: preview.source, text: preview.text, kind: preview.kind)
+        peekMode = false
+        messageMode = true
+        (panel.contentView as? CompactInteractionView)?.dragOnly = false
+        peekBar.isHidden = true
+        fullMessageView.isHidden = false
+        detailHeader.isHidden = true
+        scrollView.isHidden = true
+        peekTicker.setActive(false)
+        transitionPanel(to: max(220, messageHeight), width: compactWidth,
+                        minSize: NSSize(width: 430, height: 180),
+                        maxSize: NSSize(width: compactWidth, height: 520))
+        publishAPI()
+    }
+
+    @objc private func showControls(_ sender: Any?) { applyPeekMode(false) }
+
     @objc private func showPrevious(_ sender: Any?) {
         guard compactMode, compactIndex > 0 else { return }
         compactIndex -= 1
@@ -532,13 +557,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func restartTickerAtBeginning(_ sender: Any?) {
         guard compactMode else { return }
-        apiRevealLocked = false
         peekTicker.restart()
         if !peekMode { applyPeekMode(true) }
     }
 
     @objc private func toggleExpanded(_ sender: Any?) {
-        if peekMode { applyPeekMode(false) }
+        if peekMode || messageMode { applyPeekMode(false) }
         if compactMode {
             compactHeight = panel.frame.height
             compactMode = false
@@ -578,7 +602,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let preview = eventPreviews[compactIndex]
                 peekSourceLabel.stringValue = preview.source
                 peekSourceLabel.toolTip = preview.source
-                peekTicker.text = preview.text
+                peekTicker.text = normalizedTickerText(preview.text)
+                if messageMode {
+                    fullMessageView.show(source: preview.source, text: preview.text,
+                                         kind: preview.kind)
+                }
             }
             previousButton.isEnabled = compactIndex > 0
             nextButton.isEnabled = compactIndex >= 0 && compactIndex + 1 < eventCards.count
@@ -664,7 +692,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if navigable {
             let wasFollowingLatest = eventCards.isEmpty || compactIndex == eventCards.count - 1
             eventCards.append(card)
-            eventPreviews.append((source: source, text: normalizedTickerText(event.text)))
+            eventPreviews.append((source: source, text: event.text, kind: event.kind))
             if wasFollowingLatest { compactIndex = eventCards.count - 1 }
         } else {
             systemCards.append(card)
