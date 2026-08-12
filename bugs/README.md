@@ -10,3 +10,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-003](BUG-003-blank-position-menu.md) | Position control opened a tall blank menu | Fixed |
 | [BUG-004](BUG-004-operation-start-replaces-summary.md) | Operation-start events replaced useful summaries | Fixed |
 | [BUG-005](BUG-005-stale-process-after-rebuild.md) | Rebuilt binary left the old process on screen | Fixed |
+| [BUG-006](BUG-006-peek-missing-source-session.md) | Collapsed summary omitted its source session | Fixed |

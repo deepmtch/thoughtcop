@@ -10,6 +10,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var feedStack: NSStackView!
     private var detailHeader: NSVisualEffectView!
     private var peekBar: NSVisualEffectView!
+    private var peekSourceLabel: NSTextField!
     private var peekLabel: NSTextField!
     private var latestButton: NSButton!
     private var previousButton: NSButton!
@@ -18,7 +19,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var positionButton: NSPopUpButton!
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
-    private var eventPreviews: [NSAttributedString] = []
+    private var eventPreviews: [(source: String, body: NSAttributedString)] = []
     private var systemCards: [EventCard] = []
     private var compactIndex = -1
     private var compactMode = true
@@ -26,7 +27,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var compactHeight: CGFloat = 210
     private let peekWidth: CGFloat = 460
     private let peekMinimumHeight: CGFloat = 68
-    private let peekMaximumHeight: CGFloat = 110
+    private let peekMaximumHeight: CGFloat = 130
     private let compactWidth: CGFloat = 560
     private var expandedHeight: CGFloat = 620
     private let expandedWidth: CGFloat = 700
@@ -90,6 +91,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekBar.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(peekBar)
 
+        peekSourceLabel = NSTextField(labelWithString: "Thinkpeek")
+        peekSourceLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        peekSourceLabel.textColor = .secondaryLabelColor
+        peekSourceLabel.lineBreakMode = .byTruncatingMiddle
+        peekSourceLabel.maximumNumberOfLines = 1
+        peekSourceLabel.setContentCompressionResistancePriority(.defaultLow,
+                                                                 for: .horizontal)
+
         peekLabel = WrappingTextField(wrappingLabelWithString: "Watching Claude and Codex…")
         peekLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         peekLabel.textColor = .labelColor
@@ -100,8 +109,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekLabel.cell?.wraps = true
         peekLabel.cell?.isScrollable = false
         peekLabel.cell?.truncatesLastVisibleLine = false
-        peekLabel.translatesAutoresizingMaskIntoConstraints = false
-        peekBar.addSubview(peekLabel)
+
+        let peekStack = NSStackView(views: [peekSourceLabel, peekLabel])
+        peekStack.orientation = .vertical
+        peekStack.alignment = .leading
+        peekStack.spacing = 3
+        peekStack.translatesAutoresizingMaskIntoConstraints = false
+        peekStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        peekBar.addSubview(peekStack)
 
         detailHeader = NSVisualEffectView()
         detailHeader.material = .headerView
@@ -226,9 +241,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             peekBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             peekBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             peekBar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-            peekLabel.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor, constant: 14),
-            peekLabel.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor, constant: -14),
-            peekLabel.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
+            peekStack.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor, constant: 14),
+            peekStack.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor, constant: -14),
+            peekStack.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
+            peekSourceLabel.widthAnchor.constraint(equalTo: peekStack.widthAnchor),
+            peekLabel.widthAnchor.constraint(equalTo: peekStack.widthAnchor),
 
             detailHeader.topAnchor.constraint(equalTo: content.topAnchor),
             detailHeader.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -308,6 +325,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "visibleCardCount": peekMode ? 0 : eventCards.filter { !$0.isHidden }.count,
             "compactMode": compactMode,
             "peekMode": peekMode,
+            "peekSource": peekSourceLabel?.stringValue ?? "",
             "peekText": peekLabel?.stringValue ?? "",
             "operationPending": operationState.operationPending,
             "pendingSource": operationState.latestPendingSource ?? NSNull(),
@@ -361,8 +379,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.setFrame(frame, display: true, animate: animated)
     }
 
-    /// The collapsed window keeps its fixed width, but grows just enough for up
-    /// to three wrapped lines. The existing 110-point cap remains unchanged.
+    /// The collapsed window keeps its fixed width, but grows just enough for a
+    /// session line plus up to three wrapped summary lines.
     private func desiredPeekHeight() -> CGFloat {
         let textWidth = peekWidth - 28
         let measured = peekLabel.attributedStringValue.boundingRect(
@@ -371,8 +389,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let lineHeight = ceil(peekLabel.font?.boundingRectForFont.height ?? 16)
         let textHeight = min(ceil(measured.height), lineHeight * 3 + 6)
         let chromeHeight = panel.frame.height - (panel.contentView?.bounds.height ?? 0)
+        let sourceHeight = ceil(peekSourceLabel.font?.boundingRectForFont.height ?? 13)
         return min(peekMaximumHeight,
-                   max(peekMinimumHeight, chromeHeight + textHeight + 18))
+                   max(peekMinimumHeight,
+                       chromeHeight + sourceHeight + 3 + textHeight + 18))
     }
 
     private func handleAction(_ action: String) {
@@ -511,7 +531,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             positionLabel.stringValue = eventCards.isEmpty
                 ? "—" : "\(compactIndex + 1) / \(eventCards.count)"
             if compactIndex >= 0 && compactIndex < eventPreviews.count {
-                peekLabel.attributedStringValue = eventPreviews[compactIndex]
+                let preview = eventPreviews[compactIndex]
+                peekSourceLabel.stringValue = preview.source
+                peekLabel.attributedStringValue = preview.body
                 if peekMode {
                     resizePanel(to: desiredPeekHeight(), width: peekWidth, animated: false)
                 }
@@ -598,7 +620,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if navigable {
             let wasFollowingLatest = eventCards.isEmpty || compactIndex == eventCards.count - 1
             eventCards.append(card)
-            eventPreviews.append(renderedBody(event.text, kind: event.kind))
+            eventPreviews.append((source: source,
+                                  body: renderedBody(event.text, kind: event.kind)))
             if wasFollowingLatest { compactIndex = eventCards.count - 1 }
         } else {
             systemCards.append(card)

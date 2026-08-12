@@ -118,6 +118,22 @@ if CommandLine.arguments.contains("--presentation-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--source-context-selftest") {
+    let source = "Codex · Benchmark obfuscators with OpenRouter"
+    let event = UIEvent(timestamp: "2026-08-12T00:00:00.000Z", kind: "analysis",
+                        text: "Planning secure tmp directory build", readableAnalysis: true)
+    let preview = (source: source, body: renderedBody(event.text, kind: event.kind))
+    guard preview.source == source,
+          preview.body.string == event.text,
+          !preview.source.isEmpty else {
+        FileHandle.standardError.write("source-context self-test failed\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    print("source context: \(preview.source) → \(preview.body.string)")
+    exit(0)
+}
+
 // Headless check of the alarm path: no window, no transcript, just the model.
 if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.arguments.count {
     print("triggers: \(loadTriggers().count) from \(TRIGGERS_FILE)")
