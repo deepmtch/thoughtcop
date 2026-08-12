@@ -38,6 +38,7 @@ Sources/
     └── Ticker/
 Scripts/             # optional command-line watcher
 Benchmarks/          # benchmark utilities
+Tests/               # regression harness, separate from app startup
 docs/bugs/           # one document per user-visible regression
 .build/              # ignored compiler output
 .local/              # ignored runtime logs/cache
@@ -217,6 +218,12 @@ is enabled and name the exact direct provider. Every live card changes from
 ## Testing
 
 The tailing engine and the actual native window presentation are both testable.
+
+Run the complete suite with:
+
+```bash
+Scripts/test.sh
+```
 
 ```bash
 ./.build/thinkpeek --selftest

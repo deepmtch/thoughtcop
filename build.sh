@@ -27,6 +27,7 @@ swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o "$build_dir/thi
     Sources/UI/Controls/FullMessageView.swift \
     Sources/UI/Controls/OutsideClickDismissal.swift \
     Sources/App/HUD.swift \
+    Tests/SelfTests.swift \
     Sources/App/main.swift
 
 if /usr/bin/pgrep -x thinkpeek >/dev/null 2>&1; then
