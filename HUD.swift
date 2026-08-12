@@ -3,6 +3,10 @@
 import AppKit
 import Foundation
 
+func controlsExpansionTitle(compactMode: Bool) -> String? {
+    compactMode ? "Show all" : nil
+}
+
 final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panel: NSPanel!
     private var scrollView: NSScrollView!
@@ -54,6 +58,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var operationState = OperationPresentationState()
     private let api = UIStateServer()
     private let outsideClickMonitor = OutsideClickMonitor()
+    private var previouslyActiveApplication: NSRunningApplication?
     private var apiEvents: [[String: Any]] = []
     private var discardedEmptySummaryCount = 0
 
@@ -79,6 +84,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.delegate = self
         panel.acceptsMouseMovedEvents = true
         panel.isMovableByWindowBackground = true
+        (panel as? ConstrainedPanel)?.escapeRequested = { [weak self] in
+            guard let self, !self.peekMode else { return }
+            self.dismissDetailsWithEscape()
+        }
 
         let content = CompactInteractionView(
             frame: NSRect(x: 0, y: 0, width: compactWidth, height: compactHeight))
@@ -660,6 +669,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func applyPeekMode(_ peek: Bool, animated: Bool = false) {
         peekMode = peek
         messageMode = false
+        panel.becomesKeyOnlyIfNeeded = peek
         (panel.contentView as? CompactInteractionView)?.dragOnly = peek
         peekBar.isHidden = !peek
         fullMessageView.isHidden = true
@@ -672,6 +682,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                             minSize: NSSize(width: 340, height: 54),
                             maxSize: NSSize(width: peekWidth, height: peekHeight),
                             animated: animated)
+            releaseDetailFocus()
         } else {
             detailHeaderLayout.setActive(true,
                 width: compactMode ? compactWidth : expandedWidth)
@@ -691,8 +702,35 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                             : max(520, expandedHeight),
                             width: compactMode ? compactWidth : expandedWidth,
                             minSize: minSize, maxSize: maxSize, animated: animated)
+            focusDetails()
         }
         publishAPI()
+    }
+
+    private func focusDetails() {
+        let current = NSRunningApplication.current
+        if let frontmost = NSWorkspace.shared.frontmostApplication,
+           frontmost.processIdentifier != current.processIdentifier {
+            previouslyActiveApplication = frontmost
+        }
+        current.activate(options: [])
+        panel.makeKey()
+    }
+
+    private func releaseDetailFocus() {
+        if panel.isKeyWindow { panel.resignKey() }
+        previouslyActiveApplication?.activate(options: [])
+        previouslyActiveApplication = nil
+    }
+
+    private func dismissDetailsWithEscape() {
+        if !compactMode {
+            expandedHeight = panel.frame.height
+            compactMode = true
+            compactIndex = max(0, eventCards.count - 1)
+            updateCardVisibility()
+        }
+        applyPeekMode(true)
     }
 
     private func showCurrentMessage() {
@@ -708,9 +746,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         scrollView.isHidden = true
         detailHeaderLayout.setActive(false, width: compactWidth)
         peekTicker.setActive(false)
+        panel.becomesKeyOnlyIfNeeded = false
         transitionPanel(to: max(220, messageHeight), width: compactWidth,
                         minSize: NSSize(width: CompactWindowSizing.minimumWidth, height: 180),
                         maxSize: NSSize(width: CompactWindowSizing.maximumWidth, height: 520))
+        focusDetails()
         publishAPI()
     }
 
@@ -735,28 +775,20 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func toggleExpanded(_ sender: Any?) {
+        guard compactMode else { return }
         if peekMode || messageMode { applyPeekMode(false) }
-        if compactMode {
-            compactHeight = panel.frame.height
-            compactMode = false
-            let maxSize: NSSize
-            if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
-                maxSize = NSSize(width: min(expandedWidth, visible.width),
-                                 height: visible.height)
-            } else {
-                maxSize = NSSize(width: expandedWidth, height: expandedHeight)
-            }
-            transitionPanel(to: max(520, expandedHeight), width: expandedWidth,
-                            minSize: NSSize(width: 520, height: 360),
-                            maxSize: maxSize)
+        compactHeight = panel.frame.height
+        compactMode = false
+        let maxSize: NSSize
+        if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
+            maxSize = NSSize(width: min(expandedWidth, visible.width),
+                             height: visible.height)
         } else {
-            expandedHeight = panel.frame.height
-            compactMode = true
-            compactIndex = max(0, eventCards.count - 1)
-            transitionPanel(to: min(320, max(190, compactHeight)), width: compactWidth,
-                            minSize: NSSize(width: CompactWindowSizing.minimumWidth, height: 190),
-                            maxSize: NSSize(width: CompactWindowSizing.maximumWidth, height: 360))
+            maxSize = NSSize(width: expandedWidth, height: expandedHeight)
         }
+        transitionPanel(to: max(520, expandedHeight), width: expandedWidth,
+                        minSize: NSSize(width: 520, height: 360),
+                        maxSize: maxSize)
         updateCardVisibility()
     }
 
@@ -783,7 +815,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             previousButton.isEnabled = compactIndex > 0
             nextButton.isEnabled = compactIndex >= 0 && compactIndex + 1 < eventCards.count
-            expandButton.title = "Show all"
+            expandButton.title = controlsExpansionTitle(compactMode: true) ?? ""
+            expandButton.isHidden = false
             restartTickerButton.isEnabled = !eventCards.isEmpty
             latestButton.isHidden = true
         } else {
@@ -792,7 +825,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             positionLabel.stringValue = "All \(eventCards.count)"
             previousButton.isEnabled = false
             nextButton.isEnabled = false
-            expandButton.title = "Collapse"
+            expandButton.isHidden = true
             restartTickerButton.isEnabled = false
             latestButton.isHidden = false
         }

@@ -40,6 +40,21 @@ final class WrappingTextField: NSTextField {
 }
 
 final class ConstrainedPanel: NSPanel {
+    var escapeRequested: (() -> Void)?
+    override var canBecomeKey: Bool { true }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.type == .keyDown && event.keyCode == 53 {
+            escapeRequested?()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        escapeRequested?()
+    }
+
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
         guard let visible = (screen ?? self.screen ?? NSScreen.main)?.visibleFrame else {
             return frameRect

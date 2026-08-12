@@ -41,7 +41,6 @@ final class FullMessageView: NSVisualEffectView {
                                   action: #selector(close(_:)))
         doneButton.bezelStyle = .rounded
         doneButton.controlSize = .small
-        doneButton.keyEquivalent = "\u{1b}"
         doneButton.translatesAutoresizingMaskIntoConstraints = false
         addSubview(doneButton)
 

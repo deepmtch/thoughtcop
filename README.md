@@ -87,12 +87,15 @@ the reader returns to the ticker. The visible controls button or a deliberate do
 separate navigation/settings view. The **↤** control returns directly to the
 ticker's beginning. The settings menu selects and remembers Slow, Normal, or Fast
 ticker movement and provides Top/Bottom × Left/Center/Right presets.
+Escape from the reader, controls, or full history always returns directly to the
+one-line ticker.
 The controls and full-message views can be resized horizontally from 380 to 560
 points. Their width is remembered; below 500 points the header stacks into two
 rows so the session selector and controls remain usable. The settings menu also
 offers **Width: Narrow** and **Width: Standard** shortcuts.
-**Show all** explicitly locks open the full scrollable feed until **Collapse** is
-selected. Compact and full-feed widths are hard-capped at 560 and 700 points, so
+**Show all** opens the full scrollable feed. It has no intermediate **Collapse**
+action; Escape returns directly to the ticker. Compact and full-feed widths are
+hard-capped at 560 and 700 points, so
 long reasoning wraps and scrolls vertically instead of stretching the window.
 
 Auto mode follows every active session and nested agent. Use the session picker
@@ -188,6 +191,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --ticker-selftest
 ./thinkpeek --ticker-background-selftest
 ./thinkpeek --message-view-selftest
+./thinkpeek --escape-selftest
 ./thinkpeek --outside-click-selftest
 ./thinkpeek --window-position-selftest
 ./thinkpeek --window-chrome-selftest

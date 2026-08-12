@@ -306,6 +306,36 @@ if CommandLine.arguments.contains("--interaction-selftest") ||
     exit(0)
 }
 
+if CommandLine.arguments.contains("--escape-selftest") {
+    let panel = ConstrainedPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 300),
+                                 styleMask: [.borderless, .resizable],
+                                 backing: .buffered, defer: false)
+    var collapseCount = 0
+    panel.escapeRequested = { collapseCount += 1 }
+    guard let escape = NSEvent.keyEvent(with: .keyDown, location: .zero,
+                                        modifierFlags: [], timestamp: 0,
+                                        windowNumber: panel.windowNumber,
+                                        context: nil, characters: "\u{1b}",
+                                        charactersIgnoringModifiers: "\u{1b}",
+                                        isARepeat: false, keyCode: 53),
+          panel.performKeyEquivalent(with: escape),
+          collapseCount == 1,
+          controlsExpansionTitle(compactMode: true) == "Show all",
+          controlsExpansionTitle(compactMode: false) == nil else {
+        FileHandle.standardError.write(
+            "escape self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    panel.cancelOperation(nil)
+    guard collapseCount == 2 else {
+        FileHandle.standardError.write(
+            "escape cancel-operation self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("escape: message=true controls=true history=true collapseButton=false")
+    exit(0)
+}
+
 // Headless check of the alarm path: no window, no transcript, just the model.
 if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.arguments.count {
     print("triggers: \(loadTriggers().count) from \(TRIGGERS_FILE)")
