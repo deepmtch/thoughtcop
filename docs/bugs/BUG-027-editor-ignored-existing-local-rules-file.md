@@ -24,6 +24,6 @@ that the checker already reloads for every request.
 
 ## Verification
 
-`./thinkpeek --check-rules-editor-selftest` uses isolated app preferences to verify
+`./.build/thinkpeek --check-rules-editor-selftest` uses isolated app preferences to verify
 the initial rule, file-free local persistence, next-check semantics, and compact
 horizontal actions.

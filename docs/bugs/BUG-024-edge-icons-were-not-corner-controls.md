@@ -21,6 +21,6 @@ place the ticker in one of the four screen corners.
 
 ## Verification
 
-`./thinkpeek --ticker-corner-selftest` verifies all four final origins, callback
+`./.build/thinkpeek --ticker-corner-selftest` verifies all four final origins, callback
 order, and accessibility names. The running `/ui` surface reports the same four
 corner controls.

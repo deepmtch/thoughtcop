@@ -21,7 +21,7 @@ It did not observe mouse-down events delivered elsewhere on the system.
 
 ## Verification
 
-`./thinkpeek --outside-click-selftest` verifies inside/outside boundaries and
+`./.build/thinkpeek --outside-click-selftest` verifies inside/outside boundaries and
 ensures the rule is inactive outside message mode. The live check opens
 `full-message`, posts a real click outside the panel, and verifies the running
 state returns to `single-line-ticker` at 460 × 70 points.

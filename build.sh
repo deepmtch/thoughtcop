@@ -1,10 +1,11 @@
 #!/bin/sh
 set -eu
 
-module_cache="${TMPDIR:-/tmp}/thinkpeek-swift-module-cache"
+build_dir=".build"
+module_cache="$build_dir/module-cache"
 mkdir -p "$module_cache"
 
-swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o thinkpeek \
+swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o "$build_dir/thinkpeek" \
     Config.swift \
     CheckRulesStore.swift \
     Transcript.swift \

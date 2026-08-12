@@ -28,7 +28,7 @@ Provider detection and icon presentation did not exist.
 
 ## Verification
 
-- `./thinkpeek --provider-icon-selftest`
+- `./.build/thinkpeek --provider-icon-selftest`
 - `./build.sh`
 - Running `/ui` reports `peekProvider` matching the visible source.
 - Visual captures confirm the provider icon, source title, and right toolbar do

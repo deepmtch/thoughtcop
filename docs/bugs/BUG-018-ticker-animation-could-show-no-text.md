@@ -31,7 +31,7 @@ installed. The state API only reported the model string, so it could claim
 
 The isolated harness samples an uninterrupted cycle and rapid long/short/reopen
 transitions using glyph bounds. No sample may have less than one visible point.
-`./thinkpeek --ticker-selftest` verifies that both animation endpoints show a full
+`./.build/thinkpeek --ticker-selftest` verifies that both animation endpoints show a full
 viewport of text. The live UI is sampled repeatedly for at least one complete
 long-message cycle; every ticker-mode response must report
 `tickerTextVisible: true` and `tickerVisibleTextWidth >= 1`.

@@ -11,10 +11,10 @@ The alarm half of thinkpeek: the window shows you the reasoning, this shouts whe
 it goes wrong. Both tail the same transcript; neither writes anything to ~/.claude.
 
 Usage:
-    python3 watch.py                 # auto-follow the most recently active session
-    python3 watch.py --project /private/tmp
-    python3 watch.py --selftest      # verify backend + model, no tailing
-    python3 watch.py --once "<text>" # score one snippet and exit
+    python3 Scripts/watch.py                 # auto-follow the most recently active session
+    python3 Scripts/watch.py --project /private/tmp
+    python3 Scripts/watch.py --selftest      # verify backend + model, no tailing
+    python3 Scripts/watch.py --once "<text>" # score one snippet and exit
 
 Keys are read from GROQ_API_KEY and CEREBRAS_API_KEY in .env beside this file.
 They are held in memory only and are never printed or logged.
@@ -30,13 +30,14 @@ import urllib.error
 import urllib.request
 
 HOME = os.path.expanduser("~")
-BASE = os.path.dirname(os.path.abspath(__file__))
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RULES_DOMAIN = "com.thinkpeek.app"
 RULES_KEY = "runtimeCheckRules"
 DEFAULT_RULES = "Claude is confused or waiting for user to do someting.\n"
 PROJECTS = os.path.join(HOME, ".claude", "projects")  # read-only; Claude Code owns this
 ENV_FILE = os.path.join(BASE, ".env")
-LOG = os.path.join(BASE, "alerts.log")
+LOCAL_DIR = os.path.join(BASE, ".local")
+LOG = os.path.join(LOCAL_DIR, "alerts.log")
 
 POLL_SEC = 0.25
 TIMEOUT = 12
@@ -304,7 +305,7 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true", help="also log clean checks")
     a = ap.parse_args()
 
-    # BASE is the source dir; nothing to create
+    os.makedirs(LOCAL_DIR, exist_ok=True)
     backend = pick_backend(a.model)
 
     if a.selftest:

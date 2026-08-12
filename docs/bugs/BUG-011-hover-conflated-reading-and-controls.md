@@ -27,7 +27,7 @@ settings into one transition.
 
 ## Verification
 
-`./thinkpeek --interaction-selftest` checks the click decision and drag boundary.
+`./.build/thinkpeek --interaction-selftest` checks the click decision and drag boundary.
 Live `/message`, `/controls`, and `/hide` checks verify three distinct states:
 `full-message`, `compact-controls`, and `single-line-ticker`. Screenshots confirm
 the full-message reader renders Markdown and contains no history navigation.

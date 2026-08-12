@@ -1,4 +1,4 @@
-__pycache__/
-alerts.log
-thinkpeek
+**/__pycache__/
+.build/
+.local/
 .env

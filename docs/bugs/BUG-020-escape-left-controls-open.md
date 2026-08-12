@@ -26,6 +26,6 @@ though ticker dismissal is the intended exit from either detail presentation.
 
 ## Verification
 
-`./thinkpeek --escape-selftest` sends an Escape key equivalent and a responder-
+`./.build/thinkpeek --escape-selftest` sends an Escape key equivalent and a responder-
 chain cancel operation to the shared panel. It also verifies compact controls
 offer **Show all** while full history exposes no reverse expansion button.

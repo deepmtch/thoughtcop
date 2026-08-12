@@ -6,4 +6,4 @@ cd "$(dirname "$0")"
 
 # The new process uses SingleInstance.swift to terminate the previous Thinkpeek
 # only after this build succeeds.
-exec ./thinkpeek "$@"
+exec ./.build/thinkpeek "$@"

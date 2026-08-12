@@ -22,6 +22,6 @@ The pull-down button was populated by index with fourteen top-level items.
 
 ## Verification
 
-`./thinkpeek --settings-menu-selftest` verifies four top-level categories and
+`./.build/thinkpeek --settings-menu-selftest` verifies four top-level categories and
 the complete child-item structure. Existing speed, width, position, and color
 tests continue to pass.

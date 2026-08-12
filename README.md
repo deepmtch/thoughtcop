@@ -8,15 +8,15 @@ tails both sources and reacts when a readable reasoning summary lands on disk.
 
 | | | |
 |---|---|---|
-| **`thinkpeek`** | always-on-top window | shows the reasoning |
-| **`watch.py`** | drift alarm | shouts when it matches your triggers |
+| **`.build/thinkpeek`** | always-on-top window | shows the reasoning |
+| **`Scripts/watch.py`** | drift alarm | shouts when it matches your check rules |
 
 ```bash
 ./build.sh                                           # build once
-./thinkpeek                                          # the window
+./.build/thinkpeek                                   # the window
 ./restart.sh                                         # rebuild and replace a running copy
-./thinkpeek --local-only                             # never send reasoning externally
-python3 watch.py --project /private/tmp -v           # the alarm (second terminal)
+./.build/thinkpeek --local-only                      # never send reasoning externally
+python3 Scripts/watch.py --project /private/tmp -v   # the alarm (second terminal)
 ```
 
 Swift/AppKit + stdlib Python, no dependencies. **Nothing is ever written under
@@ -124,8 +124,8 @@ was sent. Per-record `timestamp` fields advance monotonically within the turn.
 
 ## The drift alarm
 
-`watch.py` sends each new reasoning block, plus your locally saved check rules, to a very
-fast model and fires a terminal banner + bell + macOS notification if anything
+`Scripts/watch.py` sends each new reasoning block, plus your locally saved check
+rules, to a very fast model and fires a terminal banner + bell + macOS notification if anything
 matches — typically 300–550 ms after the reasoning hits disk, well before the
 turn ends.
 
@@ -150,7 +150,7 @@ example and add one or both keys:
 ```bash
 cp .env.example .env
 # edit .env: GROQ_API_KEY=... and/or CEREBRAS_API_KEY=...
-./thinkpeek --drift-status
+./.build/thinkpeek --drift-status
 ```
 
 `.env` is ignored by git; `.env.example` contains only empty placeholders and
@@ -199,24 +199,24 @@ is enabled and name the exact direct provider. Every live card changes from
 The tailing engine and the actual native window presentation are both testable.
 
 ```bash
-./thinkpeek --selftest
-./thinkpeek --layout-selftest
-./thinkpeek --presentation-selftest
-./thinkpeek --source-context-selftest
-./thinkpeek --ticker-selftest
-./thinkpeek --ticker-background-selftest
-./thinkpeek --message-view-selftest
-./thinkpeek --escape-selftest
-./thinkpeek --exit-controls-selftest
-./thinkpeek --outside-click-selftest
-./thinkpeek --window-position-selftest
-./thinkpeek --ticker-corner-selftest
-./thinkpeek --provider-icon-selftest
-./thinkpeek --settings-menu-selftest
-./thinkpeek --check-rules-editor-selftest
-./thinkpeek --window-chrome-selftest
-./thinkpeek --compact-width-selftest
-./thinkpeek --interaction-selftest
+./.build/thinkpeek --selftest
+./.build/thinkpeek --layout-selftest
+./.build/thinkpeek --presentation-selftest
+./.build/thinkpeek --source-context-selftest
+./.build/thinkpeek --ticker-selftest
+./.build/thinkpeek --ticker-background-selftest
+./.build/thinkpeek --message-view-selftest
+./.build/thinkpeek --escape-selftest
+./.build/thinkpeek --exit-controls-selftest
+./.build/thinkpeek --outside-click-selftest
+./.build/thinkpeek --window-position-selftest
+./.build/thinkpeek --ticker-corner-selftest
+./.build/thinkpeek --provider-icon-selftest
+./.build/thinkpeek --settings-menu-selftest
+./.build/thinkpeek --check-rules-editor-selftest
+./.build/thinkpeek --window-chrome-selftest
+./.build/thinkpeek --compact-width-selftest
+./.build/thinkpeek --interaction-selftest
 ```
 
 prints the active transcript and its last 5 reasoning blocks — no window involved.
@@ -230,7 +230,7 @@ The window presentation is also exposed as a headless JSON API. The AppKit
 renderer and automated tests consume the same `UIEvent` objects:
 
 ```bash
-./thinkpeek --ui-json ~/.claude/projects/<project>/<session>.jsonl
+./.build/thinkpeek --ui-json ~/.claude/projects/<project>/<session>.jsonl
 ```
 
 The running window publishes the state it actually consumed at the local
@@ -248,14 +248,14 @@ by the running AppKit window, so layout and scrolling can be checked end to end.
 `/toggle-expanded` exercise the same reader, settings, and carousel paths as the
 visible UI, allowing every presentation state to be tested through the complete
 running window. `/reveal` remains an alias for `/controls` for compatibility.
-Use `./thinkpeek --transcript /absolute/session.jsonl` to pin a deterministic
+Use `./.build/thinkpeek --transcript /absolute/session.jsonl` to pin a deterministic
 input for an end-to-end UI test.
 
 For the alarm:
 
 ```bash
-python3 watch.py --selftest                     # backend, model, latency, triggers
-python3 watch.py --once "I'll rm -rf the build dir without checking"
+python3 Scripts/watch.py --selftest             # backend, model, latency, check rules
+python3 Scripts/watch.py --once "I'll rm -rf the build dir without checking"
 ```
 
 ## History
