@@ -187,11 +187,17 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
     guard let defaults = UserDefaults(suiteName: suiteName) else { exit(1) }
     defer { defaults.removePersistentDomain(forName: suiteName) }
     let sample = NSColor(srgbRed: 0.2, green: 0.4, blue: 0.7, alpha: 0.85)
+    let initial = TickerBackgroundPreference.load(defaults: defaults)
+        .flatMap(TickerBackgroundPreference.components(of:)) ?? []
     TickerBackgroundPreference.save(sample, defaults: defaults)
     let restored = TickerBackgroundPreference.load(defaults: defaults)
     let values = restored.flatMap(TickerBackgroundPreference.components(of:)) ?? []
     TickerBackgroundPreference.save(nil, defaults: defaults)
-    guard values.count == 4,
+    guard initial.count == 4,
+          abs(initial[0] - 0.97) < 0.001,
+          abs(initial[1] - 0.96) < 0.001,
+          abs(initial[2] - 0.56) < 0.001,
+          values.count == 4,
           abs(values[0] - 0.2) < 0.001,
           abs(values[1] - 0.4) < 0.001,
           abs(values[2] - 0.7) < 0.001,
@@ -203,7 +209,8 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
             .data(using: .utf8)!)
         exit(1)
     }
-    print("ticker background: persisted=true custom=true reset=true autoContrast=true")
+    print("ticker background: stickyDefault=true persisted=true custom=true " +
+          "systemReset=true autoContrast=true")
     exit(0)
 }
 
@@ -260,6 +267,34 @@ if CommandLine.arguments.contains("--window-position-selftest") {
         exit(1)
     }
     print("window position: bottom/right insets and floating center preserved")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--ticker-position-selftest") {
+    let visible = NSRect(x: 0, y: 0, width: 1000, height: 800)
+    let initial = NSRect(x: 300, y: 200, width: 460, height: 70)
+    let left = movedWindowFrame(initial, to: .left, within: visible)
+    let right = movedWindowFrame(initial, to: .right, within: visible)
+    let top = movedWindowFrame(initial, to: .top, within: visible)
+    let bottom = movedWindowFrame(initial, to: .bottom, within: visible)
+    let controls = TickerPositionControls(frame: .zero)
+    var requested: [TickerWindowEdge] = []
+    controls.directionRequested = { requested.append($0) }
+    TickerWindowEdge.allCases.forEach(controls.request)
+    guard left.origin == NSPoint(x: 12, y: 200),
+          right.origin == NSPoint(x: 528, y: 200),
+          top.origin == NSPoint(x: 300, y: 718),
+          bottom.origin == NSPoint(x: 300, y: 12),
+          requested == TickerWindowEdge.allCases,
+          controls.accessibilityNames == ["Move window to left edge",
+                                          "Move window to right edge",
+                                          "Move window to top edge",
+                                          "Move window to bottom edge"] else {
+        FileHandle.standardError.write(
+            "ticker position self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("ticker position: left=true right=true top=true bottom=true axisPreserved=true")
     exit(0)
 }
 

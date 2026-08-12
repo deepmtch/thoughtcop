@@ -26,3 +26,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-019](BUG-019-layer-animation-left-undrawn-ticker-regions.md) | Layer-only scrolling left parts of ticker text undrawn | Fixed |
 | [BUG-020](BUG-020-escape-left-controls-open.md) | Escape did not close every detail view directly to ticker | Fixed |
 | [BUG-021](BUG-021-borderless-details-had-no-visible-exit.md) | Borderless controls/history had no visible Close or Quit | Fixed |
+| [BUG-022](BUG-022-ticker-had-no-direct-position-controls.md) | Ticker had no direct edge-position controls | Fixed |

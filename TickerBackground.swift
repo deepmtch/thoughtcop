@@ -4,6 +4,9 @@ import AppKit
 
 enum TickerBackgroundPreference {
     static let defaultsKey = "tickerBackgroundRGBA"
+    static let modeKey = "tickerBackgroundMode"
+    static let stickyYellow = NSColor(srgbRed: 0.97, green: 0.96,
+                                      blue: 0.56, alpha: 1)
 
     static func components(of color: NSColor) -> [CGFloat]? {
         guard let rgb = color.usingColorSpace(.sRGB) else { return nil }
@@ -18,8 +21,9 @@ enum TickerBackgroundPreference {
     }
 
     static func load(defaults: UserDefaults = .standard) -> NSColor? {
+        if defaults.string(forKey: modeKey) == "system" { return nil }
         guard let values = defaults.array(forKey: defaultsKey) as? [NSNumber] else {
-            return nil
+            return stickyYellow
         }
         return color(from: values.map { CGFloat(truncating: $0) })
     }
@@ -27,9 +31,11 @@ enum TickerBackgroundPreference {
     static func save(_ color: NSColor?, defaults: UserDefaults = .standard) {
         guard let color, let values = components(of: color) else {
             defaults.removeObject(forKey: defaultsKey)
+            defaults.set("system", forKey: modeKey)
             return
         }
         defaults.set(values.map(Double.init), forKey: defaultsKey)
+        defaults.set("custom", forKey: modeKey)
     }
 
     static func usesDarkForeground(on color: NSColor) -> Bool {

@@ -79,9 +79,13 @@ Ticker movement redraws the attributed string directly inside the clipped viewpo
 on every frame instead of translating a partially rasterized text-field bitmap.
 A formatting-only or empty summary is discarded and cannot replace the last
 visible message.
+The ticker's top-right icon toolbar moves the window to the left, right, top, or
+bottom screen edge without changing the other axis; the settings icon follows the
+four position controls. The message row keeps the full ticker width below it.
 The settings menu's **Ticker Background…** item opens the native macOS color
 picker. Custom colors and opacity are remembered, ticker text/icons automatically
 switch contrast, and **Use System Ticker Background** restores the native material.
+The first-run default is a light Sticky-note yellow.
 A single click opens a dedicated full-message reader; **Done** or a click outside
 the reader returns to the ticker. The visible controls button or a deliberate double-click opens the
 separate navigation/settings view. The **↤** control returns directly to the
@@ -201,6 +205,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --exit-controls-selftest
 ./thinkpeek --outside-click-selftest
 ./thinkpeek --window-position-selftest
+./thinkpeek --ticker-position-selftest
 ./thinkpeek --window-chrome-selftest
 ./thinkpeek --compact-width-selftest
 ./thinkpeek --interaction-selftest
@@ -230,6 +235,7 @@ by the running AppKit window, so layout and scrolling can be checked end to end.
 `/restart-ticker`,
 `/speed/slow`, `/speed/normal`, `/speed/fast`, `/background/blue`,
 `/background/system`, `/width/narrow`, `/width/standard`, and
+`/edge/left`, `/edge/right`, `/edge/top`, `/edge/bottom`, and
 `/toggle-expanded` exercise the same reader, settings, and carousel paths as the
 visible UI, allowing every presentation state to be tested through the complete
 running window. `/reveal` remains an alias for `/controls` for compatibility.

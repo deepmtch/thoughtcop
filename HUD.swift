@@ -22,6 +22,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var peekSourceLabel: NSTextField!
     private var peekTicker: TickerView!
     private var peekControlsButton: NSButton!
+    private var peekPositionControls: TickerPositionControls!
     private var latestButton: NSButton!
     private var previousButton: NSButton!
     private var nextButton: NSButton!
@@ -117,10 +118,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekSourceLabel.textColor = .secondaryLabelColor
         peekSourceLabel.lineBreakMode = .byTruncatingMiddle
         peekSourceLabel.maximumNumberOfLines = 1
+        peekSourceLabel.translatesAutoresizingMaskIntoConstraints = false
         peekSourceLabel.setContentCompressionResistancePriority(.defaultLow,
                                                                  for: .horizontal)
 
         peekTicker = TickerView()
+        peekTicker.translatesAutoresizingMaskIntoConstraints = false
         let savedSpeed = UserDefaults.standard.string(forKey: "tickerSpeed")
             .flatMap(TickerSpeed.init(rawValue:)) ?? .normal
         peekTicker.speed = savedSpeed
@@ -135,16 +138,22 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekControlsButton.toolTip = "Open navigation and ticker settings"
         peekControlsButton.setAccessibilityLabel("Open controls and settings")
         peekControlsButton.translatesAutoresizingMaskIntoConstraints = false
-        peekBar.addSubview(peekControlsButton)
+        peekPositionControls = TickerPositionControls(frame: .zero)
+        peekPositionControls.directionRequested = { [weak self] edge in
+            self?.movePanel(toEdge: edge)
+        }
+        let peekToolbar = NSStackView(views: [peekPositionControls, peekControlsButton])
+        peekToolbar.orientation = .horizontal
+        peekToolbar.alignment = .centerY
+        peekToolbar.spacing = 2
+        peekToolbar.translatesAutoresizingMaskIntoConstraints = false
+        peekToolbar.setContentHuggingPriority(.required, for: .horizontal)
+        peekToolbar.setContentCompressionResistancePriority(.required, for: .horizontal)
+        peekToolbar.widthAnchor.constraint(equalToConstant: 114).isActive = true
+        peekBar.addSubview(peekToolbar)
         applyTickerBackground(TickerBackgroundPreference.load())
-
-        let peekStack = NSStackView(views: [peekSourceLabel, peekTicker])
-        peekStack.orientation = .vertical
-        peekStack.alignment = .leading
-        peekStack.spacing = 3
-        peekStack.translatesAutoresizingMaskIntoConstraints = false
-        peekStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        peekBar.addSubview(peekStack)
+        peekBar.addSubview(peekSourceLabel)
+        peekBar.addSubview(peekTicker)
 
         fullMessageView = FullMessageView(frame: .zero)
         fullMessageView.closeRequested = { [weak self] in self?.applyPeekMode(true) }
@@ -331,18 +340,21 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             tickerBackgroundView.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor),
             tickerBackgroundView.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor),
             tickerBackgroundView.bottomAnchor.constraint(equalTo: peekBar.bottomAnchor),
-            peekStack.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor, constant: 14),
-            peekStack.trailingAnchor.constraint(equalTo: peekControlsButton.leadingAnchor,
-                                                 constant: -8),
-            peekStack.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
-            peekSourceLabel.widthAnchor.constraint(equalTo: peekStack.widthAnchor),
+            peekSourceLabel.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor,
+                                                      constant: 14),
+            peekSourceLabel.trailingAnchor.constraint(equalTo: peekToolbar.leadingAnchor,
+                                                       constant: -8),
+            peekSourceLabel.topAnchor.constraint(equalTo: peekBar.topAnchor, constant: 10),
             peekSourceLabel.heightAnchor.constraint(equalToConstant: 16),
-            peekTicker.widthAnchor.constraint(equalTo: peekStack.widthAnchor),
+            peekTicker.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor, constant: 14),
+            peekTicker.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor, constant: -14),
+            peekTicker.bottomAnchor.constraint(equalTo: peekBar.bottomAnchor, constant: -7),
             peekTicker.heightAnchor.constraint(equalToConstant: 26),
-            peekControlsButton.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor,
-                                                          constant: -10),
-            peekControlsButton.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
-            peekControlsButton.widthAnchor.constraint(equalToConstant: 28),
+            peekToolbar.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor,
+                                                   constant: -10),
+            peekToolbar.topAnchor.constraint(equalTo: peekBar.topAnchor, constant: 7),
+            peekToolbar.heightAnchor.constraint(equalToConstant: 24),
+            peekControlsButton.widthAnchor.constraint(equalToConstant: 24),
             peekControlsButton.heightAnchor.constraint(equalToConstant: 28),
 
             fullMessageView.topAnchor.constraint(equalTo: content.topAnchor),
@@ -458,6 +470,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "hoverDisclosure": false,
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": true,
+            "tickerPositionButtons": peekPositionControls.accessibilityNames,
             "outsideClickDismissesMessage": true,
             "discardedEmptySummaryCount": discardedEmptySummaryCount,
             "userResizableWidth": true,
@@ -572,6 +585,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case "controls": applyPeekMode(false)
         case "close": dismissDetailsToTicker()
         case "quit": quitApplication()
+        case let value where value.hasPrefix("edge/"):
+            if let edge = TickerWindowEdge.allCases.first(where: {
+                String(describing: $0) == String(value.dropFirst("edge/".count))
+            }) {
+                movePanel(toEdge: edge)
+            }
         case let value where value.hasPrefix("speed/"):
             setTickerSpeed(String(value.dropFirst("speed/".count)))
         case "width/narrow": setCompactWidth(CompactWindowSizing.narrowWidth)
@@ -646,6 +665,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             peekTicker?.foregroundColor = .labelColor
             peekSourceLabel?.textColor = .secondaryLabelColor
             peekControlsButton?.contentTintColor = nil
+            peekPositionControls?.foregroundColor = nil
             return
         }
         let foreground: NSColor = TickerBackgroundPreference.usesDarkForeground(on: color)
@@ -654,6 +674,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekTicker?.foregroundColor = foreground
         peekSourceLabel?.textColor = foreground.withAlphaComponent(0.72)
         peekControlsButton?.contentTintColor = foreground.withAlphaComponent(0.78)
+        peekPositionControls?.foregroundColor = foreground.withAlphaComponent(0.78)
     }
 
     private func updateSettingsMenuChecks(_ speed: TickerSpeed) {
@@ -696,6 +717,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if preset.hasPrefix("top") { frame.origin.y = visible.maxY - frame.height - inset }
         else { frame.origin.y = visible.minY + inset }
         panel.setFrame(panel.constrainFrameRect(frame, to: panel.screen), display: true)
+        publishAPI()
+    }
+
+    private func movePanel(toEdge edge: TickerWindowEdge) {
+        guard let visible = (panel.screen ?? NSScreen.main)?.visibleFrame else { return }
+        panel.setFrame(movedWindowFrame(panel.frame, to: edge, within: visible),
+                       display: true)
         publishAPI()
     }
 
