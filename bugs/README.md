@@ -12,3 +12,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-005](BUG-005-stale-process-after-rebuild.md) | Rebuilt binary left the old process on screen | Fixed |
 | [BUG-006](BUG-006-peek-missing-source-session.md) | Collapsed summary omitted its source session | Fixed |
 | [BUG-007](BUG-007-hover-loses-window-edge.md) | Hover expansion lost the chosen bottom/edge placement | Fixed |
+| [BUG-008](BUG-008-hover-controls-feel-unavailable.md) | Delayed, drag-only peek made controls feel unavailable | Fixed |

@@ -3,6 +3,12 @@
 
 import AppKit
 
+enum HoverUX {
+    static let revealDelay: TimeInterval = 0.08
+    static let hideDelay: TimeInterval = 0.35
+    static let dragTolerance: CGFloat = 2
+}
+
 final class FlippedView: NSView {
     override var isFlipped: Bool { true }
 }
@@ -50,6 +56,7 @@ final class ConstrainedPanel: NSPanel {
 
 final class HoverView: NSView {
     var hoverChanged: ((Bool) -> Void)?
+    var clicked: (() -> Void)?
     var doubleClicked: (() -> Void)?
     var draggingChanged: ((Bool) -> Void)?
     var dragOnly = false {
@@ -77,11 +84,18 @@ final class HoverView: NSView {
         }
         dragging = true
         draggingChanged?(true)
+        let startOrigin = window?.frame.origin
         NSCursor.closedHand.push()
         window?.performDrag(with: event)
         NSCursor.pop()
+        let endOrigin = window?.frame.origin
         dragging = false
         draggingChanged?(false)
+        if let startOrigin, let endOrigin,
+           hypot(endOrigin.x - startOrigin.x, endOrigin.y - startOrigin.y)
+              < HoverUX.dragTolerance {
+            clicked?()
+        }
     }
 
     override func updateTrackingAreas() {

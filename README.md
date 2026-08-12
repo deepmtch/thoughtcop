@@ -171,6 +171,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --presentation-selftest
 ./thinkpeek --source-context-selftest
 ./thinkpeek --window-position-selftest
+./thinkpeek --hover-ux-selftest
 ```
 
 prints the active transcript and its last 5 reasoning blocks — no window involved.

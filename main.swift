@@ -158,6 +158,17 @@ if CommandLine.arguments.contains("--window-position-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--hover-ux-selftest") {
+    guard HoverUX.revealDelay <= 0.10,
+          HoverUX.hideDelay >= 0.30,
+          HoverUX.dragTolerance >= 2 else {
+        FileHandle.standardError.write("hover UX self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("hover UX: reveal=80ms clickFallback=true dragTolerance=2pt")
+    exit(0)
+}
+
 // Headless check of the alarm path: no window, no transcript, just the model.
 if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.arguments.count {
     print("triggers: \(loadTriggers().count) from \(TRIGGERS_FILE)")

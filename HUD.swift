@@ -79,6 +79,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         content.wantsLayer = true
         content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         content.hoverChanged = { [weak self] inside in self?.hoverChanged(inside) }
+        content.clicked = { [weak self] in self?.applyPeekMode(false) }
         content.doubleClicked = { [weak self] in self?.applyPeekMode(false) }
         content.draggingChanged = { [weak self] dragging in
             if dragging { self?.peekRevealWorkItem?.cancel() }
@@ -330,6 +331,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "operationPending": operationState.operationPending,
             "pendingSource": operationState.latestPendingSource ?? NSNull(),
             "hoverDisclosure": true,
+            "hoverRevealDelayMs": Int(HoverUX.revealDelay * 1_000),
+            "clickToReveal": true,
             "currentIndex": compactIndex,
             "navigableCount": eventCards.count,
             "uiStyle": peekMode ? "wrapped-peek"
@@ -477,7 +480,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.applyPeekMode(false)
             }
             peekRevealWorkItem = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + HoverUX.revealDelay,
+                                          execute: work)
             return
         }
         guard compactMode, !apiRevealLocked else { return }
@@ -487,7 +491,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.applyPeekMode(true)
         }
         peekHideWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + HoverUX.hideDelay,
+                                      execute: work)
     }
 
     private func applyPeekMode(_ peek: Bool, animated: Bool = false) {
