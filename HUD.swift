@@ -362,21 +362,53 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func resizePanel(to height: CGFloat, width: CGFloat? = nil,
                              animated: Bool = true) {
         var frame = panel.frame
-        let top = frame.maxY
-        let center = frame.midX
-        frame.size.height = height
-        frame.origin.y = top - height
-        if let width {
-            frame.size.width = width
-            frame.origin.x = center - width / 2
-        }
+        var placement: WindowPlacement?
+        var placementBounds: NSRect?
         if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
-            frame.origin.x = min(max(frame.origin.x, visible.minX),
-                                 max(visible.minX, visible.maxX - frame.width))
-            frame.origin.y = min(max(frame.origin.y, visible.minY),
-                                 max(visible.minY, visible.maxY - frame.height))
+            let captured = WindowPlacement(frame: frame, within: visible)
+            placement = captured
+            placementBounds = visible
+            frame = captured.frame(
+                for: NSSize(width: width ?? frame.width, height: height), within: visible)
+        } else {
+            let center = NSPoint(x: frame.midX, y: frame.midY)
+            frame.size.height = height
+            if let width { frame.size.width = width }
+            frame.origin.x = center.x - frame.width / 2
+            frame.origin.y = center.y - frame.height / 2
         }
         panel.setFrame(frame, display: true, animate: animated)
+        guard let placement, let placementBounds else { return }
+
+        let restorePlacement = { [weak self] in
+            guard let self else { return }
+            let corrected = placement.frame(for: self.panel.frame.size,
+                                            within: placementBounds)
+            if abs(corrected.minX - self.panel.frame.minX) > 0.5 ||
+               abs(corrected.minY - self.panel.frame.minY) > 0.5 {
+                self.panel.setFrameOrigin(corrected.origin)
+            }
+        }
+        panel.contentView?.layoutSubtreeIfNeeded()
+        restorePlacement()
+        if !animated { DispatchQueue.main.async(execute: restorePlacement) }
+    }
+
+    /// AppKit may resize a window immediately when minSize/maxSize stop
+    /// containing its current frame. Keep both the current and target sizes
+    /// legal during the transition, perform our edge-aware resize, then install
+    /// the final mode constraints.
+    private func transitionPanel(to height: CGFloat, width: CGFloat,
+                                 minSize: NSSize, maxSize: NSSize,
+                                 animated: Bool = true) {
+        let current = panel.frame.size
+        panel.minSize = NSSize(width: min(current.width, min(width, minSize.width)),
+                               height: min(current.height, min(height, minSize.height)))
+        panel.maxSize = NSSize(width: max(current.width, max(width, maxSize.width)),
+                               height: max(current.height, max(height, maxSize.height)))
+        resizePanel(to: height, width: width, animated: animated)
+        panel.minSize = minSize
+        panel.maxSize = maxSize
     }
 
     /// The collapsed window keeps its fixed width, but grows just enough for a
@@ -465,22 +497,26 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         detailHeader.isHidden = peek
         scrollView.isHidden = peek
         if peek {
-            panel.minSize = NSSize(width: 340, height: 62)
-            panel.maxSize = NSSize(width: peekWidth, height: peekMaximumHeight)
-            resizePanel(to: desiredPeekHeight(), width: peekWidth, animated: animated)
+            transitionPanel(to: desiredPeekHeight(), width: peekWidth,
+                            minSize: NSSize(width: 340, height: 62),
+                            maxSize: NSSize(width: peekWidth, height: peekMaximumHeight),
+                            animated: animated)
         } else {
-            panel.minSize = compactMode ? NSSize(width: 430, height: 190)
+            let minSize = compactMode ? NSSize(width: 430, height: 190)
                 : NSSize(width: 520, height: 360)
+            let maxSize: NSSize
             if compactMode {
-                panel.maxSize = NSSize(width: compactWidth, height: 360)
+                maxSize = NSSize(width: compactWidth, height: 360)
             } else if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
-                panel.maxSize = NSSize(width: min(expandedWidth, visible.width),
-                                       height: visible.height)
+                maxSize = NSSize(width: min(expandedWidth, visible.width),
+                                 height: visible.height)
+            } else {
+                maxSize = NSSize(width: expandedWidth, height: expandedHeight)
             }
-            resizePanel(to: compactMode ? max(190, compactHeight)
-                                       : max(520, expandedHeight),
-                        width: compactMode ? compactWidth : expandedWidth,
-                        animated: animated)
+            transitionPanel(to: compactMode ? max(190, compactHeight)
+                                            : max(520, expandedHeight),
+                            width: compactMode ? compactWidth : expandedWidth,
+                            minSize: minSize, maxSize: maxSize, animated: animated)
         }
         publishAPI()
     }
@@ -502,19 +538,23 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if compactMode {
             compactHeight = panel.frame.height
             compactMode = false
-            panel.minSize = NSSize(width: 520, height: 360)
+            let maxSize: NSSize
             if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
-                panel.maxSize = NSSize(width: min(expandedWidth, visible.width),
-                                       height: visible.height)
+                maxSize = NSSize(width: min(expandedWidth, visible.width),
+                                 height: visible.height)
+            } else {
+                maxSize = NSSize(width: expandedWidth, height: expandedHeight)
             }
-            resizePanel(to: max(520, expandedHeight), width: expandedWidth)
+            transitionPanel(to: max(520, expandedHeight), width: expandedWidth,
+                            minSize: NSSize(width: 520, height: 360),
+                            maxSize: maxSize)
         } else {
             expandedHeight = panel.frame.height
             compactMode = true
-            panel.minSize = NSSize(width: 430, height: 190)
-            panel.maxSize = NSSize(width: compactWidth, height: 360)
             compactIndex = max(0, eventCards.count - 1)
-            resizePanel(to: min(320, max(190, compactHeight)), width: compactWidth)
+            transitionPanel(to: min(320, max(190, compactHeight)), width: compactWidth,
+                            minSize: NSSize(width: 430, height: 190),
+                            maxSize: NSSize(width: compactWidth, height: 360))
         }
         updateCardVisibility()
     }

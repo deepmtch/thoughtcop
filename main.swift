@@ -134,6 +134,30 @@ if CommandLine.arguments.contains("--source-context-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--window-position-selftest") {
+    let visible = NSRect(x: 0, y: 0, width: 1440, height: 900)
+    let bottomRightPeek = NSRect(x: 968, y: 12, width: 460, height: 98)
+    let expanded = resizedWindowFrame(bottomRightPeek, toHeight: 210,
+                                      width: 560, within: visible)
+    let collapsed = resizedWindowFrame(expanded, toHeight: 98,
+                                       width: 460, within: visible)
+    let floating = NSRect(x: 400, y: 300, width: 460, height: 98)
+    let floatingExpanded = resizedWindowFrame(floating, toHeight: 210,
+                                              width: 560, within: visible)
+    let close: (CGFloat, CGFloat) -> Bool = { abs($0 - $1) < 0.5 }
+    guard close(expanded.minY, 12), close(collapsed.minY, 12),
+          close(expanded.maxX, 1428), close(collapsed.maxX, 1428),
+          close(floatingExpanded.midX, floating.midX),
+          close(floatingExpanded.midY, floating.midY) else {
+        FileHandle.standardError.write(
+            "window-position self-test failed: expanded=\(expanded) collapsed=\(collapsed)\n"
+                .data(using: .utf8)!)
+        exit(1)
+    }
+    print("window position: bottom/right insets and floating center preserved")
+    exit(0)
+}
+
 // Headless check of the alarm path: no window, no transcript, just the model.
 if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.arguments.count {
     print("triggers: \(loadTriggers().count) from \(TRIGGERS_FILE)")
