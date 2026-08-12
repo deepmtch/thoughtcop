@@ -7,11 +7,14 @@ final class FullMessageView: NSVisualEffectView {
     private let sourceLabel = NSTextField(labelWithString: "")
     private let textView = NSTextView()
     private let scrollView = NSScrollView()
+    private let quitButton = NSButton(title: "Quit", target: nil, action: nil)
     var closeRequested: (() -> Void)?
     var controlsRequested: (() -> Void)?
+    var quitRequested: (() -> Void)?
 
     var source: String { sourceLabel.stringValue }
     var text: String { textView.string }
+    var lifecycleButtonTitles: [String] { ["Done", quitButton.title] }
     var requiresScroll: Bool {
         textView.bounds.height > scrollView.contentView.bounds.height + 0.5
     }
@@ -44,6 +47,17 @@ final class FullMessageView: NSVisualEffectView {
         doneButton.translatesAutoresizingMaskIntoConstraints = false
         addSubview(doneButton)
 
+        quitButton.target = self
+        quitButton.action = #selector(quit(_:))
+        quitButton.bezelStyle = .rounded
+        quitButton.controlSize = .small
+        quitButton.toolTip = "Quit Thinkpeek (Command-Q)"
+        quitButton.setAccessibilityLabel("Quit Thinkpeek")
+        quitButton.keyEquivalent = "q"
+        quitButton.keyEquivalentModifierMask = [.command]
+        quitButton.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(quitButton)
+
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
@@ -73,7 +87,10 @@ final class FullMessageView: NSVisualEffectView {
             controlsButton.trailingAnchor.constraint(equalTo: doneButton.leadingAnchor,
                                                       constant: -8),
             doneButton.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            doneButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            doneButton.trailingAnchor.constraint(equalTo: quitButton.leadingAnchor,
+                                                  constant: -8),
+            quitButton.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            quitButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
             scrollView.topAnchor.constraint(equalTo: doneButton.bottomAnchor, constant: 8),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -92,4 +109,5 @@ final class FullMessageView: NSVisualEffectView {
 
     @objc private func close(_ sender: Any?) { closeRequested?() }
     @objc private func showControls(_ sender: Any?) { controlsRequested?() }
+    @objc private func quit(_ sender: Any?) { quitRequested?() }
 }

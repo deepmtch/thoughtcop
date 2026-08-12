@@ -14,6 +14,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var feedStack: NSStackView!
     private var detailHeader: NSVisualEffectView!
     private var detailHeaderLayout: DetailHeaderLayout!
+    private var detailExitControls: DetailExitControls!
     private var peekBar: NSVisualEffectView!
     private var tickerBackgroundView: TickerBackgroundView!
     private var tickerBackgroundColor: NSColor?
@@ -35,7 +36,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var compactMode = true
     private var peekMode = true
     private var messageMode = false
-    private var compactHeight: CGFloat = 210
     private var messageHeight: CGFloat = 300
     private let peekWidth: CGFloat = 460
     private let peekHeight: CGFloat = 70
@@ -86,11 +86,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.isMovableByWindowBackground = true
         (panel as? ConstrainedPanel)?.escapeRequested = { [weak self] in
             guard let self, !self.peekMode else { return }
-            self.dismissDetailsWithEscape()
+            self.dismissDetailsToTicker()
         }
 
         let content = CompactInteractionView(
-            frame: NSRect(x: 0, y: 0, width: compactWidth, height: compactHeight))
+            frame: NSRect(x: 0, y: 0, width: compactWidth, height: 210))
         content.autoresizingMask = [.width, .height]
         panel.contentView = content
         content.wantsLayer = true
@@ -133,6 +133,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekControlsButton.bezelStyle = .accessoryBarAction
         peekControlsButton.isBordered = false
         peekControlsButton.toolTip = "Open navigation and ticker settings"
+        peekControlsButton.setAccessibilityLabel("Open controls and settings")
         peekControlsButton.translatesAutoresizingMaskIntoConstraints = false
         peekBar.addSubview(peekControlsButton)
         applyTickerBackground(TickerBackgroundPreference.load())
@@ -148,6 +149,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         fullMessageView = FullMessageView(frame: .zero)
         fullMessageView.closeRequested = { [weak self] in self?.applyPeekMode(true) }
         fullMessageView.controlsRequested = { [weak self] in self?.applyPeekMode(false) }
+        fullMessageView.quitRequested = { [weak self] in self?.quitApplication() }
         content.addSubview(fullMessageView)
 
         detailHeader = NSVisualEffectView()
@@ -162,6 +164,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         picker.target = self
         picker.action = #selector(sessionPicked(_:))
         picker.font = .systemFont(ofSize: 14, weight: .semibold)
+        picker.setAccessibilityLabel("Monitored session")
         detailHeader.addSubview(picker)
 
         status = NSTextField(labelWithString: "")
@@ -169,8 +172,18 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         status.font = .systemFont(ofSize: 11, weight: .regular)
         status.textColor = .secondaryLabelColor
         status.lineBreakMode = .byTruncatingMiddle
+        status.setAccessibilityLabel("Drift check status")
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         detailHeader.addSubview(status)
+
+        detailExitControls = DetailExitControls(frame: .zero)
+        detailExitControls.closeRequested = { [weak self] in
+            self?.dismissDetailsToTicker()
+        }
+        detailExitControls.quitRequested = { [weak self] in
+            self?.quitApplication()
+        }
+        detailHeader.addSubview(detailExitControls)
 
         latestButton = NSButton(title: "Latest ↓", target: self,
                                 action: #selector(scrollToLatest(_:)))
@@ -179,11 +192,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         latestButton.translatesAutoresizingMaskIntoConstraints = false
         latestButton.setContentHuggingPriority(.required, for: .horizontal)
         latestButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        latestButton.toolTip = "Scroll to the latest history item"
+        latestButton.setAccessibilityLabel("Scroll to latest history item")
         picker.setContentHuggingPriority(.defaultLow, for: .horizontal)
         picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         previousButton = NSButton(title: "‹", target: self, action: #selector(showPrevious(_:)))
         nextButton = NSButton(title: "›", target: self, action: #selector(showNext(_:)))
+        previousButton.toolTip = "Previous message"
+        previousButton.setAccessibilityLabel("Previous message")
+        nextButton.toolTip = "Next message"
+        nextButton.setAccessibilityLabel("Next message")
         for button in [previousButton!, nextButton!] {
             button.bezelStyle = .rounded
             button.controlSize = .small
@@ -204,6 +223,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         positionLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         positionLabel.textColor = .secondaryLabelColor
         positionLabel.alignment = .center
+        positionLabel.setAccessibilityLabel("Current message position")
         positionLabel.translatesAutoresizingMaskIntoConstraints = false
         positionLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 42).isActive = true
 
@@ -211,6 +231,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                 action: #selector(toggleExpanded(_:)))
         expandButton.bezelStyle = .rounded
         expandButton.controlSize = .small
+        expandButton.toolTip = "Show complete message history"
+        expandButton.setAccessibilityLabel("Show complete message history")
         latestButton.isHidden = true
 
         positionButton = NSPopUpButton(frame: .zero, pullsDown: true)
@@ -256,6 +278,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         positionButton.action = #selector(positionPicked(_:))
         positionButton.controlSize = .small
         positionButton.toolTip = "Ticker appearance and window settings"
+        positionButton.setAccessibilityLabel("Ticker appearance and window settings")
         positionButton.widthAnchor.constraint(equalToConstant: 36).isActive = true
         updateSettingsMenuChecks(savedSpeed)
 
@@ -270,7 +293,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         controls.setContentCompressionResistancePriority(.required, for: .horizontal)
         detailHeader.addSubview(controls)
         detailHeaderLayout = DetailHeaderLayout(header: detailHeader, picker: picker,
-                                                status: status, controls: controls)
+                                                status: status, controls: controls,
+                                                actions: detailExitControls)
 
         scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -399,15 +423,20 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "scrollY": Int(scrollView.contentView.bounds.minY),
             "contentRequiresScroll": !peekMode &&
                 (messageMode ? fullMessageView.requiresScroll
-                    : feedView.bounds.height > scrollView.contentView.bounds.height),
+                    : (!compactMode &&
+                       feedView.bounds.height > scrollView.contentView.bounds.height)),
             "smartAutoscroll": true,
             "unseenCount": unseenCount,
             "cardCount": feedStack.arrangedSubviews.count,
-            "visibleCardCount": (peekMode || messageMode)
+            "visibleCardCount": (peekMode || messageMode || compactMode)
                 ? 0 : eventCards.filter { !$0.isHidden }.count,
             "compactMode": compactMode,
             "peekMode": peekMode,
             "messageMode": messageMode,
+            "closeControlVisible": messageMode || (!detailHeader.isHidden &&
+                !detailExitControls.isHidden),
+            "quitControlVisible": messageMode || (!detailHeader.isHidden &&
+                !detailExitControls.isHidden),
             "peekSource": peekSourceLabel?.stringValue ?? "",
             "peekText": peekTicker?.text ?? "",
             "tickerOverflowing": peekTicker?.isOverflowing ?? false,
@@ -455,7 +484,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             messageHeight = panel.frame.height
             compactWidth = CompactWindowSizing.clamped(panel.frame.width)
         } else if compactMode {
-            compactHeight = panel.frame.height
             compactWidth = CompactWindowSizing.clamped(panel.frame.width)
             detailHeaderLayout.apply(width: compactWidth)
         } else {
@@ -542,6 +570,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case "restart-ticker": restartTickerAtBeginning(nil)
         case "message": showCurrentMessage()
         case "controls": applyPeekMode(false)
+        case "close": dismissDetailsToTicker()
+        case "quit": quitApplication()
         case let value where value.hasPrefix("speed/"):
             setTickerSpeed(String(value.dropFirst("speed/".count)))
         case "width/narrow": setCompactWidth(CompactWindowSizing.narrowWidth)
@@ -642,14 +672,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                   forKey: CompactWindowSizing.defaultsKey)
         updateSettingsMenuChecks(peekTicker.speed)
         guard compactMode, !peekMode else { publishAPI(); return }
-        let minimumHeight: CGFloat = messageMode ? 180 : 190
-        let maximumHeight: CGFloat = messageMode ? 520 : 360
-        transitionPanel(to: max(minimumHeight, panel.frame.height), width: compactWidth,
+        detailHeaderLayout.apply(width: compactWidth)
+        let minimumHeight: CGFloat = messageMode
+            ? 180 : CompactWindowSizing.controlsHeight(for: compactWidth)
+        let maximumHeight: CGFloat = messageMode ? 520 : minimumHeight
+        transitionPanel(to: messageMode ? max(minimumHeight, panel.frame.height)
+                                        : minimumHeight,
+                        width: compactWidth,
                         minSize: NSSize(width: CompactWindowSizing.minimumWidth,
                                         height: minimumHeight),
                         maxSize: NSSize(width: CompactWindowSizing.maximumWidth,
                                         height: maximumHeight))
-        detailHeaderLayout.apply(width: compactWidth)
         publishAPI()
     }
 
@@ -674,7 +707,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekBar.isHidden = !peek
         fullMessageView.isHidden = true
         detailHeader.isHidden = peek
-        scrollView.isHidden = peek
+        scrollView.isHidden = !shouldShowHistoryFeed(peekMode: peek,
+                                                     messageMode: messageMode,
+                                                     compactMode: compactMode)
         peekTicker.setActive(peek)
         if peek {
             detailHeaderLayout.setActive(false, width: compactWidth)
@@ -686,19 +721,22 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             detailHeaderLayout.setActive(true,
                 width: compactMode ? compactWidth : expandedWidth)
+            let controlsHeight = CompactWindowSizing.controlsHeight(for: compactWidth)
             let minSize = compactMode
-                ? NSSize(width: CompactWindowSizing.minimumWidth, height: 190)
+                ? NSSize(width: CompactWindowSizing.minimumWidth,
+                         height: controlsHeight)
                 : NSSize(width: 520, height: 360)
             let maxSize: NSSize
             if compactMode {
-                maxSize = NSSize(width: CompactWindowSizing.maximumWidth, height: 360)
+                maxSize = NSSize(width: CompactWindowSizing.maximumWidth,
+                                 height: controlsHeight)
             } else if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
                 maxSize = NSSize(width: min(expandedWidth, visible.width),
                                  height: visible.height)
             } else {
                 maxSize = NSSize(width: expandedWidth, height: expandedHeight)
             }
-            transitionPanel(to: compactMode ? max(190, compactHeight)
+            transitionPanel(to: compactMode ? controlsHeight
                                             : max(520, expandedHeight),
                             width: compactMode ? compactWidth : expandedWidth,
                             minSize: minSize, maxSize: maxSize, animated: animated)
@@ -723,7 +761,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         previouslyActiveApplication = nil
     }
 
-    private func dismissDetailsWithEscape() {
+    private func dismissDetailsToTicker() {
         if !compactMode {
             expandedHeight = panel.frame.height
             compactMode = true
@@ -731,6 +769,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             updateCardVisibility()
         }
         applyPeekMode(true)
+    }
+
+    private func quitApplication() {
+        NSApp.terminate(nil)
     }
 
     private func showCurrentMessage() {
@@ -777,8 +819,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func toggleExpanded(_ sender: Any?) {
         guard compactMode else { return }
         if peekMode || messageMode { applyPeekMode(false) }
-        compactHeight = panel.frame.height
         compactMode = false
+        scrollView.isHidden = false
         let maxSize: NSSize
         if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
             maxSize = NSSize(width: min(expandedWidth, visible.width),
@@ -1011,6 +1053,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func refreshStatus() {
         let d = driftStatus()
         status.stringValue = d.ready ? "drift check: \(d.detail)" : "drift check OFF — \(d.detail)"
+        status.toolTip = status.stringValue
         status.textColor = d.ready ? .secondaryLabelColor : .systemPurple
     }
 

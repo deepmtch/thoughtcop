@@ -215,11 +215,12 @@ if CommandLine.arguments.contains("--message-view-selftest") {
     message.layoutSubtreeIfNeeded()
     guard message.source == "Codex · Message test",
           message.text == "Complete rendered summary with inline code.",
+          message.lifecycleButtonTitles == ["Done", "Quit"],
           !message.text.contains("**") else {
         FileHandle.standardError.write("message view self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("message view: dedicated=true markdownRendered=true closeReturnsToTicker=true")
+    print("message view: dedicated=true markdownRendered=true close=true quit=true")
     exit(0)
 }
 
@@ -285,7 +286,13 @@ if CommandLine.arguments.contains("--compact-width-selftest") {
           CompactWindowSizing.headerStyle(for: 400) == .stacked,
           CompactWindowSizing.headerStyle(for: 560) == .inline,
           CompactWindowSizing.headerHeight(for: 400) == 106,
-          CompactWindowSizing.headerHeight(for: 560) == 74 else {
+          CompactWindowSizing.headerHeight(for: 560) == 74,
+          CompactWindowSizing.controlsHeight(for: 400) == 106,
+          CompactWindowSizing.controlsHeight(for: 560) == 74,
+          !shouldShowHistoryFeed(peekMode: false, messageMode: false,
+                                 compactMode: true),
+          shouldShowHistoryFeed(peekMode: false, messageMode: false,
+                                compactMode: false) else {
         FileHandle.standardError.write("compact width self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
@@ -333,6 +340,26 @@ if CommandLine.arguments.contains("--escape-selftest") {
         exit(1)
     }
     print("escape: message=true controls=true history=true collapseButton=false")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--exit-controls-selftest") {
+    let controls = DetailExitControls(frame: .zero)
+    var closed = false
+    var quit = false
+    controls.closeRequested = { closed = true }
+    controls.quitRequested = { quit = true }
+    controls.requestClose(nil)
+    controls.requestQuit(nil)
+    guard controls.buttonTitles == ["Close", "Quit"],
+          controls.accessibilityNames == ["Close details and return to ticker",
+                                          "Quit Thinkpeek"],
+          closed, quit else {
+        FileHandle.standardError.write(
+            "exit controls self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("exit controls: close=true quit=true visible=true accessible=true")
     exit(0)
 }
 

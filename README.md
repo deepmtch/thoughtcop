@@ -87,12 +87,18 @@ the reader returns to the ticker. The visible controls button or a deliberate do
 separate navigation/settings view. The **↤** control returns directly to the
 ticker's beginning. The settings menu selects and remembers Slow, Normal, or Fast
 ticker movement and provides Top/Bottom × Left/Center/Right presets.
+The reader also keeps **Quit** visible because the accessory HUD has no standard
+application menu.
 Escape from the reader, controls, or full history always returns directly to the
 one-line ticker.
+Controls and full history also keep explicit **Close** and **Quit** buttons visible;
+Close returns to the ticker without terminating the monitor, while Quit exits it.
 The controls and full-message views can be resized horizontally from 380 to 560
 points. Their width is remembered; below 500 points the header stacks into two
 rows so the session selector and controls remain usable. The settings menu also
 offers **Width: Narrow** and **Width: Standard** shortcuts.
+Compact controls are header-only: message content is reserved for the dedicated
+reader, while **Show all** is the only view that displays history cards.
 **Show all** opens the full scrollable feed. It has no intermediate **Collapse**
 action; Escape returns directly to the ticker. Compact and full-feed widths are
 hard-capped at 560 and 700 points, so
@@ -192,6 +198,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --ticker-background-selftest
 ./thinkpeek --message-view-selftest
 ./thinkpeek --escape-selftest
+./thinkpeek --exit-controls-selftest
 ./thinkpeek --outside-click-selftest
 ./thinkpeek --window-position-selftest
 ./thinkpeek --window-chrome-selftest
@@ -219,7 +226,8 @@ endpoint `http://127.0.0.1:17321/ui` (override with
 omitted blocks, activity, and drift results assertable without screen capture.
 The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
 by the running AppKit window, so layout and scrolling can be checked end to end.
-`/message`, `/controls`, `/hide`, `/previous`, `/next`, `/restart-ticker`,
+`/message`, `/controls`, `/close`, `/quit`, `/hide`, `/previous`, `/next`,
+`/restart-ticker`,
 `/speed/slow`, `/speed/normal`, `/speed/fast`, `/background/blue`,
 `/background/system`, `/width/narrow`, `/width/standard`, and
 `/toggle-expanded` exercise the same reader, settings, and carousel paths as the

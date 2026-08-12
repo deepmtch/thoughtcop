@@ -43,6 +43,7 @@ final class UIStateServer {
                                "/toggle-expanded": "toggle-expanded",
                                "/restart-ticker": "restart-ticker",
                                "/message": "message", "/controls": "controls",
+                               "/close": "close", "/quit": "quit",
                                "/speed/slow": "speed/slow",
                                "/speed/normal": "speed/normal",
                                "/speed/fast": "speed/fast",
