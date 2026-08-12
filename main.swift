@@ -298,6 +298,31 @@ if CommandLine.arguments.contains("--ticker-position-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--provider-icon-selftest") {
+    let claude = ProviderIconView(frame: .zero)
+    claude.update(source: "Claude · Appium")
+    let chatGPT = ProviderIconView(frame: .zero)
+    chatGPT.update(source: "Codex · Thought watch 2")
+    let explicitChatGPT = MessageProvider.detect(from: "ChatGPT · Example")
+    let nativeIconsAvailable = [MessageProvider.claude, .chatGPT].allSatisfy {
+        guard let path = $0.installedApplicationPath else { return false }
+        return FileManager.default.fileExists(atPath: path)
+    }
+    guard claude.provider == .claude,
+          chatGPT.provider == .chatGPT,
+          explicitChatGPT == .chatGPT,
+          claude.image != nil,
+          chatGPT.image != nil,
+          claude.accessibilityLabel() == "Provider: Claude",
+          chatGPT.accessibilityLabel() == "Provider: ChatGPT" else {
+        FileHandle.standardError.write(
+            "provider icon self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("provider icons: claude=true chatGPT=true nativeAppIcons=\(nativeIconsAvailable) accessible=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--window-chrome-selftest") {
     let testPanel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 70),
                             styleMask: [.borderless, .resizable, .nonactivatingPanel],

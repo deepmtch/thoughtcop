@@ -19,6 +19,7 @@ running `/ui` inspection surface. A checked item is not merely planned.
 ## Content and state
 
 - [x] Ticker always identifies the exact source/session.
+- [x] Ticker identifies Claude and ChatGPT/Codex with their provider icon.
 - [x] Empty or formatting-only summaries cannot replace readable text.
 - [x] Operation-start placeholders do not replace useful content.
 - [x] Single click opens the complete message; it does not open settings.
@@ -57,6 +58,7 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Detail views explicitly own keyboard focus while open.
 - [x] Ticker relinquishes keyboard focus when restored.
 - [x] Every icon-only control has a tooltip and accessibility label.
+- [x] Provider icons expose an explicit provider accessibility label.
 - [x] Session, status, message position, history, and lifecycle controls have
   explicit accessibility names instead of relying on symbol pronunciation.
 - [x] Close and Quit use visible text, tooltips, accessibility names, shortcuts.

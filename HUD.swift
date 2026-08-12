@@ -2,6 +2,7 @@
 
 import AppKit
 import Foundation
+import QuartzCore
 
 func controlsExpansionTitle(compactMode: Bool) -> String? {
     compactMode ? "Show all" : nil
@@ -19,10 +20,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var tickerBackgroundView: TickerBackgroundView!
     private var tickerBackgroundColor: NSColor?
     private var fullMessageView: FullMessageView!
+    private var peekProviderIcon: ProviderIconView!
     private var peekSourceLabel: NSTextField!
     private var peekTicker: TickerView!
     private var peekControlsButton: NSButton!
     private var peekPositionControls: TickerPositionControls!
+    private var peekToolbar: NSStackView!
     private var latestButton: NSButton!
     private var previousButton: NSButton!
     private var nextButton: NSButton!
@@ -113,6 +116,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tickerBackgroundView.translatesAutoresizingMaskIntoConstraints = false
         peekBar.addSubview(tickerBackgroundView)
 
+        peekProviderIcon = ProviderIconView(frame: .zero)
+        peekProviderIcon.translatesAutoresizingMaskIntoConstraints = false
+
         peekSourceLabel = NSTextField(labelWithString: "Thinkpeek")
         peekSourceLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         peekSourceLabel.textColor = .secondaryLabelColor
@@ -142,7 +148,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekPositionControls.directionRequested = { [weak self] edge in
             self?.movePanel(toEdge: edge)
         }
-        let peekToolbar = NSStackView(views: [peekPositionControls, peekControlsButton])
+        peekToolbar = NSStackView(views: [peekPositionControls, peekControlsButton])
         peekToolbar.orientation = .horizontal
         peekToolbar.alignment = .centerY
         peekToolbar.spacing = 2
@@ -150,10 +156,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekToolbar.setContentHuggingPriority(.required, for: .horizontal)
         peekToolbar.setContentCompressionResistancePriority(.required, for: .horizontal)
         peekToolbar.widthAnchor.constraint(equalToConstant: 114).isActive = true
-        peekBar.addSubview(peekToolbar)
         applyTickerBackground(TickerBackgroundPreference.load())
+        peekBar.addSubview(peekProviderIcon)
         peekBar.addSubview(peekSourceLabel)
         peekBar.addSubview(peekTicker)
+        // Keep interactive controls above every text/image layer. AppKit's cached
+        // rendering can otherwise omit them after a provider/source transition.
+        peekBar.addSubview(peekToolbar)
 
         fullMessageView = FullMessageView(frame: .zero)
         fullMessageView.closeRequested = { [weak self] in self?.applyPeekMode(true) }
@@ -340,8 +349,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             tickerBackgroundView.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor),
             tickerBackgroundView.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor),
             tickerBackgroundView.bottomAnchor.constraint(equalTo: peekBar.bottomAnchor),
-            peekSourceLabel.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor,
-                                                      constant: 14),
+            peekProviderIcon.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor,
+                                                       constant: 12),
+            peekProviderIcon.topAnchor.constraint(equalTo: peekBar.topAnchor, constant: 8),
+            peekProviderIcon.widthAnchor.constraint(equalToConstant: 20),
+            peekProviderIcon.heightAnchor.constraint(equalToConstant: 20),
+            peekSourceLabel.leadingAnchor.constraint(equalTo: peekProviderIcon.trailingAnchor,
+                                                      constant: 6),
             peekSourceLabel.trailingAnchor.constraint(equalTo: peekToolbar.leadingAnchor,
                                                        constant: -8),
             peekSourceLabel.topAnchor.constraint(equalTo: peekBar.topAnchor, constant: 10),
@@ -449,6 +463,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 !detailExitControls.isHidden),
             "quitControlVisible": messageMode || (!detailHeader.isHidden &&
                 !detailExitControls.isHidden),
+            "peekProvider": peekProviderIcon?.provider.rawValue ?? "unknown",
             "peekSource": peekSourceLabel?.stringValue ?? "",
             "peekText": peekTicker?.text ?? "",
             "tickerOverflowing": peekTicker?.isOverflowing ?? false,
@@ -875,9 +890,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 ? "—" : "\(compactIndex + 1) / \(eventCards.count)"
             if compactIndex >= 0 && compactIndex < eventPreviews.count {
                 let preview = eventPreviews[compactIndex]
-                peekSourceLabel.stringValue = preview.source
-                peekSourceLabel.toolTip = preview.source
                 peekTicker.text = normalizedTickerText(preview.text)
+                updatePeekHeader(source: preview.source)
                 if messageMode {
                     fullMessageView.show(source: preview.source, text: preview.text,
                                          kind: preview.kind)
@@ -905,6 +919,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
         publishAPI()
+    }
+
+    private func updatePeekHeader(source: String) {
+        peekProviderIcon.update(source: source)
+        peekSourceLabel.stringValue = source
+        peekSourceLabel.toolTip = source
+        peekBar.layoutSubtreeIfNeeded()
+        peekToolbar.needsDisplay = true
+        peekBar.needsDisplay = true
+        peekBar.displayIfNeeded()
+        CATransaction.flush()
     }
 
     private func captureWindowPNG() -> Data? {
