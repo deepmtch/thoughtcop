@@ -50,6 +50,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var alertCount = 0
     private var operationState = OperationPresentationState()
     private let api = UIStateServer()
+    private let outsideClickMonitor = OutsideClickMonitor()
     private var apiEvents: [[String: Any]] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -322,6 +323,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         api.captureHandler = { [weak self] in self?.captureWindowPNG() }
         api.actionHandler = { [weak self] action in self?.handleAction(action) }
         api.start()
+        outsideClickMonitor.start { [weak self] location in
+            DispatchQueue.main.async {
+                guard let self,
+                      shouldDismissFullMessage(isShowing: self.messageMode,
+                                               windowFrame: self.panel.frame,
+                                               clickLocation: location) else { return }
+                self.applyPeekMode(true)
+            }
+        }
         refreshPicker()
         refreshStatus()
         addSystemCard("Watching active Claude and Codex sessions",
@@ -381,6 +391,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "hoverDisclosure": false,
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": true,
+            "outsideClickDismissesMessage": true,
             "currentIndex": compactIndex,
             "navigableCount": eventCards.count,
             "uiStyle": peekMode ? "single-line-ticker"
@@ -411,6 +422,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func windowDidMove(_ notification: Notification) {
         publishAPI()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        outsideClickMonitor.stop()
     }
 
     private func resizePanel(to height: CGFloat, width: CGFloat? = nil,

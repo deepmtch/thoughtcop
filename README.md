@@ -73,8 +73,8 @@ Its borderless resting state keeps a fixed 460 × 70-point frame: the exact sour
 top and a single-line ticker below. Overflowing text pauses at the beginning,
 moves horizontally, pauses at the end, and quickly returns. With macOS Reduce
 Motion enabled, it remains clipped and stationary. Hover never changes the UI.
-A single click opens a dedicated full-message reader; **Done** returns to the
-ticker. The visible controls button or a deliberate double-click opens the
+A single click opens a dedicated full-message reader; **Done** or a click outside
+the reader returns to the ticker. The visible controls button or a deliberate double-click opens the
 separate navigation/settings view. The **↤** control returns directly to the
 ticker's beginning. The settings menu selects and remembers Slow, Normal, or Fast
 ticker movement and provides Top/Bottom × Left/Center/Right presets.
@@ -174,6 +174,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --source-context-selftest
 ./thinkpeek --ticker-selftest
 ./thinkpeek --message-view-selftest
+./thinkpeek --outside-click-selftest
 ./thinkpeek --window-position-selftest
 ./thinkpeek --window-chrome-selftest
 ./thinkpeek --interaction-selftest

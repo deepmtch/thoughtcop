@@ -18,3 +18,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-011](BUG-011-hover-conflated-reading-and-controls.md) | Hover conflated reading a message with opening controls | Fixed |
 | [BUG-012](BUG-012-ticker-speed-not-configurable.md) | Ticker reading speed was not configurable | Fixed |
 | [BUG-013](BUG-013-title-bar-wasted-compact-height.md) | Title bar wasted compact HUD height | Fixed |
+| [BUG-014](BUG-014-full-message-ignored-outside-click.md) | Full-message reader ignored outside clicks | Fixed |
