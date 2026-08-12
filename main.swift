@@ -62,6 +62,32 @@ if CommandLine.arguments.contains("--selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--layout-selftest") {
+    let sample = "Since the combined start.sh has debug mode always enabled rather than selecting the requested runtime configuration."
+    let event = UIEvent(timestamp: "2026-08-12T00:00:00.000Z", kind: "analysis",
+                        text: sample, readableAnalysis: true)
+    let card = EventCard(source: "Codex · Layout test", time: "00:00:00", event: event)
+    let fixedCardWidth: CGFloat = 524 // 560-point detail width minus feed insets.
+    card.translatesAutoresizingMaskIntoConstraints = true
+    card.frame = NSRect(x: 0, y: 0, width: fixedCardWidth, height: 180)
+    card.setFooter("✓ layout mutation keeps the body visible")
+    card.layoutSubtreeIfNeeded()
+    let metrics = card.layoutMetrics
+    let singleLineHeight = NSFont.systemFont(ofSize: 15).boundingRectForFont.height
+    guard abs(metrics.card.width - fixedCardWidth) < 0.5,
+          metrics.body.minX >= 12,
+          metrics.body.maxX <= fixedCardWidth - 12,
+          metrics.body.height > singleLineHeight * 1.5 else {
+        FileHandle.standardError.write(
+            "layout self-test failed: card=\(metrics.card) body=\(metrics.body)\n"
+                .data(using: .utf8)!)
+        exit(1)
+    }
+    print("wrapped: detailWidth=560 cardWidth=\(Int(metrics.card.width)) " +
+          "bodyWidth=\(Int(metrics.body.width)) bodyHeight=\(Int(metrics.body.height))")
+    exit(0)
+}
+
 // Headless check of the alarm path: no window, no transcript, just the model.
 if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.arguments.count {
     print("triggers: \(loadTriggers().count) from \(TRIGGERS_FILE)")

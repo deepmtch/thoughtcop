@@ -67,8 +67,9 @@ shows either the readable summary or an explicit omitted-summary marker.
 ## Native window
 
 The AppKit window is a resizable, always-on-top HUD rather than a terminal view.
-Its resting state is one truncated summary line (460 points wide; user-resizable
-down to 340 × 62). Pause the pointer over the HUD for 350 ms to reveal the current
+Its resting state is a summary of up to three wrapped lines at a fixed 460-point
+width; its height grows only as needed and remains capped at 110 points. Pause the
+pointer over the HUD for 350 ms to reveal the current
 card, session selector, provider status, and left/right history controls; moving
 away collapses it after a short delay. The pause leaves time to drag immediately
 with the hand cursor. The move icon provides Top/Bottom × Left/Center/Right presets.
@@ -163,9 +164,12 @@ The tailing engine and the actual native window presentation are both testable.
 
 ```bash
 ./thinkpeek --selftest
+./thinkpeek --layout-selftest
 ```
 
 prints the active transcript and its last 5 reasoning blocks — no window involved.
+The layout check verifies that the 460-point peek width stays fixed while a long
+summary occupies multiple lines.
 
 Engine tests cover: backfill, live append, sealed-block flagging, partial-line
 safety, and partial-line rejoin. All 5 pass against a real transcript.

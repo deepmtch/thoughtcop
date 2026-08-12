@@ -25,6 +25,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var peekMode = true
     private var compactHeight: CGFloat = 210
     private let peekWidth: CGFloat = 460
+    private let peekMinimumHeight: CGFloat = 68
+    private let peekMaximumHeight: CGFloat = 110
     private let compactWidth: CGFloat = 560
     private var expandedHeight: CGFloat = 620
     private let expandedWidth: CGFloat = 700
@@ -87,11 +89,16 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekBar.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(peekBar)
 
-        peekLabel = NSTextField(labelWithString: "Watching Claude and Codex…")
+        peekLabel = WrappingTextField(wrappingLabelWithString: "Watching Claude and Codex…")
         peekLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         peekLabel.textColor = .labelColor
-        peekLabel.lineBreakMode = .byTruncatingTail
-        peekLabel.maximumNumberOfLines = 1
+        peekLabel.usesSingleLineMode = false
+        peekLabel.lineBreakMode = .byWordWrapping
+        peekLabel.maximumNumberOfLines = 3
+        peekLabel.preferredMaxLayoutWidth = peekWidth - 28
+        peekLabel.cell?.wraps = true
+        peekLabel.cell?.isScrollable = false
+        peekLabel.cell?.truncatesLastVisibleLine = false
         peekLabel.translatesAutoresizingMaskIntoConstraints = false
         peekBar.addSubview(peekLabel)
 
@@ -304,7 +311,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "hoverDisclosure": true,
             "currentIndex": compactIndex,
             "navigableCount": eventCards.count,
-            "uiStyle": peekMode ? "one-line-peek"
+            "uiStyle": peekMode ? "wrapped-peek"
                 : (compactMode ? "compact-carousel" : "expanded-card-feed"),
             "events": Array(apiEvents.suffix(250)),
         ])
@@ -349,6 +356,20 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                  max(visible.minY, visible.maxY - frame.height))
         }
         panel.setFrame(frame, display: true, animate: animated)
+    }
+
+    /// The collapsed window keeps its fixed width, but grows just enough for up
+    /// to three wrapped lines. The existing 110-point cap remains unchanged.
+    private func desiredPeekHeight() -> CGFloat {
+        let textWidth = peekWidth - 28
+        let measured = peekLabel.attributedStringValue.boundingRect(
+            with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading])
+        let lineHeight = ceil(peekLabel.font?.boundingRectForFont.height ?? 16)
+        let textHeight = min(ceil(measured.height), lineHeight * 3 + 6)
+        let chromeHeight = panel.frame.height - (panel.contentView?.bounds.height ?? 0)
+        return min(peekMaximumHeight,
+                   max(peekMinimumHeight, chromeHeight + textHeight + 18))
     }
 
     private func handleAction(_ action: String) {
@@ -422,8 +443,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         scrollView.isHidden = peek
         if peek {
             panel.minSize = NSSize(width: 340, height: 62)
-            panel.maxSize = NSSize(width: peekWidth, height: 110)
-            resizePanel(to: 68, width: peekWidth, animated: animated)
+            panel.maxSize = NSSize(width: peekWidth, height: peekMaximumHeight)
+            resizePanel(to: desiredPeekHeight(), width: peekWidth, animated: animated)
         } else {
             panel.minSize = compactMode ? NSSize(width: 430, height: 190)
                 : NSSize(width: 520, height: 360)
@@ -488,6 +509,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 ? "—" : "\(compactIndex + 1) / \(eventCards.count)"
             if compactIndex >= 0 && compactIndex < eventPreviews.count {
                 peekLabel.attributedStringValue = eventPreviews[compactIndex]
+                if peekMode {
+                    resizePanel(to: desiredPeekHeight(), width: peekWidth, animated: false)
+                }
             }
             previousButton.isEnabled = compactIndex > 0
             nextButton.isEnabled = compactIndex >= 0 && compactIndex + 1 < eventCards.count

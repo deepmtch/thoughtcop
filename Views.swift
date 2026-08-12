@@ -7,6 +7,33 @@ final class FlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
+/// A wrapping label whose intrinsic width never pushes its container wider.
+/// AppKit's stock wrapping label can report the unwrapped text width before
+/// Auto Layout assigns its real width, which stretches or collapses card rows.
+final class WrappingTextField: NSTextField {
+    private var measuredWidth: CGFloat = 0
+
+    override var intrinsicContentSize: NSSize {
+        let width = bounds.width > 1 ? bounds.width : preferredMaxLayoutWidth
+        guard width > 1 else {
+            return NSSize(width: NSView.noIntrinsicMetric,
+                          height: super.intrinsicContentSize.height)
+        }
+        let rect = attributedStringValue.boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading])
+        return NSSize(width: NSView.noIntrinsicMetric, height: ceil(rect.height))
+    }
+
+    override func layout() {
+        super.layout()
+        guard bounds.width > 1, abs(measuredWidth - bounds.width) > 0.5 else { return }
+        measuredWidth = bounds.width
+        preferredMaxLayoutWidth = bounds.width
+        invalidateIntrinsicContentSize()
+    }
+}
+
 final class ConstrainedPanel: NSPanel {
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
         guard let visible = (screen ?? self.screen ?? NSScreen.main)?.visibleFrame else {
@@ -83,6 +110,7 @@ func renderedBody(_ text: String, kind: String) -> NSAttributedString {
     let color: NSColor = kind == "omitted-analysis" ? .secondaryLabelColor : .labelColor
     let paragraph = NSMutableParagraphStyle()
     paragraph.lineSpacing = 3
+    paragraph.lineBreakMode = .byWordWrapping
 
     let result: NSMutableAttributedString
     if kind == "analysis" {
@@ -125,6 +153,8 @@ func renderedBody(_ text: String, kind: String) -> NSAttributedString {
 
 final class EventCard: NSView {
     private let footer = NSTextField(labelWithString: "")
+    private let body = WrappingTextField(wrappingLabelWithString: "")
+    private let stack = NSStackView()
 
     init(source: String, time: String, event: UIEvent) {
         super.init(frame: .zero)
@@ -153,15 +183,18 @@ final class EventCard: NSView {
         header.addArrangedSubview(NSView())
         header.addArrangedSubview(timeLabel)
 
-        let body = NSTextField(wrappingLabelWithString: event.text)
         body.isSelectable = true
         body.maximumNumberOfLines = 0
+        body.usesSingleLineMode = false
         body.lineBreakMode = .byWordWrapping
         body.preferredMaxLayoutWidth = 500
         body.cell?.wraps = true
         body.cell?.isScrollable = false
+        body.cell?.truncatesLastVisibleLine = false
         body.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         body.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        body.setContentCompressionResistancePriority(.required, for: .vertical)
+        body.setContentHuggingPriority(.required, for: .vertical)
         body.attributedStringValue = renderedBody(event.text, kind: event.kind)
 
         footer.font = .systemFont(ofSize: 11, weight: .medium)
@@ -170,10 +203,14 @@ final class EventCard: NSView {
         footer.lineBreakMode = .byTruncatingMiddle
         footer.preferredMaxLayoutWidth = 500
         footer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        footer.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        let stack = NSStackView(views: [header, body, footer])
+        stack.addArrangedSubview(header)
+        stack.addArrangedSubview(body)
+        stack.addArrangedSubview(footer)
         stack.orientation = .vertical
         stack.alignment = .leading
+        stack.distribution = .fill
         stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -210,6 +247,10 @@ final class EventCard: NSView {
         footer.stringValue = text
         footer.textColor = color
         footer.isHidden = false
+    }
+
+    var layoutMetrics: (card: NSRect, body: NSRect, footer: NSRect) {
+        (frame, body.convert(body.bounds, to: self), footer.convert(footer.bounds, to: self))
     }
 
     func setAlert(_ text: String) {
