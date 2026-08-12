@@ -122,15 +122,37 @@ if CommandLine.arguments.contains("--source-context-selftest") {
     let source = "Codex · Benchmark obfuscators with OpenRouter"
     let event = UIEvent(timestamp: "2026-08-12T00:00:00.000Z", kind: "analysis",
                         text: "Planning secure tmp directory build", readableAnalysis: true)
-    let preview = (source: source, body: renderedBody(event.text, kind: event.kind))
+    let preview = (source: source, text: normalizedTickerText(event.text))
     guard preview.source == source,
-          preview.body.string == event.text,
+          preview.text == event.text,
           !preview.source.isEmpty else {
         FileHandle.standardError.write("source-context self-test failed\n"
             .data(using: .utf8)!)
         exit(1)
     }
-    print("source context: \(preview.source) → \(preview.body.string)")
+    print("source context: \(preview.source) → \(preview.text)")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--ticker-selftest") {
+    let ticker = TickerView(frame: NSRect(x: 0, y: 0, width: 432, height: 26))
+    ticker.text = "First line\ncontinues as one long ticker without wrapping or clipping vertically " +
+        "while the **complete text** remains available in the revealed card."
+    ticker.layoutSubtreeIfNeeded()
+    let metrics = ticker.layoutMetrics
+    guard ticker.isOverflowing,
+          !ticker.text.contains("\n"),
+          !ticker.text.contains("**"),
+          metrics.label.minY >= metrics.viewport.minY,
+          metrics.label.maxY <= metrics.viewport.maxY,
+          TickerTiming.startPause >= 1,
+          TickerTiming.returnDuration <= 0.2 else {
+        FileHandle.standardError.write(
+            "ticker self-test failed: viewport=\(metrics.viewport) label=\(metrics.label)\n"
+                .data(using: .utf8)!)
+        exit(1)
+    }
+    print("ticker: oneLine=true overflow=true verticallyContained=true reset=true")
     exit(0)
 }
 

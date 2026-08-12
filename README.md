@@ -69,13 +69,14 @@ shows either the readable summary or an explicit omitted-summary marker.
 ## Native window
 
 The AppKit window is a resizable, always-on-top HUD rather than a terminal view.
-Its resting state is a summary of up to three wrapped lines at a fixed 460-point
-width, always preceded by the exact source session; its height grows only as
-needed and remains capped at 130 points. Pause the
-pointer over the HUD for 350 ms to reveal the current
-card, session selector, provider status, and left/right history controls; moving
-away collapses it after a short delay. The pause leaves time to drag immediately
-with the hand cursor. The move icon provides Top/Bottom × Left/Center/Right presets.
+Its resting state keeps a fixed 460 × 98-point frame: the exact source session on
+top and a single-line ticker below. Overflowing text pauses at the beginning,
+moves horizontally, pauses at the end, and quickly returns. With macOS Reduce
+Motion enabled, it remains clipped and stationary. Hover for 80 ms or click to
+reveal the complete card, session selector, provider status, and controls; moving
+away collapses it after a short delay. The **↤** control returns directly to the
+ticker's beginning. Dragging still uses the hand cursor. The move icon provides
+Top/Bottom × Left/Center/Right presets.
 **Show all** explicitly locks open the full scrollable feed until **Collapse** is
 selected. Compact and full-feed widths are hard-capped at 560 and 700 points, so
 long reasoning wraps and scrolls vertically instead of stretching the window.
@@ -170,13 +171,14 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --layout-selftest
 ./thinkpeek --presentation-selftest
 ./thinkpeek --source-context-selftest
+./thinkpeek --ticker-selftest
 ./thinkpeek --window-position-selftest
 ./thinkpeek --hover-ux-selftest
 ```
 
 prints the active transcript and its last 5 reasoning blocks — no window involved.
-The layout check verifies that the 460-point peek width stays fixed while a long
-summary occupies multiple lines.
+The layout check verifies fixed-width full-card wrapping; the ticker check verifies
+that the resting message stays on one vertically contained line when it overflows.
 
 Engine tests cover: backfill, live append, sealed-block flagging, partial-line
 safety, and partial-line rejoin. All 5 pass against a real transcript.
@@ -194,9 +196,10 @@ endpoint `http://127.0.0.1:17321/ui` (override with
 omitted blocks, activity, and drift results assertable without screen capture.
 The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
 by the running AppKit window, so layout and scrolling can be checked end to end.
-`/reveal`, `/hide`, `/previous`, `/next`, and `/toggle-expanded` exercise the
-same disclosure and carousel paths as the visible UI, allowing compact, hover,
-and expanded interactions to be tested through the complete running window.
+`/reveal`, `/hide`, `/previous`, `/next`, `/restart-ticker`, and
+`/toggle-expanded` exercise the same disclosure and carousel paths as the
+visible UI, allowing compact, hover, and expanded interactions to be tested
+through the complete running window.
 Use `./thinkpeek --transcript /absolute/session.jsonl` to pin a deterministic
 input for an end-to-end UI test.
 

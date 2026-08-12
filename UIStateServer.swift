@@ -40,6 +40,7 @@ final class UIStateServer {
                 let path = requestLine.split(separator: " ").dropFirst().first.map(String.init) ?? ""
                 let actions = ["/previous": "previous", "/next": "next",
                                "/toggle-expanded": "toggle-expanded",
+                               "/restart-ticker": "restart-ticker",
                                "/reveal": "reveal", "/hide": "hide",
                                "/position/top-left": "position/top-left",
                                "/position/top-center": "position/top-center",

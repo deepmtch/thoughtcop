@@ -11,23 +11,23 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var detailHeader: NSVisualEffectView!
     private var peekBar: NSVisualEffectView!
     private var peekSourceLabel: NSTextField!
-    private var peekLabel: NSTextField!
+    private var peekTicker: TickerView!
     private var latestButton: NSButton!
     private var previousButton: NSButton!
     private var nextButton: NSButton!
+    private var restartTickerButton: NSButton!
     private var positionLabel: NSTextField!
     private var positionButton: NSPopUpButton!
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
-    private var eventPreviews: [(source: String, body: NSAttributedString)] = []
+    private var eventPreviews: [(source: String, text: String)] = []
     private var systemCards: [EventCard] = []
     private var compactIndex = -1
     private var compactMode = true
     private var peekMode = true
     private var compactHeight: CGFloat = 210
     private let peekWidth: CGFloat = 460
-    private let peekMinimumHeight: CGFloat = 68
-    private let peekMaximumHeight: CGFloat = 130
+    private let peekHeight: CGFloat = 98
     private let compactWidth: CGFloat = 560
     private var expandedHeight: CGFloat = 620
     private let expandedWidth: CGFloat = 700
@@ -100,18 +100,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekSourceLabel.setContentCompressionResistancePriority(.defaultLow,
                                                                  for: .horizontal)
 
-        peekLabel = WrappingTextField(wrappingLabelWithString: "Watching Claude and Codex…")
-        peekLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        peekLabel.textColor = .labelColor
-        peekLabel.usesSingleLineMode = false
-        peekLabel.lineBreakMode = .byWordWrapping
-        peekLabel.maximumNumberOfLines = 3
-        peekLabel.preferredMaxLayoutWidth = peekWidth - 28
-        peekLabel.cell?.wraps = true
-        peekLabel.cell?.isScrollable = false
-        peekLabel.cell?.truncatesLastVisibleLine = false
+        peekTicker = TickerView()
+        peekTicker.text = "Watching Claude and Codex…"
 
-        let peekStack = NSStackView(views: [peekSourceLabel, peekLabel])
+        let peekStack = NSStackView(views: [peekSourceLabel, peekTicker])
         peekStack.orientation = .vertical
         peekStack.alignment = .leading
         peekStack.spacing = 3
@@ -160,6 +152,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button.translatesAutoresizingMaskIntoConstraints = false
             button.widthAnchor.constraint(equalToConstant: 32).isActive = true
         }
+        restartTickerButton = NSButton(title: "↤", target: self,
+                                       action: #selector(restartTickerAtBeginning(_:)))
+        restartTickerButton.bezelStyle = .rounded
+        restartTickerButton.controlSize = .small
+        restartTickerButton.font = .systemFont(ofSize: 15, weight: .semibold)
+        restartTickerButton.toolTip = "Return to the beginning of this summary"
+        restartTickerButton.setAccessibilityLabel("Restart summary ticker")
+        restartTickerButton.translatesAutoresizingMaskIntoConstraints = false
+        restartTickerButton.widthAnchor.constraint(equalToConstant: 32).isActive = true
         positionLabel = NSTextField(labelWithString: "—")
         positionLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         positionLabel.textColor = .secondaryLabelColor
@@ -202,6 +203,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         positionButton.widthAnchor.constraint(equalToConstant: 36).isActive = true
 
         let controls = NSStackView(views: [previousButton, positionLabel, nextButton,
+                                           restartTickerButton,
                                            positionButton, expandButton, latestButton])
         controls.orientation = .horizontal
         controls.alignment = .centerY
@@ -246,7 +248,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             peekStack.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor, constant: -14),
             peekStack.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
             peekSourceLabel.widthAnchor.constraint(equalTo: peekStack.widthAnchor),
-            peekLabel.widthAnchor.constraint(equalTo: peekStack.widthAnchor),
+            peekSourceLabel.heightAnchor.constraint(equalToConstant: 16),
+            peekTicker.widthAnchor.constraint(equalTo: peekStack.widthAnchor),
+            peekTicker.heightAnchor.constraint(equalToConstant: 26),
 
             detailHeader.topAnchor.constraint(equalTo: content.topAnchor),
             detailHeader.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -327,7 +331,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "compactMode": compactMode,
             "peekMode": peekMode,
             "peekSource": peekSourceLabel?.stringValue ?? "",
-            "peekText": peekLabel?.stringValue ?? "",
+            "peekText": peekTicker?.text ?? "",
+            "tickerOverflowing": peekTicker?.isOverflowing ?? false,
+            "tickerReduceMotion": NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
             "operationPending": operationState.operationPending,
             "pendingSource": operationState.latestPendingSource ?? NSNull(),
             "hoverDisclosure": true,
@@ -335,7 +341,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "clickToReveal": true,
             "currentIndex": compactIndex,
             "navigableCount": eventCards.count,
-            "uiStyle": peekMode ? "wrapped-peek"
+            "uiStyle": peekMode ? "single-line-ticker"
                 : (compactMode ? "compact-carousel" : "expanded-card-feed"),
             "events": Array(apiEvents.suffix(250)),
         ])
@@ -414,27 +420,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.maxSize = maxSize
     }
 
-    /// The collapsed window keeps its fixed width, but grows just enough for a
-    /// session line plus up to three wrapped summary lines.
-    private func desiredPeekHeight() -> CGFloat {
-        let textWidth = peekWidth - 28
-        let measured = peekLabel.attributedStringValue.boundingRect(
-            with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading])
-        let lineHeight = ceil(peekLabel.font?.boundingRectForFont.height ?? 16)
-        let textHeight = min(ceil(measured.height), lineHeight * 3 + 6)
-        let chromeHeight = panel.frame.height - (panel.contentView?.bounds.height ?? 0)
-        let sourceHeight = ceil(peekSourceLabel.font?.boundingRectForFont.height ?? 13)
-        return min(peekMaximumHeight,
-                   max(peekMinimumHeight,
-                       chromeHeight + sourceHeight + 3 + textHeight + 18))
-    }
-
     private func handleAction(_ action: String) {
         switch action {
         case "previous": showPrevious(nil)
         case "next": showNext(nil)
         case "toggle-expanded": toggleExpanded(nil)
+        case "restart-ticker": restartTickerAtBeginning(nil)
         case "reveal":
             apiRevealLocked = true
             applyPeekMode(false)
@@ -501,10 +492,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekBar.isHidden = !peek
         detailHeader.isHidden = peek
         scrollView.isHidden = peek
+        peekTicker.setActive(peek)
         if peek {
-            transitionPanel(to: desiredPeekHeight(), width: peekWidth,
+            transitionPanel(to: peekHeight, width: peekWidth,
                             minSize: NSSize(width: 340, height: 62),
-                            maxSize: NSSize(width: peekWidth, height: peekMaximumHeight),
+                            maxSize: NSSize(width: peekWidth, height: peekHeight),
                             animated: animated)
         } else {
             let minSize = compactMode ? NSSize(width: 430, height: 190)
@@ -536,6 +528,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard compactMode, compactIndex + 1 < eventCards.count else { return }
         compactIndex += 1
         updateCardVisibility()
+    }
+
+    @objc private func restartTickerAtBeginning(_ sender: Any?) {
+        guard compactMode else { return }
+        apiRevealLocked = false
+        peekTicker.restart()
+        if !peekMode { applyPeekMode(true) }
     }
 
     @objc private func toggleExpanded(_ sender: Any?) {
@@ -578,14 +577,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if compactIndex >= 0 && compactIndex < eventPreviews.count {
                 let preview = eventPreviews[compactIndex]
                 peekSourceLabel.stringValue = preview.source
-                peekLabel.attributedStringValue = preview.body
-                if peekMode {
-                    resizePanel(to: desiredPeekHeight(), width: peekWidth, animated: false)
-                }
+                peekSourceLabel.toolTip = preview.source
+                peekTicker.text = preview.text
             }
             previousButton.isEnabled = compactIndex > 0
             nextButton.isEnabled = compactIndex >= 0 && compactIndex + 1 < eventCards.count
             expandButton.title = "Show all"
+            restartTickerButton.isEnabled = !eventCards.isEmpty
             latestButton.isHidden = true
         } else {
             for card in eventCards { card.isHidden = false }
@@ -594,6 +592,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             previousButton.isEnabled = false
             nextButton.isEnabled = false
             expandButton.title = "Collapse"
+            restartTickerButton.isEnabled = false
             latestButton.isHidden = false
         }
         feedView.layoutSubtreeIfNeeded()
@@ -665,8 +664,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if navigable {
             let wasFollowingLatest = eventCards.isEmpty || compactIndex == eventCards.count - 1
             eventCards.append(card)
-            eventPreviews.append((source: source,
-                                  body: renderedBody(event.text, kind: event.kind)))
+            eventPreviews.append((source: source, text: normalizedTickerText(event.text)))
             if wasFollowingLatest { compactIndex = eventCards.count - 1 }
         } else {
             systemCards.append(card)
