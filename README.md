@@ -12,7 +12,7 @@ tails both sources and reacts when a readable reasoning summary lands on disk.
 | **`watch.py`** | drift alarm | shouts when it matches your triggers |
 
 ```bash
-swiftc -O -swift-version 5 -o thinkpeek main.swift   # build once
+./build.sh                                           # build once
 ./thinkpeek                                          # the window
 ./thinkpeek --local-only                             # never send reasoning externally
 python3 watch.py --project /private/tmp -v           # the alarm (second terminal)
@@ -152,7 +152,9 @@ is enabled and name the exact direct provider. Every live card changes from
 
 - **Zero install.** Builds with the `swiftc` in Xcode Command Line Tools; links
   only AppKit and Foundation. No package manager, no runtime, no app bundle.
-- **Single file**, readable in one sitting.
+- **Small focused Swift files.** Transcript parsing, session discovery, drift
+  checks, API serving, reusable views, HUD coordination, and startup each have a
+  separate source file.
 - **Negligible cost** — idle polling must not register in Activity Monitor.
 
 ## Testing
