@@ -15,7 +15,7 @@ swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o thinkpeek \
     WindowGeometry.swift \
     CompactWindowLayout.swift \
     DetailExitControls.swift \
-    TickerPositionControls.swift \
+    TickerCornerControls.swift \
     ProviderIcon.swift \
     TickerBackground.swift \
     TickerView.swift \

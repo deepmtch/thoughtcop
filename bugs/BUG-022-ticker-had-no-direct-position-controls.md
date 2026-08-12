@@ -1,5 +1,8 @@
 # BUG-022 — Ticker had no direct position controls
 
+> Historical note: BUG-024 replaced these ambiguous edge controls with explicit
+> four-corner controls.
+
 ## Symptom
 
 Moving the resting ticker required opening controls, opening the settings menu,

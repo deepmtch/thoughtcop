@@ -205,7 +205,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --exit-controls-selftest
 ./thinkpeek --outside-click-selftest
 ./thinkpeek --window-position-selftest
-./thinkpeek --ticker-position-selftest
+./thinkpeek --ticker-corner-selftest
 ./thinkpeek --provider-icon-selftest
 ./thinkpeek --window-chrome-selftest
 ./thinkpeek --compact-width-selftest
@@ -236,7 +236,8 @@ by the running AppKit window, so layout and scrolling can be checked end to end.
 `/restart-ticker`,
 `/speed/slow`, `/speed/normal`, `/speed/fast`, `/background/blue`,
 `/background/system`, `/width/narrow`, `/width/standard`, and
-`/edge/left`, `/edge/right`, `/edge/top`, `/edge/bottom`, and
+`/corner/top-left`, `/corner/top-right`, `/corner/bottom-left`,
+`/corner/bottom-right`, and
 `/toggle-expanded` exercise the same reader, settings, and carousel paths as the
 visible UI, allowing every presentation state to be tested through the complete
 running window. `/reveal` remains an alias for `/controls` for compatibility.

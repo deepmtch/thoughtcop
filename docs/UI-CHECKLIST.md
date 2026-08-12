@@ -44,8 +44,8 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Ticker speed offers Slow, Normal, and Fast and persists the choice.
 - [x] Width offers Narrow and Standard, supports drag resize, and persists.
 - [x] Position offers six Top/Bottom × Left/Center/Right presets.
-- [x] Ticker exposes icon-only Left, Right, Top, and Bottom edge controls.
-- [x] Each edge control preserves the orthogonal window coordinate.
+- [x] Ticker exposes unmistakable icon-only controls for all four corners.
+- [x] Each corner control moves both axes to the selected corner.
 - [x] Top positions use the macOS visible frame below the menu bar.
 - [x] Ticker background uses the native color picker and persists opacity.
 - [x] First-run ticker background defaults to light Sticky-note yellow.

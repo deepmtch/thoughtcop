@@ -24,7 +24,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var peekSourceLabel: NSTextField!
     private var peekTicker: TickerView!
     private var peekControlsButton: NSButton!
-    private var peekPositionControls: TickerPositionControls!
+    private var peekCornerControls: TickerCornerControls!
     private var peekToolbar: NSStackView!
     private var latestButton: NSButton!
     private var previousButton: NSButton!
@@ -144,11 +144,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekControlsButton.toolTip = "Open navigation and ticker settings"
         peekControlsButton.setAccessibilityLabel("Open controls and settings")
         peekControlsButton.translatesAutoresizingMaskIntoConstraints = false
-        peekPositionControls = TickerPositionControls(frame: .zero)
-        peekPositionControls.directionRequested = { [weak self] edge in
-            self?.movePanel(toEdge: edge)
+        peekCornerControls = TickerCornerControls(frame: .zero)
+        peekCornerControls.cornerRequested = { [weak self] corner in
+            self?.movePanel(toCorner: corner)
         }
-        peekToolbar = NSStackView(views: [peekPositionControls, peekControlsButton])
+        peekToolbar = NSStackView(views: [peekCornerControls, peekControlsButton])
         peekToolbar.orientation = .horizontal
         peekToolbar.alignment = .centerY
         peekToolbar.spacing = 2
@@ -485,7 +485,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "hoverDisclosure": false,
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": true,
-            "tickerPositionButtons": peekPositionControls.accessibilityNames,
+            "tickerCornerButtons": peekCornerControls.accessibilityNames,
             "outsideClickDismissesMessage": true,
             "discardedEmptySummaryCount": discardedEmptySummaryCount,
             "userResizableWidth": true,
@@ -600,11 +600,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case "controls": applyPeekMode(false)
         case "close": dismissDetailsToTicker()
         case "quit": quitApplication()
-        case let value where value.hasPrefix("edge/"):
-            if let edge = TickerWindowEdge.allCases.first(where: {
-                String(describing: $0) == String(value.dropFirst("edge/".count))
+        case let value where value.hasPrefix("corner/"):
+            if let corner = TickerWindowCorner.allCases.first(where: {
+                $0.routeName == String(value.dropFirst("corner/".count))
             }) {
-                movePanel(toEdge: edge)
+                movePanel(toCorner: corner)
             }
         case let value where value.hasPrefix("speed/"):
             setTickerSpeed(String(value.dropFirst("speed/".count)))
@@ -680,7 +680,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             peekTicker?.foregroundColor = .labelColor
             peekSourceLabel?.textColor = .secondaryLabelColor
             peekControlsButton?.contentTintColor = nil
-            peekPositionControls?.foregroundColor = nil
+            peekCornerControls?.foregroundColor = nil
             return
         }
         let foreground: NSColor = TickerBackgroundPreference.usesDarkForeground(on: color)
@@ -689,7 +689,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekTicker?.foregroundColor = foreground
         peekSourceLabel?.textColor = foreground.withAlphaComponent(0.72)
         peekControlsButton?.contentTintColor = foreground.withAlphaComponent(0.78)
-        peekPositionControls?.foregroundColor = foreground.withAlphaComponent(0.78)
+        peekCornerControls?.foregroundColor = foreground.withAlphaComponent(0.78)
     }
 
     private func updateSettingsMenuChecks(_ speed: TickerSpeed) {
@@ -735,9 +735,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         publishAPI()
     }
 
-    private func movePanel(toEdge edge: TickerWindowEdge) {
+    private func movePanel(toCorner corner: TickerWindowCorner) {
         guard let visible = (panel.screen ?? NSScreen.main)?.visibleFrame else { return }
-        panel.setFrame(movedWindowFrame(panel.frame, to: edge, within: visible),
+        panel.setFrame(movedWindowFrame(panel.frame, to: corner, within: visible),
                        display: true)
         publishAPI()
     }

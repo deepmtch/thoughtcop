@@ -28,3 +28,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-021](BUG-021-borderless-details-had-no-visible-exit.md) | Borderless controls/history had no visible Close or Quit | Fixed |
 | [BUG-022](BUG-022-ticker-had-no-direct-position-controls.md) | Ticker had no direct edge-position controls | Fixed |
 | [BUG-023](BUG-023-ticker-had-no-provider-icons.md) | Ticker did not visually distinguish Claude from ChatGPT/Codex | Fixed |
+| [BUG-024](BUG-024-edge-icons-were-not-corner-controls.md) | Edge-docking icons were mistaken for corner placement | Fixed |

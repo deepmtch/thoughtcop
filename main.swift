@@ -270,31 +270,32 @@ if CommandLine.arguments.contains("--window-position-selftest") {
     exit(0)
 }
 
-if CommandLine.arguments.contains("--ticker-position-selftest") {
+if CommandLine.arguments.contains("--ticker-corner-selftest") ||
+   CommandLine.arguments.contains("--ticker-position-selftest") {
     let visible = NSRect(x: 0, y: 0, width: 1000, height: 800)
     let initial = NSRect(x: 300, y: 200, width: 460, height: 70)
-    let left = movedWindowFrame(initial, to: .left, within: visible)
-    let right = movedWindowFrame(initial, to: .right, within: visible)
-    let top = movedWindowFrame(initial, to: .top, within: visible)
-    let bottom = movedWindowFrame(initial, to: .bottom, within: visible)
-    let controls = TickerPositionControls(frame: .zero)
-    var requested: [TickerWindowEdge] = []
-    controls.directionRequested = { requested.append($0) }
-    TickerWindowEdge.allCases.forEach(controls.request)
-    guard left.origin == NSPoint(x: 12, y: 200),
-          right.origin == NSPoint(x: 528, y: 200),
-          top.origin == NSPoint(x: 300, y: 718),
-          bottom.origin == NSPoint(x: 300, y: 12),
-          requested == TickerWindowEdge.allCases,
-          controls.accessibilityNames == ["Move window to left edge",
-                                          "Move window to right edge",
-                                          "Move window to top edge",
-                                          "Move window to bottom edge"] else {
+    let topLeft = movedWindowFrame(initial, to: .topLeft, within: visible)
+    let topRight = movedWindowFrame(initial, to: .topRight, within: visible)
+    let bottomLeft = movedWindowFrame(initial, to: .bottomLeft, within: visible)
+    let bottomRight = movedWindowFrame(initial, to: .bottomRight, within: visible)
+    let controls = TickerCornerControls(frame: .zero)
+    var requested: [TickerWindowCorner] = []
+    controls.cornerRequested = { requested.append($0) }
+    TickerWindowCorner.allCases.forEach(controls.request)
+    guard topLeft.origin == NSPoint(x: 12, y: 718),
+          topRight.origin == NSPoint(x: 528, y: 718),
+          bottomLeft.origin == NSPoint(x: 12, y: 12),
+          bottomRight.origin == NSPoint(x: 528, y: 12),
+          requested == TickerWindowCorner.allCases,
+          controls.accessibilityNames == ["Move window to top left corner",
+                                          "Move window to top right corner",
+                                          "Move window to bottom left corner",
+                                          "Move window to bottom right corner"] else {
         FileHandle.standardError.write(
             "ticker position self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("ticker position: left=true right=true top=true bottom=true axisPreserved=true")
+    print("ticker corners: topLeft=true topRight=true bottomLeft=true bottomRight=true")
     exit(0)
 }
 

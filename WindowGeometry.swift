@@ -69,19 +69,23 @@ func resizedWindowFrame(_ frame: NSRect, toHeight height: CGFloat,
     return WindowPlacement(frame: frame, within: visible).frame(for: size, within: visible)
 }
 
-/// Move one axis to a visible-screen edge while preserving the other axis.
-func movedWindowFrame(_ frame: NSRect, to edge: TickerWindowEdge,
+/// Move the window to one of the visible screen's four corners.
+func movedWindowFrame(_ frame: NSRect, to corner: TickerWindowCorner,
                       within visible: NSRect, inset: CGFloat = 12) -> NSRect {
     var result = frame
     let minimumX = visible.minX + inset
     let maximumX = max(minimumX, visible.maxX - frame.width - inset)
     let minimumY = visible.minY + inset
     let maximumY = max(minimumY, visible.maxY - frame.height - inset)
-    switch edge {
-    case .left: result.origin.x = minimumX
-    case .right: result.origin.x = maximumX
-    case .top: result.origin.y = maximumY
-    case .bottom: result.origin.y = minimumY
+    switch corner {
+    case .topLeft:
+        result.origin = NSPoint(x: minimumX, y: maximumY)
+    case .topRight:
+        result.origin = NSPoint(x: maximumX, y: maximumY)
+    case .bottomLeft:
+        result.origin = NSPoint(x: minimumX, y: minimumY)
+    case .bottomRight:
+        result.origin = NSPoint(x: maximumX, y: minimumY)
     }
     result.origin.x = min(max(result.origin.x, minimumX), maximumX)
     result.origin.y = min(max(result.origin.y, minimumY), maximumY)
