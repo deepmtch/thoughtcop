@@ -59,6 +59,9 @@ final class TickerView: NSView {
     private var active = false
     private var optionsObserver: NSObjectProtocol?
     var speed: TickerSpeed = .normal { didSet { restart() } }
+    var foregroundColor: NSColor = .labelColor {
+        didSet { label.textColor = foregroundColor }
+    }
 
     var text: String {
         get { label.stringValue }

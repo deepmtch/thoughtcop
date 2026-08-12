@@ -173,6 +173,31 @@ if CommandLine.arguments.contains("--ticker-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--ticker-background-selftest") {
+    let suiteName = "thinkpeek.ticker-background.selftest.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suiteName) else { exit(1) }
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let sample = NSColor(srgbRed: 0.2, green: 0.4, blue: 0.7, alpha: 0.85)
+    TickerBackgroundPreference.save(sample, defaults: defaults)
+    let restored = TickerBackgroundPreference.load(defaults: defaults)
+    let values = restored.flatMap(TickerBackgroundPreference.components(of:)) ?? []
+    TickerBackgroundPreference.save(nil, defaults: defaults)
+    guard values.count == 4,
+          abs(values[0] - 0.2) < 0.001,
+          abs(values[1] - 0.4) < 0.001,
+          abs(values[2] - 0.7) < 0.001,
+          abs(values[3] - 0.85) < 0.001,
+          TickerBackgroundPreference.load(defaults: defaults) == nil,
+          TickerBackgroundPreference.usesDarkForeground(on: .white),
+          !TickerBackgroundPreference.usesDarkForeground(on: .black) else {
+        FileHandle.standardError.write("ticker background self-test failed\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    print("ticker background: persisted=true custom=true reset=true autoContrast=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--message-view-selftest") {
     let message = FullMessageView(frame: NSRect(x: 0, y: 0, width: 560, height: 300))
     message.show(source: "Codex · Message test",

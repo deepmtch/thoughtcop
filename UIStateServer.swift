@@ -47,6 +47,8 @@ final class UIStateServer {
                                "/speed/fast": "speed/fast",
                                "/width/narrow": "width/narrow",
                                "/width/standard": "width/standard",
+                               "/background/blue": "background/blue",
+                               "/background/system": "background/system",
                                "/reveal": "reveal", "/hide": "hide",
                                "/position/top-left": "position/top-left",
                                "/position/top-center": "position/top-center",

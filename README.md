@@ -75,6 +75,9 @@ moves horizontally, pauses at the end, and quickly returns. With macOS Reduce
 Motion enabled, it remains clipped and stationary. Hover never changes the UI.
 A formatting-only or empty summary is discarded and cannot replace the last
 visible message.
+The settings menu's **Ticker Background…** item opens the native macOS color
+picker. Custom colors and opacity are remembered, ticker text/icons automatically
+switch contrast, and **Use System Ticker Background** restores the native material.
 A single click opens a dedicated full-message reader; **Done** or a click outside
 the reader returns to the ticker. The visible controls button or a deliberate double-click opens the
 separate navigation/settings view. The **↤** control returns directly to the
@@ -179,6 +182,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --presentation-selftest
 ./thinkpeek --source-context-selftest
 ./thinkpeek --ticker-selftest
+./thinkpeek --ticker-background-selftest
 ./thinkpeek --message-view-selftest
 ./thinkpeek --outside-click-selftest
 ./thinkpeek --window-position-selftest
@@ -208,8 +212,8 @@ omitted blocks, activity, and drift results assertable without screen capture.
 The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
 by the running AppKit window, so layout and scrolling can be checked end to end.
 `/message`, `/controls`, `/hide`, `/previous`, `/next`, `/restart-ticker`,
-`/speed/slow`, `/speed/normal`, `/speed/fast`, `/width/narrow`,
-`/width/standard`, and
+`/speed/slow`, `/speed/normal`, `/speed/fast`, `/background/blue`,
+`/background/system`, `/width/narrow`, `/width/standard`, and
 `/toggle-expanded` exercise the same reader, settings, and carousel paths as the
 visible UI, allowing every presentation state to be tested through the complete
 running window. `/reveal` remains an alias for `/controls` for compatibility.

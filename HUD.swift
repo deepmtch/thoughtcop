@@ -11,6 +11,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var detailHeader: NSVisualEffectView!
     private var detailHeaderLayout: DetailHeaderLayout!
     private var peekBar: NSVisualEffectView!
+    private var tickerBackgroundView: TickerBackgroundView!
+    private var tickerBackgroundColor: NSColor?
     private var fullMessageView: FullMessageView!
     private var peekSourceLabel: NSTextField!
     private var peekTicker: TickerView!
@@ -97,6 +99,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekBar.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(peekBar)
 
+        tickerBackgroundView = TickerBackgroundView()
+        tickerBackgroundView.translatesAutoresizingMaskIntoConstraints = false
+        peekBar.addSubview(tickerBackgroundView)
+
         peekSourceLabel = NSTextField(labelWithString: "Thinkpeek")
         peekSourceLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         peekSourceLabel.textColor = .secondaryLabelColor
@@ -120,6 +126,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekControlsButton.toolTip = "Open navigation and ticker settings"
         peekControlsButton.translatesAutoresizingMaskIntoConstraints = false
         peekBar.addSubview(peekControlsButton)
+        applyTickerBackground(TickerBackgroundPreference.load())
 
         let peekStack = NSStackView(views: [peekSourceLabel, peekTicker])
         peekStack.orientation = .vertical
@@ -202,7 +209,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                               "Ticker: Fast", "Width: Narrow",
                                               "Width: Standard", "Top Left", "Top Center",
                                               "Top Right", "Bottom Left", "Bottom Center",
-                                              "Bottom Right"])
+                                              "Bottom Right", "Ticker Background…",
+                                              "Use System Ticker Background"])
         positionButton.item(at: 0)?.image = NSImage(
             systemSymbolName: "slider.horizontal.3",
             accessibilityDescription: "Ticker and window settings")
@@ -229,10 +237,16 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             item.image = NSImage(systemSymbolName: symbol,
                                  accessibilityDescription: description)
         }
+        positionButton.item(at: 12)?.image = NSImage(
+            systemSymbolName: "paintpalette",
+            accessibilityDescription: "Choose ticker background")
+        positionButton.item(at: 13)?.image = NSImage(
+            systemSymbolName: "arrow.counterclockwise",
+            accessibilityDescription: "Use system ticker background")
         positionButton.target = self
         positionButton.action = #selector(positionPicked(_:))
         positionButton.controlSize = .small
-        positionButton.toolTip = "Ticker speed and window position"
+        positionButton.toolTip = "Ticker appearance and window settings"
         positionButton.widthAnchor.constraint(equalToConstant: 36).isActive = true
         updateSettingsMenuChecks(savedSpeed)
 
@@ -280,6 +294,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             peekBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             peekBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             peekBar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            tickerBackgroundView.topAnchor.constraint(equalTo: peekBar.topAnchor),
+            tickerBackgroundView.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor),
+            tickerBackgroundView.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor),
+            tickerBackgroundView.bottomAnchor.constraint(equalTo: peekBar.bottomAnchor),
             peekStack.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor, constant: 14),
             peekStack.trailingAnchor.constraint(equalTo: peekControlsButton.leadingAnchor,
                                                  constant: -8),
@@ -385,6 +403,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "tickerReduceMotion": NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
             "tickerSpeed": peekTicker.speed.rawValue,
             "tickerPointsPerSecond": Int(peekTicker.speed.pointsPerSecond),
+            "tickerBackgroundMode": tickerBackgroundColor == nil ? "system" : "custom",
+            "tickerBackgroundRGBA": tickerBackgroundColor.flatMap(
+                TickerBackgroundPreference.components(of:))?.map(Double.init) ?? NSNull(),
+            "tickerUsesDarkForeground": tickerBackgroundColor.map(
+                TickerBackgroundPreference.usesDarkForeground(on:)) ?? false,
             "operationPending": operationState.operationPending,
             "pendingSource": operationState.latestPendingSource ?? NSNull(),
             "hoverDisclosure": false,
@@ -507,6 +530,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             setTickerSpeed(String(value.dropFirst("speed/".count)))
         case "width/narrow": setCompactWidth(CompactWindowSizing.narrowWidth)
         case "width/standard": setCompactWidth(CompactWindowSizing.standardWidth)
+        case "background/blue":
+            setTickerBackground(NSColor(srgbRed: 0.16, green: 0.38,
+                                        blue: 0.68, alpha: 1))
+        case "background/system": setTickerBackground(nil)
         case "reveal":
             applyPeekMode(false)
         case "hide":
@@ -529,6 +556,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             setCompactWidth(CompactWindowSizing.standardWidth)
         } else if (6...11).contains(selected) {
             movePanel(to: presets[selected - 6])
+        } else if selected == 12 {
+            showTickerBackgroundPicker(nil)
+        } else if selected == 13 {
+            setTickerBackground(nil)
         }
         sender.selectItem(at: 0)
     }
@@ -539,6 +570,44 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updateSettingsMenuChecks(speed)
         UserDefaults.standard.set(speed.rawValue, forKey: "tickerSpeed")
         publishAPI()
+    }
+
+    @objc private func showTickerBackgroundPicker(_ sender: Any?) {
+        let colorPanel = NSColorPanel.shared
+        colorPanel.showsAlpha = true
+        colorPanel.isContinuous = true
+        colorPanel.color = tickerBackgroundColor ?? .controlAccentColor
+        colorPanel.setTarget(self)
+        colorPanel.setAction(#selector(tickerBackgroundChanged(_:)))
+        NSApp.activate(ignoringOtherApps: true)
+        colorPanel.orderFront(nil)
+    }
+
+    @objc private func tickerBackgroundChanged(_ sender: NSColorPanel) {
+        setTickerBackground(sender.color)
+    }
+
+    private func setTickerBackground(_ color: NSColor?) {
+        TickerBackgroundPreference.save(color)
+        applyTickerBackground(color)
+        publishAPI()
+    }
+
+    private func applyTickerBackground(_ color: NSColor?) {
+        tickerBackgroundColor = color
+        tickerBackgroundView?.color = color
+        guard let color else {
+            peekTicker?.foregroundColor = .labelColor
+            peekSourceLabel?.textColor = .secondaryLabelColor
+            peekControlsButton?.contentTintColor = nil
+            return
+        }
+        let foreground: NSColor = TickerBackgroundPreference.usesDarkForeground(on: color)
+            ? NSColor(calibratedWhite: 0.08, alpha: 1)
+            : NSColor.white
+        peekTicker?.foregroundColor = foreground
+        peekSourceLabel?.textColor = foreground.withAlphaComponent(0.72)
+        peekControlsButton?.contentTintColor = foreground.withAlphaComponent(0.78)
     }
 
     private func updateSettingsMenuChecks(_ speed: TickerSpeed) {
