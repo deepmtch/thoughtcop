@@ -42,9 +42,9 @@ running `/ui` inspection surface. A checked item is not merely planned.
 ## Settings
 
 - [x] Settings use compact Speed, Width, Position, and Appearance submenus.
-- [x] Check Prompt opens a multiline runtime editor with Save, Cancel, and Restore Default.
-- [x] Custom check instructions persist and apply to the next model check.
-- [x] The checker JSON response contract cannot be overwritten by custom instructions.
+- [x] What to Check uses local app storage as its only source of truth.
+- [x] No triggers file or file path remains in the UI or runtime configuration.
+- [x] Editor actions are horizontal Save/Cancel controls with no generic alert icon.
 - [x] Ticker speed offers Slow, Normal, and Fast and persists the choice.
 - [x] Width offers Narrow and Standard, supports drag resize, and persists.
 - [x] Position offers six Top/Bottom × Left/Center/Right presets.

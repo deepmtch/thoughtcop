@@ -340,33 +340,34 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
     guard settings.structure == expected, button.numberOfItems == 6,
           settings.topLevelTitles == ["Ticker Speed", "Window Width",
                                       "Window Position", "Appearance",
-                                      "Check Prompt…"] else {
+                                      "What to Check…"] else {
         FileHandle.standardError.write(
             "settings menu self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("settings menu: categories=4 checkPrompt=true hierarchical=true")
+    print("settings menu: categories=4 whatToCheck=true hierarchical=true")
     exit(0)
 }
 
-if CommandLine.arguments.contains("--check-prompt-selftest") {
-    guard let defaults = UserDefaults(suiteName: "thinkpeek.check-prompt-selftest") else {
+if CommandLine.arguments.contains("--check-rules-editor-selftest") ||
+   CommandLine.arguments.contains("--check-prompt-selftest") {
+    guard let defaults = UserDefaults(suiteName: "thinkpeek.check-rules-selftest") else {
         exit(1)
     }
-    defaults.removePersistentDomain(forName: "thinkpeek.check-prompt-selftest")
-    let custom = "Flag reasoning that changes public API behavior without verification."
-    guard CheckPromptPreference.load(defaults: defaults) == CheckPromptPreference.defaultValue,
-          !CheckPromptPreference.isCustomized(defaults: defaults) else { exit(1) }
-    CheckPromptPreference.save(custom, defaults: defaults)
-    let systemPrompt = makeCheckSystemPrompt(
-        instructions: CheckPromptPreference.load(defaults: defaults))
-    guard CheckPromptPreference.isCustomized(defaults: defaults),
-          systemPrompt.contains(custom),
-          systemPrompt.contains("Reply with JSON only") else { exit(1) }
-    CheckPromptPreference.restoreDefault(defaults: defaults)
-    guard !CheckPromptPreference.isCustomized(defaults: defaults) else { exit(1) }
-    defaults.removePersistentDomain(forName: "thinkpeek.check-prompt-selftest")
-    print("check prompt: editable=true persisted=true nextCheck=true schemaProtected=true restoreDefault=true")
+    defaults.removePersistentDomain(forName: "thinkpeek.check-rules-selftest")
+    defer { defaults.removePersistentDomain(forName: "thinkpeek.check-rules-selftest") }
+    let editor = CheckRulesEditor(contents: CheckRulesStore.loadRaw(defaults: defaults),
+                                  save: { _ in }, closed: {})
+    guard editor.currentText == CheckRulesStore.defaultValue,
+          editor.actionTitles == ["Cancel", "Save"], editor.actionsAreHorizontal,
+          CheckRulesStore.rules(defaults: defaults) ==
+            ["Claude is confused or waiting for user to do someting."],
+          !CheckRulesStore.isCustomized(defaults: defaults)
+    else { exit(1) }
+    CheckRulesStore.saveRaw("Updated local rule", defaults: defaults)
+    guard CheckRulesStore.loadRaw(defaults: defaults) == "Updated local rule\n",
+          CheckRulesStore.isCustomized(defaults: defaults) else { exit(1) }
+    print("check rules editor: appLocalOnly=true noFiles=true persisted=true nextCheck=true compactWindow=true")
     exit(0)
 }
 
@@ -472,7 +473,7 @@ if CommandLine.arguments.contains("--exit-controls-selftest") {
 
 // Headless check of the alarm path: no window, no transcript, just the model.
 if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.arguments.count {
-    print("triggers: \(loadTriggers().count) from \(TRIGGERS_FILE)")
+    print("check rules: \(loadTriggers().count) from local app storage")
     var finished = false
     checkDrift(CommandLine.arguments[i + 1]) { outcome, ms in
         print("latency : \(Int(ms)) ms")

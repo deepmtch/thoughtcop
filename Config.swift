@@ -24,7 +24,7 @@ let ACCENT = NSColor(srgbRed: 0.79, green: 0.64, blue: 0.15, alpha: 1)
 let SEALED = NSColor(srgbRed: 0.48, green: 0.36, blue: 0.62, alpha: 1)
 let ALERT = NSColor(srgbRed: 0.95, green: 0.33, blue: 0.31, alpha: 1)
 
-/// Where this binary lives — triggers.txt sits beside it, never under ~/.claude.
+/// Where this binary lives — local environment configuration sits beside it.
 /// argv[0] is often relative ("./thinkpeek"), which resolves to nothing useful —
 /// ask the loader for the real executable path instead.
 let BASE: String = {
@@ -34,8 +34,6 @@ let BASE: String = {
             : FileManager.default.currentDirectoryPath + "/" + argv0)
     return ((exe as NSString).resolvingSymlinksInPath as NSString).deletingLastPathComponent
 }()
-let TRIGGERS_FILE = ProcessInfo.processInfo.environment["THINKPEEK_TRIGGERS"]
-    ?? BASE + "/triggers.txt"
 let ENV_FILE = BASE + "/.env"
 
 /// Read one dotenv value without mutating the process environment. Existing

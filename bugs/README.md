@@ -31,3 +31,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-024](BUG-024-edge-icons-were-not-corner-controls.md) | Edge-docking icons were mistaken for corner placement | Fixed |
 | [BUG-025](BUG-025-settings-menu-was-a-tall-flat-list.md) | Settings menu was an oversized flat list | Fixed |
 | [BUG-026](BUG-026-check-prompt-could-not-change-at-runtime.md) | Check prompt could not be changed at runtime | Fixed |
+| [BUG-027](BUG-027-editor-ignored-existing-local-rules-file.md) | Check rules had competing app and file storage | Fixed |

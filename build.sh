@@ -6,7 +6,7 @@ mkdir -p "$module_cache"
 
 swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o thinkpeek \
     Config.swift \
-    CheckPrompt.swift \
+    CheckRulesStore.swift \
     Transcript.swift \
     Sessions.swift \
     DriftCheck.swift \
@@ -18,7 +18,7 @@ swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o thinkpeek \
     DetailExitControls.swift \
     TickerCornerControls.swift \
     TickerSettingsMenu.swift \
-    CheckPromptEditor.swift \
+    CheckRulesEditor.swift \
     ProviderIcon.swift \
     TickerBackground.swift \
     TickerView.swift \

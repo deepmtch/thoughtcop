@@ -33,6 +33,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var positionLabel: NSTextField!
     private var positionButton: NSPopUpButton!
     private var tickerSettingsMenu: TickerSettingsMenu!
+    private var checkRulesEditor: CheckRulesEditor?
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
     private var eventPreviews: [(source: String, text: String, kind: String)] = []
@@ -271,8 +272,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tickerSettingsMenu.systemBackgroundRequested = { [weak self] in
             self?.setTickerBackground(nil)
         }
-        tickerSettingsMenu.checkPromptRequested = { [weak self] in
-            self?.showCheckPromptEditor()
+        tickerSettingsMenu.checkRulesRequested = { [weak self] in
+            self?.showCheckRulesEditor()
         }
         tickerSettingsMenu.install(on: positionButton)
         positionButton.controlSize = .small
@@ -469,8 +470,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "tickerCornerButtons": peekCornerControls.accessibilityNames,
             "settingsMenuStructure": tickerSettingsMenu?.structure ?? [:],
             "settingsMenuItems": tickerSettingsMenu?.topLevelTitles ?? [],
-            "checkPrompt": CheckPromptPreference.load(),
-            "checkPromptCustomized": CheckPromptPreference.isCustomized(),
+            "checkRulesText": CheckRulesStore.loadRaw(),
+            "checkRuleCount": loadTriggers().count,
+            "checkRulesStorage": "local-app-preferences",
+            "checkRulesCustomized": CheckRulesStore.isCustomized(),
+            "checkRulesEditorVisible": checkRulesEditor?.window?.isVisible ?? false,
             "outsideClickDismissesMessage": true,
             "discardedEmptySummaryCount": discardedEmptySummaryCount,
             "userResizableWidth": true,
@@ -585,6 +589,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case "controls": applyPeekMode(false)
         case "close": dismissDetailsToTicker()
         case "quit": quitApplication()
+        case "check-rules": showCheckRulesEditor()
         case let value where value.hasPrefix("corner/"):
             if let corner = TickerWindowCorner.allCases.first(where: {
                 $0.routeName == String(value.dropFirst("corner/".count))
@@ -639,12 +644,23 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         publishAPI()
     }
 
-    private func showCheckPromptEditor() {
-        CheckPromptEditor.present(current: CheckPromptPreference.load()) { [weak self] prompt in
-            CheckPromptPreference.save(prompt)
+    private func showCheckRulesEditor() {
+        if let checkRulesEditor {
+            checkRulesEditor.present()
+            return
+        }
+        let editor = CheckRulesEditor(contents: CheckRulesStore.loadRaw(),
+                                      save: { [weak self] text in
+            CheckRulesStore.saveRaw(text)
             self?.refreshStatus()
             self?.publishAPI()
-        }
+        }, closed: { [weak self] in
+            self?.checkRulesEditor = nil
+            self?.publishAPI()
+        })
+        checkRulesEditor = editor
+        editor.present()
+        publishAPI()
     }
 
     private func applyTickerBackground(_ color: NSColor?) {
@@ -902,8 +918,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func captureWindowPNG() -> Data? {
-        guard let view = panel.contentView else { return nil }
-        let scale = panel.backingScaleFactor
+        let captureWindow = checkRulesEditor?.window?.isVisible == true
+            ? checkRulesEditor?.window : panel
+        guard let window = captureWindow, let view = window.contentView else { return nil }
+        let scale = window.backingScaleFactor
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
             pixelsWide: max(1, Int(view.bounds.width * scale)),

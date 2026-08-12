@@ -124,18 +124,18 @@ was sent. Per-record `timestamp` fields advance monotonically within the turn.
 
 ## The drift alarm
 
-`watch.py` sends each new reasoning block, plus your `triggers.txt`, to a very
+`watch.py` sends each new reasoning block, plus your locally saved check rules, to a very
 fast model and fires a terminal banner + bell + macOS notification if anything
 matches — typically 300–550 ms after the reasoning hits disk, well before the
 turn ends.
 
-`triggers.txt` is the rule configuration: one plain-English rule per line, `#`
-for comments, re-read on every check so edits take effect with no restart.
+Thinkpeek stores check rules locally in its app preferences: one plain-English
+rule per line, with `#` comments supported. They are read on every check, so edits
+take effect with no restart.
 
-The settings menu's **Check Prompt…** editor changes the checker's instructions
-while Thinkpeek is running. The prompt persists, applies to the next reasoning
-block, and can be restored to the safe default without editing a file. The JSON
-response contract remains fixed so custom instructions cannot break parsing.
+The settings menu's **What to Check…** action edits that local value directly.
+There is no file-backed configuration. The next reasoning block uses the saved
+rules without restarting Thinkpeek.
 
 ```
 Claude is guessing or assuming instead of verifying against the actual code
@@ -213,7 +213,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --ticker-corner-selftest
 ./thinkpeek --provider-icon-selftest
 ./thinkpeek --settings-menu-selftest
-./thinkpeek --check-prompt-selftest
+./thinkpeek --check-rules-editor-selftest
 ./thinkpeek --window-chrome-selftest
 ./thinkpeek --compact-width-selftest
 ./thinkpeek --interaction-selftest

@@ -44,6 +44,7 @@ final class UIStateServer {
                                "/restart-ticker": "restart-ticker",
                                "/message": "message", "/controls": "controls",
                                "/close": "close", "/quit": "quit",
+                               "/check-rules": "check-rules",
                                "/corner/top-left": "corner/top-left",
                                "/corner/top-right": "corner/top-right",
                                "/corner/bottom-left": "corner/bottom-left",

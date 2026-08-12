@@ -8,7 +8,7 @@ final class TickerSettingsMenu: NSObject {
     var positionRequested: ((String) -> Void)?
     var backgroundRequested: (() -> Void)?
     var systemBackgroundRequested: (() -> Void)?
-    var checkPromptRequested: (() -> Void)?
+    var checkRulesRequested: (() -> Void)?
 
     private(set) var menu = NSMenu()
     private var speedItems: [TickerSpeed: NSMenuItem] = [:]
@@ -38,13 +38,13 @@ final class TickerSettingsMenu: NSObject {
                                  submenu: positionMenu()))
         menu.addItem(submenuItem(title: "Appearance", symbol: "paintpalette",
                                  submenu: appearanceMenu()))
-        let checkPrompt = NSMenuItem(title: "Check Prompt…",
-                                     action: #selector(checkPromptPicked(_:)),
+        let checkRules = NSMenuItem(title: "What to Check…",
+                                     action: #selector(checkRulesPicked(_:)),
                                      keyEquivalent: "")
-        checkPrompt.target = self
-        checkPrompt.image = NSImage(systemSymbolName: "text.badge.checkmark",
-                                    accessibilityDescription: checkPrompt.title)
-        menu.addItem(checkPrompt)
+        checkRules.target = self
+        checkRules.image = NSImage(systemSymbolName: "checklist",
+                                   accessibilityDescription: checkRules.title)
+        menu.addItem(checkRules)
         button.menu = menu
     }
 
@@ -154,5 +154,5 @@ final class TickerSettingsMenu: NSObject {
     @objc private func systemBackgroundPicked(_ sender: NSMenuItem) {
         systemBackgroundRequested?()
     }
-    @objc private func checkPromptPicked(_ sender: NSMenuItem) { checkPromptRequested?() }
+    @objc private func checkRulesPicked(_ sender: NSMenuItem) { checkRulesRequested?() }
 }

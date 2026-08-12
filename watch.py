@@ -4,7 +4,7 @@ reasoning-watch — live drift alarm for Claude Code.
 
 Tails the active session transcript, and the instant a new reasoning (thinking)
 block is written, sends it directly to Groq or Cerebras together with your
-triggers file. If any trigger fires you get a
+locally saved Thinkpeek rules. If any trigger fires you get a
 terminal warning + bell + macOS notification within ~200-400ms.
 
 The alarm half of thinkpeek: the window shows you the reasoning, this shouts when
@@ -30,8 +30,10 @@ import urllib.error
 import urllib.request
 
 HOME = os.path.expanduser("~")
-BASE = os.path.dirname(os.path.abspath(__file__))    # beside the code, never under ~/.claude
-TRIGGERS = os.path.join(BASE, "triggers.txt")
+BASE = os.path.dirname(os.path.abspath(__file__))
+RULES_DOMAIN = "com.thinkpeek.app"
+RULES_KEY = "runtimeCheckRules"
+DEFAULT_RULES = "Claude is confused or waiting for user to do someting.\n"
 PROJECTS = os.path.join(HOME, ".claude", "projects")  # read-only; Claude Code owns this
 ENV_FILE = os.path.join(BASE, ".env")
 LOG = os.path.join(BASE, "alerts.log")
@@ -110,7 +112,7 @@ def pick_backend(model_override=None):
 
 SYSTEM = (
     "You are a fast drift detector watching an AI coding agent's private reasoning. "
-    "You are given a numbered list of TRIGGERS and a REASONING excerpt. "
+    "You are given a numbered list of CHECK RULES and a REASONING excerpt. "
     "Decide which triggers, if any, the reasoning matches. Be strict: only fire when the "
     "reasoning clearly exhibits the trigger, not when it merely mentions the topic or "
     "explicitly decides against it. "
@@ -120,11 +122,14 @@ SYSTEM = (
 
 
 def load_triggers():
-    try:
-        return [l.strip() for l in open(TRIGGERS)
-                if l.strip() and not l.lstrip().startswith("#")]
-    except OSError:
-        return []
+    """Read the same local app preference as the native Thinkpeek window."""
+    result = subprocess.run(
+        ["/usr/bin/defaults", "read", RULES_DOMAIN, RULES_KEY],
+        text=True, capture_output=True, check=False,
+    )
+    text = result.stdout if result.returncode == 0 else DEFAULT_RULES
+    return [line.strip() for line in text.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")]
 
 
 def score(backend, thinking, triggers):
@@ -133,7 +138,7 @@ def score(backend, thinking, triggers):
         "model": backend.model,
         "messages": [
             {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": f"TRIGGERS:\n{numbered}\n\nREASONING:\n{thinking[:6000]}"},
+            {"role": "user", "content": f"CHECK RULES:\n{numbered}\n\nREASONING:\n{thinking[:6000]}"},
         ],
         "temperature": 0,
         "max_tokens": 250,
@@ -307,7 +312,7 @@ def main():
         print(f"backend : {backend.name}")
         print(f"model   : {backend.model}"
               + (f"  (provider pinned: {backend.provider[0]})" if backend.provider else ""))
-        print(f"triggers: {len(trig)} loaded from {TRIGGERS}")
+        print(f"check rules: {len(trig)} loaded from local app storage")
         demo = ("I'll just assume the loop guard works the same way and patch it directly "
                 "without reproducing the bug first. No need to run the tests.")
         fired, ms, err = score(backend, demo, trig)

@@ -1,5 +1,8 @@
 # BUG-026: Check prompt could not change at runtime
 
+> Historical note: BUG-027 removed this separate preference-backed prompt and
+> made the runtime editor operate on the existing local rules file instead.
+
 ## Symptom
 
 Users could edit rule lines on disk, but could not change the checker's broader
