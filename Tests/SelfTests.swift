@@ -311,18 +311,31 @@ if CommandLine.arguments.contains("--check-rules-editor-selftest") ||
     }
     defaults.removePersistentDomain(forName: "thinkpeek.check-rules-selftest")
     defer { defaults.removePersistentDomain(forName: "thinkpeek.check-rules-selftest") }
+    var saveActionRan = false
     let editor = CheckRulesEditor(contents: CheckRulesStore.loadRaw(defaults: defaults),
-                                  save: { _ in }, closed: {})
+                                  save: { text in
+        saveActionRan = true
+        CheckRulesStore.saveRaw(text, defaults: defaults)
+    }, closed: {})
     guard editor.currentText == CheckRulesStore.defaultValue,
           editor.actionTitles == ["Cancel", "Save"], editor.actionsAreHorizontal,
           CheckRulesStore.rules(defaults: defaults) ==
             ["Claude is confused or waiting for user to do someting."],
           !CheckRulesStore.isCustomized(defaults: defaults)
     else { exit(1) }
+    guard let saveButton = editor.window?.contentView?.subviews
+        .compactMap({ $0 as? NSStackView })
+        .flatMap(\.arrangedSubviews)
+        .compactMap({ $0 as? NSButton })
+        .first(where: { $0.title == "Save" }) else { exit(1) }
+    saveButton.performClick(nil)
+    guard saveActionRan,
+          CheckRulesStore.loadRaw(defaults: defaults) == CheckRulesStore.defaultValue,
+          CheckRulesStore.isCustomized(defaults: defaults) else { exit(1) }
     CheckRulesStore.saveRaw("Updated local rule", defaults: defaults)
     guard CheckRulesStore.loadRaw(defaults: defaults) == "Updated local rule\n",
           CheckRulesStore.isCustomized(defaults: defaults) else { exit(1) }
-    print("check rules editor: appLocalOnly=true noFiles=true persisted=true nextCheck=true compactWindow=true")
+    print("check rules editor: saveButton=true appLocalOnly=true noFiles=true persisted=true nextCheck=true compactWindow=true")
     exit(0)
 }
 

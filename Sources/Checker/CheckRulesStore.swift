@@ -8,11 +8,19 @@ enum CheckRulesStore {
     static let defaultValue = "Claude is confused or waiting for user to do someting.\n"
     static let localDefaults = UserDefaults(suiteName: suiteName)!
 
-    static func loadRaw(defaults: UserDefaults = localDefaults) -> String {
+    static func loadRaw() -> String {
+        loadRaw(defaults: localDefaults)
+    }
+
+    static func loadRaw(defaults: UserDefaults) -> String {
         defaults.string(forKey: defaultsKey) ?? defaultValue
     }
 
-    static func rules(defaults: UserDefaults = localDefaults) -> [String] {
+    static func rules() -> [String] {
+        rules(defaults: localDefaults)
+    }
+
+    static func rules(defaults: UserDefaults) -> [String] {
         parse(loadRaw(defaults: defaults))
     }
 
@@ -22,14 +30,22 @@ enum CheckRulesStore {
             .filter { !$0.isEmpty && !$0.hasPrefix("#") }
     }
 
-    static func saveRaw(_ text: String, defaults: UserDefaults = .standard) {
+    static func saveRaw(_ text: String) {
+        saveRaw(text, defaults: localDefaults)
+    }
+
+    static func saveRaw(_ text: String, defaults: UserDefaults) {
         var normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
         if !normalized.isEmpty && !normalized.hasSuffix("\n") { normalized += "\n" }
         defaults.set(normalized, forKey: defaultsKey)
     }
 
-    static func isCustomized(defaults: UserDefaults = localDefaults) -> Bool {
+    static func isCustomized() -> Bool {
+        isCustomized(defaults: localDefaults)
+    }
+
+    static func isCustomized(defaults: UserDefaults) -> Bool {
         defaults.object(forKey: defaultsKey) != nil
     }
 }
