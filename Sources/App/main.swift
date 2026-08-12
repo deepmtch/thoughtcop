@@ -1,6 +1,6 @@
 // thinkpeek command-line entry point.
 //
-// Build with ./build.sh, then run ./thinkpeek.
+// Build with ./build.sh, then run ./.build/thinkpeek.
 
 import AppKit
 import Foundation

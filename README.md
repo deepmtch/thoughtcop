@@ -23,6 +23,26 @@ Swift/AppKit + stdlib Python, no dependencies. **Nothing is ever written under
 `~/.claude/`** — that directory is Claude Code's, and thinkpeek only ever reads
 `~/.claude/projects/`.
 
+## Project layout
+
+```text
+Sources/
+├── App/             # entry point and application coordinator
+├── Checker/         # check-rule storage and model scoring
+├── Monitoring/      # transcript discovery, parsing, and presentation state
+├── Infrastructure/  # single-instance and local inspection server
+└── UI/
+    ├── Components/
+    ├── Controls/
+    ├── Layout/
+    └── Ticker/
+Scripts/             # optional command-line watcher
+Benchmarks/          # benchmark utilities
+docs/bugs/           # one document per user-visible regression
+.build/              # ignored compiler output
+.local/              # ignored runtime logs/cache
+```
+
 ## What it reads
 
 Claude Code writes one JSON object per line to:

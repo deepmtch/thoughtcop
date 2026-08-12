@@ -6,28 +6,28 @@ module_cache="$build_dir/module-cache"
 mkdir -p "$module_cache"
 
 swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o "$build_dir/thinkpeek" \
-    Config.swift \
-    CheckRulesStore.swift \
-    Transcript.swift \
-    Sessions.swift \
-    DriftCheck.swift \
-    SingleInstance.swift \
-    UIStateServer.swift \
-    PresentationState.swift \
-    WindowGeometry.swift \
-    CompactWindowLayout.swift \
-    DetailExitControls.swift \
-    TickerCornerControls.swift \
-    TickerSettingsMenu.swift \
-    CheckRulesEditor.swift \
-    ProviderIcon.swift \
-    TickerBackground.swift \
-    TickerView.swift \
-    Views.swift \
-    FullMessageView.swift \
-    OutsideClickDismissal.swift \
-    HUD.swift \
-    main.swift
+    Sources/App/Config.swift \
+    Sources/Checker/CheckRulesStore.swift \
+    Sources/Monitoring/Transcript.swift \
+    Sources/Monitoring/Sessions.swift \
+    Sources/Checker/DriftCheck.swift \
+    Sources/Infrastructure/SingleInstance.swift \
+    Sources/Infrastructure/UIStateServer.swift \
+    Sources/Monitoring/PresentationState.swift \
+    Sources/UI/Layout/WindowGeometry.swift \
+    Sources/UI/Layout/CompactWindowLayout.swift \
+    Sources/UI/Controls/DetailExitControls.swift \
+    Sources/UI/Ticker/TickerCornerControls.swift \
+    Sources/UI/Ticker/TickerSettingsMenu.swift \
+    Sources/UI/Controls/CheckRulesEditor.swift \
+    Sources/UI/Ticker/ProviderIcon.swift \
+    Sources/UI/Ticker/TickerBackground.swift \
+    Sources/UI/Ticker/TickerView.swift \
+    Sources/UI/Components/Views.swift \
+    Sources/UI/Controls/FullMessageView.swift \
+    Sources/UI/Controls/OutsideClickDismissal.swift \
+    Sources/App/HUD.swift \
+    Sources/App/main.swift
 
 if /usr/bin/pgrep -x thinkpeek >/dev/null 2>&1; then
     echo "build complete; a running Thinkpeek still uses its old binary"

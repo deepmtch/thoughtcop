@@ -27,14 +27,19 @@ let ALERT = NSColor(srgbRed: 0.95, green: 0.33, blue: 0.31, alpha: 1)
 /// Where this binary lives — local environment configuration sits beside it.
 /// argv[0] is often relative ("./thinkpeek"), which resolves to nothing useful —
 /// ask the loader for the real executable path instead.
-let BASE: String = {
+let PROJECT_ROOT: String = {
     let argv0 = CommandLine.arguments[0]
     let exe = Bundle.main.executablePath
         ?? (argv0.hasPrefix("/") ? argv0
             : FileManager.default.currentDirectoryPath + "/" + argv0)
-    return ((exe as NSString).resolvingSymlinksInPath as NSString).deletingLastPathComponent
+    let executableDirectory = ((exe as NSString).resolvingSymlinksInPath as NSString)
+        .deletingLastPathComponent
+    if (executableDirectory as NSString).lastPathComponent == ".build" {
+        return (executableDirectory as NSString).deletingLastPathComponent
+    }
+    return executableDirectory
 }()
-let ENV_FILE = BASE + "/.env"
+let ENV_FILE = PROJECT_ROOT + "/.env"
 
 /// Read one dotenv value without mutating the process environment. Existing
 /// environment variables take precedence; otherwise use .env beside the binary.
