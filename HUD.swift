@@ -174,7 +174,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         ]
         for (index, symbol, description) in positionSymbols {
             guard let item = positionButton.item(at: index) else { continue }
-            item.title = ""
             item.toolTip = description
             item.image = NSImage(systemSymbolName: symbol,
                                  accessibilityDescription: description)
