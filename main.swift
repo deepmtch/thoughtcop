@@ -140,9 +140,17 @@ if CommandLine.arguments.contains("--ticker-selftest") {
         "while the **complete text** remains available in the revealed card."
     ticker.layoutSubtreeIfNeeded()
     let metrics = ticker.layoutMetrics
+    let markdownCases = [
+        "**bold summary**": "bold summary",
+        "__strong summary__": "strong summary",
+        "`code summary`": "code summary",
+        "[linked summary](https://example.com)": "linked summary",
+        "## Heading summary": "Heading summary",
+    ]
     guard ticker.isOverflowing,
           !ticker.text.contains("\n"),
           !ticker.text.contains("**"),
+          markdownCases.allSatisfy({ normalizedTickerText($0.key) == $0.value }),
           metrics.label.minY >= metrics.viewport.minY,
           metrics.label.maxY <= metrics.viewport.maxY,
           TickerTiming.startPause >= 1,

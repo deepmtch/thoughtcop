@@ -19,7 +19,21 @@ func normalizedTickerText(_ text: String) -> String {
     } else {
         plain = text
     }
-    return plain.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    // Transcript chunks can arrive while a Markdown span is incomplete, and
+    // Foundation intentionally preserves unmatched delimiters. The ticker is
+    // plain text, so remove the small inline subset that can otherwise leak.
+    let inlinePatterns = [
+        ("\\*\\*([^*]+)\\*\\*", "$1"),
+        ("__([^_]+)__", "$1"),
+        ("`([^`]+)`", "$1"),
+        ("\\[([^]]+)\\]\\([^)]+\\)", "$1"),
+        ("^\\s{0,3}#{1,6}\\s+", ""),
+    ]
+    let stripped = inlinePatterns.reduce(plain) { value, pattern in
+        value.replacingOccurrences(of: pattern.0, with: pattern.1,
+                                   options: .regularExpression)
+    }
+    return stripped.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
 }
 
 final class TickerView: NSView {

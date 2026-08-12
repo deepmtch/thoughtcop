@@ -14,3 +14,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-007](BUG-007-hover-loses-window-edge.md) | Hover expansion lost the chosen bottom/edge placement | Fixed |
 | [BUG-008](BUG-008-hover-controls-feel-unavailable.md) | Delayed, drag-only peek made controls feel unavailable | Fixed |
 | [BUG-009](BUG-009-wrapped-peek-too-tall-and-clipped.md) | Wrapped resting summary was too tall and clipped its first line | Fixed |
+| [BUG-010](BUG-010-markdown-markers-in-ticker.md) | Markdown markers appeared literally in the ticker | Fixed |
