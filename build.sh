@@ -15,3 +15,8 @@ swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o thinkpeek \
     Views.swift \
     HUD.swift \
     main.swift
+
+if /usr/bin/pgrep -x thinkpeek >/dev/null 2>&1; then
+    echo "build complete; a running Thinkpeek still uses its old binary"
+    echo "run ./restart.sh to replace it with this build"
+fi

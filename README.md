@@ -14,6 +14,7 @@ tails both sources and reacts when a readable reasoning summary lands on disk.
 ```bash
 ./build.sh                                           # build once
 ./thinkpeek                                          # the window
+./restart.sh                                         # rebuild and replace a running copy
 ./thinkpeek --local-only                             # never send reasoning externally
 python3 watch.py --project /private/tmp -v           # the alarm (second terminal)
 ```
