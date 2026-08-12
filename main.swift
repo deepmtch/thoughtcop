@@ -244,6 +244,21 @@ if CommandLine.arguments.contains("--window-chrome-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--compact-width-selftest") {
+    guard CompactWindowSizing.clamped(300) == 380,
+          CompactWindowSizing.clamped(440) == 440,
+          CompactWindowSizing.clamped(700) == 560,
+          CompactWindowSizing.headerStyle(for: 400) == .stacked,
+          CompactWindowSizing.headerStyle(for: 560) == .inline,
+          CompactWindowSizing.headerHeight(for: 400) == 106,
+          CompactWindowSizing.headerHeight(for: 560) == 74 else {
+        FileHandle.standardError.write("compact width self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("compact width: range=380...560 narrow=400 responsiveHeader=true persisted=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--interaction-selftest") ||
    CommandLine.arguments.contains("--hover-ux-selftest") {
     guard CompactInteractionUX.clickDecisionDelay >= 0.18,

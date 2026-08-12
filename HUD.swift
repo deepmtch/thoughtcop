@@ -9,6 +9,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var feedView: FlippedView!
     private var feedStack: NSStackView!
     private var detailHeader: NSVisualEffectView!
+    private var detailHeaderLayout: DetailHeaderLayout!
     private var peekBar: NSVisualEffectView!
     private var fullMessageView: FullMessageView!
     private var peekSourceLabel: NSTextField!
@@ -32,7 +33,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var messageHeight: CGFloat = 300
     private let peekWidth: CGFloat = 460
     private let peekHeight: CGFloat = 70
-    private let compactWidth: CGFloat = 560
+    private var compactWidth = CompactWindowSizing.savedWidth()
     private var expandedHeight: CGFloat = 620
     private let expandedWidth: CGFloat = 700
     private var presentationKeys = Set<String>()
@@ -198,7 +199,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         positionButton = NSPopUpButton(frame: .zero, pullsDown: true)
         positionButton.addItems(withTitles: ["", "Ticker: Slow", "Ticker: Normal",
-                                              "Ticker: Fast", "Top Left", "Top Center",
+                                              "Ticker: Fast", "Width: Narrow",
+                                              "Width: Standard", "Top Left", "Top Center",
                                               "Top Right", "Bottom Left", "Bottom Center",
                                               "Bottom Right"])
         positionButton.item(at: 0)?.image = NSImage(
@@ -207,13 +209,19 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for (index, speed) in TickerSpeed.allCases.enumerated() {
             positionButton.item(at: index + 1)?.toolTip = "\(speed.title) ticker speed"
         }
+        positionButton.item(at: 4)?.image = NSImage(
+            systemSymbolName: "arrow.left.and.right",
+            accessibilityDescription: "Narrow controls width")
+        positionButton.item(at: 5)?.image = NSImage(
+            systemSymbolName: "rectangle.expand.vertical",
+            accessibilityDescription: "Standard controls width")
         let positionSymbols = [
-            (4, "arrow.up.left", "Top Left"),
-            (5, "arrow.up", "Top Center"),
-            (6, "arrow.up.right", "Top Right"),
-            (7, "arrow.down.left", "Bottom Left"),
-            (8, "arrow.down", "Bottom Center"),
-            (9, "arrow.down.right", "Bottom Right"),
+            (6, "arrow.up.left", "Top Left"),
+            (7, "arrow.up", "Top Center"),
+            (8, "arrow.up.right", "Top Right"),
+            (9, "arrow.down.left", "Bottom Left"),
+            (10, "arrow.down", "Bottom Center"),
+            (11, "arrow.down.right", "Bottom Right"),
         ]
         for (index, symbol, description) in positionSymbols {
             guard let item = positionButton.item(at: index) else { continue }
@@ -238,6 +246,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         controls.setContentHuggingPriority(.required, for: .horizontal)
         controls.setContentCompressionResistancePriority(.required, for: .horizontal)
         detailHeader.addSubview(controls)
+        detailHeaderLayout = DetailHeaderLayout(header: detailHeader, picker: picker,
+                                                status: status, controls: controls)
 
         scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -292,18 +302,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             detailHeader.topAnchor.constraint(equalTo: content.topAnchor),
             detailHeader.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             detailHeader.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            detailHeader.heightAnchor.constraint(equalToConstant: 74),
-
-            picker.topAnchor.constraint(equalTo: detailHeader.topAnchor, constant: 10),
-            picker.heightAnchor.constraint(equalToConstant: 30),
-            picker.leadingAnchor.constraint(equalTo: detailHeader.leadingAnchor, constant: 14),
-            picker.trailingAnchor.constraint(equalTo: controls.leadingAnchor, constant: -12),
-            status.leadingAnchor.constraint(equalTo: picker.leadingAnchor, constant: 2),
-            status.trailingAnchor.constraint(equalTo: controls.leadingAnchor, constant: -12),
-            status.heightAnchor.constraint(equalToConstant: 16),
-            status.bottomAnchor.constraint(equalTo: detailHeader.bottomAnchor, constant: -8),
-            controls.trailingAnchor.constraint(equalTo: detailHeader.trailingAnchor, constant: -14),
-            controls.centerYAnchor.constraint(equalTo: detailHeader.centerYAnchor),
 
             scrollView.topAnchor.constraint(equalTo: detailHeader.bottomAnchor),
             scrollView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -394,6 +392,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "doubleClickOpensControls": true,
             "outsideClickDismissesMessage": true,
             "discardedEmptySummaryCount": discardedEmptySummaryCount,
+            "userResizableWidth": true,
+            "compactPreferredWidth": Int(compactWidth),
+            "compactMinimumWidth": Int(CompactWindowSizing.minimumWidth),
+            "compactMaximumWidth": Int(CompactWindowSizing.maximumWidth),
+            "compactHeaderStyle": CompactWindowSizing.headerStyle(
+                for: compactWidth).rawValue,
             "currentIndex": compactIndex,
             "navigableCount": eventCards.count,
             "uiStyle": peekMode ? "single-line-ticker"
@@ -410,15 +414,24 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         } else if messageMode {
             messageHeight = panel.frame.height
+            compactWidth = CompactWindowSizing.clamped(panel.frame.width)
         } else if compactMode {
             compactHeight = panel.frame.height
+            compactWidth = CompactWindowSizing.clamped(panel.frame.width)
+            detailHeaderLayout.apply(width: compactWidth)
         } else {
             expandedHeight = panel.frame.height
+            detailHeaderLayout.apply(width: panel.frame.width)
         }
         publishAPI()
     }
 
     func windowDidEndLiveResize(_ notification: Notification) {
+        if compactMode, !peekMode {
+            UserDefaults.standard.set(Double(compactWidth),
+                                      forKey: CompactWindowSizing.defaultsKey)
+            updateSettingsMenuChecks(peekTicker.speed)
+        }
         publishAPI()
     }
 
@@ -492,6 +505,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case "controls": applyPeekMode(false)
         case let value where value.hasPrefix("speed/"):
             setTickerSpeed(String(value.dropFirst("speed/".count)))
+        case "width/narrow": setCompactWidth(CompactWindowSizing.narrowWidth)
+        case "width/standard": setCompactWidth(CompactWindowSizing.standardWidth)
         case "reveal":
             applyPeekMode(false)
         case "hide":
@@ -508,8 +523,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let selected = sender.indexOfSelectedItem
         if (1...3).contains(selected) {
             setTickerSpeed(TickerSpeed.allCases[selected - 1].rawValue)
-        } else if (4...9).contains(selected) {
-            movePanel(to: presets[selected - 4])
+        } else if selected == 4 {
+            setCompactWidth(CompactWindowSizing.narrowWidth)
+        } else if selected == 5 {
+            setCompactWidth(CompactWindowSizing.standardWidth)
+        } else if (6...11).contains(selected) {
+            movePanel(to: presets[selected - 6])
         }
         sender.selectItem(at: 0)
     }
@@ -526,6 +545,27 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for (index, candidate) in TickerSpeed.allCases.enumerated() {
             positionButton.item(at: index + 1)?.state = candidate == speed ? .on : .off
         }
+        positionButton.item(at: 4)?.state = abs(compactWidth -
+            CompactWindowSizing.narrowWidth) < 1 ? .on : .off
+        positionButton.item(at: 5)?.state = abs(compactWidth -
+            CompactWindowSizing.standardWidth) < 1 ? .on : .off
+    }
+
+    private func setCompactWidth(_ requestedWidth: CGFloat) {
+        compactWidth = CompactWindowSizing.clamped(requestedWidth)
+        UserDefaults.standard.set(Double(compactWidth),
+                                  forKey: CompactWindowSizing.defaultsKey)
+        updateSettingsMenuChecks(peekTicker.speed)
+        guard compactMode, !peekMode else { publishAPI(); return }
+        let minimumHeight: CGFloat = messageMode ? 180 : 190
+        let maximumHeight: CGFloat = messageMode ? 520 : 360
+        transitionPanel(to: max(minimumHeight, panel.frame.height), width: compactWidth,
+                        minSize: NSSize(width: CompactWindowSizing.minimumWidth,
+                                        height: minimumHeight),
+                        maxSize: NSSize(width: CompactWindowSizing.maximumWidth,
+                                        height: maximumHeight))
+        detailHeaderLayout.apply(width: compactWidth)
+        publishAPI()
     }
 
     private func movePanel(to preset: String) {
@@ -551,16 +591,20 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         scrollView.isHidden = peek
         peekTicker.setActive(peek)
         if peek {
+            detailHeaderLayout.setActive(false, width: compactWidth)
             transitionPanel(to: peekHeight, width: peekWidth,
                             minSize: NSSize(width: 340, height: 54),
                             maxSize: NSSize(width: peekWidth, height: peekHeight),
                             animated: animated)
         } else {
-            let minSize = compactMode ? NSSize(width: 430, height: 190)
+            detailHeaderLayout.setActive(true,
+                width: compactMode ? compactWidth : expandedWidth)
+            let minSize = compactMode
+                ? NSSize(width: CompactWindowSizing.minimumWidth, height: 190)
                 : NSSize(width: 520, height: 360)
             let maxSize: NSSize
             if compactMode {
-                maxSize = NSSize(width: compactWidth, height: 360)
+                maxSize = NSSize(width: CompactWindowSizing.maximumWidth, height: 360)
             } else if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
                 maxSize = NSSize(width: min(expandedWidth, visible.width),
                                  height: visible.height)
@@ -586,10 +630,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         fullMessageView.isHidden = false
         detailHeader.isHidden = true
         scrollView.isHidden = true
+        detailHeaderLayout.setActive(false, width: compactWidth)
         peekTicker.setActive(false)
         transitionPanel(to: max(220, messageHeight), width: compactWidth,
-                        minSize: NSSize(width: 430, height: 180),
-                        maxSize: NSSize(width: compactWidth, height: 520))
+                        minSize: NSSize(width: CompactWindowSizing.minimumWidth, height: 180),
+                        maxSize: NSSize(width: CompactWindowSizing.maximumWidth, height: 520))
         publishAPI()
     }
 
@@ -633,8 +678,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             compactMode = true
             compactIndex = max(0, eventCards.count - 1)
             transitionPanel(to: min(320, max(190, compactHeight)), width: compactWidth,
-                            minSize: NSSize(width: 430, height: 190),
-                            maxSize: NSSize(width: compactWidth, height: 360))
+                            minSize: NSSize(width: CompactWindowSizing.minimumWidth, height: 190),
+                            maxSize: NSSize(width: CompactWindowSizing.maximumWidth, height: 360))
         }
         updateCardVisibility()
     }

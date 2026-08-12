@@ -20,3 +20,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-013](BUG-013-title-bar-wasted-compact-height.md) | Title bar wasted compact HUD height | Fixed |
 | [BUG-014](BUG-014-full-message-ignored-outside-click.md) | Full-message reader ignored outside clicks | Fixed |
 | [BUG-015](BUG-015-empty-summary-erased-ticker.md) | Empty normalized summary erased the ticker | Fixed |
+| [BUG-016](BUG-016-controls-width-was-fixed.md) | Controls window could not stay at a narrower width | Fixed |

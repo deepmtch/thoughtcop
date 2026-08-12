@@ -80,6 +80,10 @@ the reader returns to the ticker. The visible controls button or a deliberate do
 separate navigation/settings view. The **↤** control returns directly to the
 ticker's beginning. The settings menu selects and remembers Slow, Normal, or Fast
 ticker movement and provides Top/Bottom × Left/Center/Right presets.
+The controls and full-message views can be resized horizontally from 380 to 560
+points. Their width is remembered; below 500 points the header stacks into two
+rows so the session selector and controls remain usable. The settings menu also
+offers **Width: Narrow** and **Width: Standard** shortcuts.
 **Show all** explicitly locks open the full scrollable feed until **Collapse** is
 selected. Compact and full-feed widths are hard-capped at 560 and 700 points, so
 long reasoning wraps and scrolls vertically instead of stretching the window.
@@ -179,6 +183,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --outside-click-selftest
 ./thinkpeek --window-position-selftest
 ./thinkpeek --window-chrome-selftest
+./thinkpeek --compact-width-selftest
 ./thinkpeek --interaction-selftest
 ```
 
@@ -203,7 +208,8 @@ omitted blocks, activity, and drift results assertable without screen capture.
 The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
 by the running AppKit window, so layout and scrolling can be checked end to end.
 `/message`, `/controls`, `/hide`, `/previous`, `/next`, `/restart-ticker`,
-`/speed/slow`, `/speed/normal`, `/speed/fast`, and
+`/speed/slow`, `/speed/normal`, `/speed/fast`, `/width/narrow`,
+`/width/standard`, and
 `/toggle-expanded` exercise the same reader, settings, and carousel paths as the
 visible UI, allowing every presentation state to be tested through the complete
 running window. `/reveal` remains an alias for `/controls` for compatibility.

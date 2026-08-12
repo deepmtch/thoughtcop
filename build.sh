@@ -13,6 +13,7 @@ swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o thinkpeek \
     UIStateServer.swift \
     PresentationState.swift \
     WindowGeometry.swift \
+    CompactWindowLayout.swift \
     TickerView.swift \
     Views.swift \
     FullMessageView.swift \
