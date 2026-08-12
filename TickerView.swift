@@ -53,11 +53,18 @@ func presentableTickerText(_ text: String) -> String? {
     return normalized.isEmpty ? nil : normalized
 }
 
+func visibleTickerTextWidth(textWidth: CGFloat, viewportWidth: CGFloat,
+                            translation: CGFloat) -> CGFloat {
+    max(0, min(viewportWidth, textWidth + translation) - max(0, translation))
+}
+
 final class TickerView: NSView {
     private let viewport = NSView()
     private let label = NSTextField(labelWithString: "")
     private var active = false
     private var optionsObserver: NSObjectProtocol?
+    private var animationGeneration = 0
+    private var measuredTextWidth: CGFloat = 0
     var speed: TickerSpeed = .normal { didSet { restart() } }
     var foregroundColor: NSColor = .labelColor {
         didSet { label.textColor = foregroundColor }
@@ -67,6 +74,7 @@ final class TickerView: NSView {
         get { label.stringValue }
         set {
             guard let normalized = presentableTickerText(newValue) else { return }
+            resetToBeginning()
             label.stringValue = normalized
             needsLayout = true
             layoutSubtreeIfNeeded()
@@ -77,6 +85,16 @@ final class TickerView: NSView {
     var isOverflowing: Bool { label.frame.width > viewport.bounds.width + 0.5 }
     var layoutMetrics: (viewport: NSRect, label: NSRect) {
         (viewport.bounds, label.frame)
+    }
+    var presentationMetrics: (translation: CGFloat, textWidth: CGFloat,
+                              visibleWidth: CGFloat) {
+        let layer = label.layer?.presentation() ?? label.layer
+        let translation = (layer?.value(forKeyPath: "transform.translation.x")
+            as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
+        return (translation, measuredTextWidth,
+                visibleTickerTextWidth(textWidth: measuredTextWidth,
+                                       viewportWidth: viewport.bounds.width,
+                                       translation: translation))
     }
 
     override init(frame frameRect: NSRect) {
@@ -113,10 +131,11 @@ final class TickerView: NSView {
     override func layout() {
         super.layout()
         viewport.frame = bounds
+        measuredTextWidth = ceil(label.attributedStringValue.size().width)
         let fitting = label.fittingSize
         let labelHeight = min(bounds.height, ceil(fitting.height))
         label.frame = NSRect(x: 0, y: floor((bounds.height - labelHeight) / 2),
-                             width: max(ceil(fitting.width), bounds.width),
+                             width: max(measuredTextWidth, bounds.width),
                              height: labelHeight)
         restart()
     }
@@ -131,12 +150,34 @@ final class TickerView: NSView {
     }
 
     func restart() {
-        label.layer?.removeAnimation(forKey: "ticker")
+        resetToBeginning()
         guard active,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
               isOverflowing else { return }
 
-        let distance = label.frame.width - viewport.bounds.width
+        let generation = animationGeneration
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.active, self.animationGeneration == generation else { return }
+            self.installAnimation(expectedGeneration: generation)
+        }
+    }
+
+    private func resetToBeginning() {
+        animationGeneration += 1
+        label.layer?.removeAllAnimations()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        label.layer?.transform = CATransform3DIdentity
+        CATransaction.commit()
+    }
+
+    private func installAnimation(expectedGeneration: Int) {
+        guard animationGeneration == expectedGeneration,
+              active,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              measuredTextWidth > viewport.bounds.width + 0.5 else { return }
+
+        let distance = measuredTextWidth - viewport.bounds.width
         let travelDuration = TimeInterval(distance / speed.pointsPerSecond)
         let total = TickerTiming.startPause + travelDuration +
             TickerTiming.endPause + TickerTiming.returnDuration

@@ -22,3 +22,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-015](BUG-015-empty-summary-erased-ticker.md) | Empty normalized summary erased the ticker | Fixed |
 | [BUG-016](BUG-016-controls-width-was-fixed.md) | Controls window could not stay at a narrower width | Fixed |
 | [BUG-017](BUG-017-ticker-background-not-customizable.md) | Ticker background was not customizable | Fixed |
+| [BUG-018](BUG-018-ticker-animation-could-show-no-text.md) | Ticker animation could show no message text | Fixed |

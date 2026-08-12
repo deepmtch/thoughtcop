@@ -339,6 +339,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         knownOffsets = transcriptSizes()
         api.captureHandler = { [weak self] in self?.captureWindowPNG() }
         api.actionHandler = { [weak self] action in self?.handleAction(action) }
+        api.refreshHandler = { [weak self] in self?.publishAPI() }
         api.start()
         outsideClickMonitor.start { [weak self] location in
             DispatchQueue.main.async {
@@ -362,6 +363,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func publishAPI() {
         let visibleFrame = (panel.screen ?? NSScreen.main)?.visibleFrame
+        let tickerPresentation = peekTicker.presentationMetrics
         api.publish([
             "schemaVersion": 1,
             "ready": true,
@@ -400,6 +402,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "peekSource": peekSourceLabel?.stringValue ?? "",
             "peekText": peekTicker?.text ?? "",
             "tickerOverflowing": peekTicker?.isOverflowing ?? false,
+            "tickerPresentationOffset": Double(tickerPresentation.translation),
+            "tickerMeasuredTextWidth": Double(tickerPresentation.textWidth),
+            "tickerVisibleTextWidth": Double(tickerPresentation.visibleWidth),
+            "tickerTextVisible": !peekTicker.text.isEmpty &&
+                tickerPresentation.visibleWidth >= 1,
             "tickerReduceMotion": NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
             "tickerSpeed": peekTicker.speed.rawValue,
             "tickerPointsPerSecond": Int(peekTicker.speed.pointsPerSecond),

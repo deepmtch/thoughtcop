@@ -73,6 +73,8 @@ Its borderless resting state keeps a fixed 460 × 70-point frame: the exact sour
 top and a single-line ticker below. Overflowing text pauses at the beginning,
 moves horizontally, pauses at the end, and quickly returns. With macOS Reduce
 Motion enabled, it remains clipped and stationary. Hover never changes the UI.
+Every text replacement and reopen synchronously resets the ticker to position
+zero before a new animation is installed, preventing mid-message or blank starts.
 A formatting-only or empty summary is discarded and cannot replace the last
 visible message.
 The settings menu's **Ticker Background…** item opens the native macOS color

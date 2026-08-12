@@ -10,6 +10,7 @@ final class UIStateServer {
     private var listener: NWListener?
     var captureHandler: (() -> Data?)?
     var actionHandler: ((String) -> Void)?
+    var refreshHandler: (() -> Void)?
 
     func publish(_ object: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: object,
@@ -64,8 +65,11 @@ final class UIStateServer {
                     }
                     return
                 }
-                self.lock.lock(); let payload = self.body; self.lock.unlock()
-                self.send(connection, payload: payload, type: "application/json")
+                DispatchQueue.main.async {
+                    self.refreshHandler?()
+                    self.lock.lock(); let payload = self.body; self.lock.unlock()
+                    self.send(connection, payload: payload, type: "application/json")
+                }
             }
         }
         listener.start(queue: DispatchQueue(label: "thinkpeek.ui-api"))

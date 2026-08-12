@@ -150,6 +150,9 @@ if CommandLine.arguments.contains("--ticker-selftest") {
         "## Heading summary": "Heading summary",
     ]
     let speeds = TickerSpeed.allCases.map(\.pointsPerSecond)
+    let longTextWidth: CGFloat = 900
+    let viewportWidth: CGFloat = 400
+    let endTranslation = -(longTextWidth - viewportWidth)
     ticker.text = "Visible summary"
     ticker.text = "  \n\t  "
     guard overflowing,
@@ -158,6 +161,12 @@ if CommandLine.arguments.contains("--ticker-selftest") {
           markdownCases.allSatisfy({ normalizedTickerText($0.key) == $0.value }),
           presentableTickerText("  \n\t  ") == nil,
           ticker.text == "Visible summary",
+          visibleTickerTextWidth(textWidth: longTextWidth,
+                                 viewportWidth: viewportWidth,
+                                 translation: 0) == viewportWidth,
+          visibleTickerTextWidth(textWidth: longTextWidth,
+                                 viewportWidth: viewportWidth,
+                                 translation: endTranslation) == viewportWidth,
           speeds == [22, 34, 52],
           metrics.label.minY >= metrics.viewport.minY,
           metrics.label.maxY <= metrics.viewport.maxY,
@@ -169,7 +178,7 @@ if CommandLine.arguments.contains("--ticker-selftest") {
         exit(1)
     }
     print("ticker: oneLine=true overflow=true verticallyContained=true " +
-          "emptyRejected=true reset=true")
+          "emptyRejected=true alwaysVisible=true reset=true")
     exit(0)
 }
 
