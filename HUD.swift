@@ -299,6 +299,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "scrollable": scrollView.hasVerticalScroller,
             "contentHeight": Int(feedView.bounds.height),
             "viewportHeight": Int(scrollView.contentView.bounds.height),
+            "scrollY": Int(scrollView.contentView.bounds.minY),
             "contentRequiresScroll": !peekMode &&
                 feedView.bounds.height > scrollView.contentView.bounds.height,
             "smartAutoscroll": true,
@@ -564,7 +565,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func scrollToLatest(_ sender: Any?) {
         feedView.layoutSubtreeIfNeeded()
-        let y = max(0, feedView.bounds.height - scrollView.contentView.bounds.height)
+        // A compact carousel shows one card, so it must open at that card's
+        // beginning. Scrolling to the feed bottom hid its header and body as
+        // soon as a footer appeared. Expanded mode still follows the latest.
+        let y = compactMode
+            ? 0
+            : max(0, feedView.bounds.height - scrollView.contentView.bounds.height)
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         unseenCount = 0
@@ -579,6 +585,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let follow = !deferScrollAndLayout &&
             (nearBottom() || feedStack.arrangedSubviews.isEmpty)
         let card = EventCard(source: source, time: displayTime(event.timestamp), event: event)
+        card.contentChanged = { [weak self, weak card] in
+            guard let self, let card else { return }
+            self.cardContentDidChange(card)
+        }
         feedStack.addArrangedSubview(card)
         card.widthAnchor.constraint(equalTo: feedStack.widthAnchor,
                                     constant: -feedStack.edgeInsets.left - feedStack.edgeInsets.right)
@@ -601,6 +611,18 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             latestButton.title = "\(unseenCount) new ↓"
         }
         return card
+    }
+
+    private func cardContentDidChange(_ card: EventCard) {
+        feedView.layoutSubtreeIfNeeded()
+        if compactMode,
+           compactIndex >= 0,
+           compactIndex < eventCards.count,
+           eventCards[compactIndex] === card {
+            scrollView.contentView.scroll(to: .zero)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+        publishAPI()
     }
 
     private func addSystemCard(_ title: String, detail: String) {

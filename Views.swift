@@ -152,6 +152,7 @@ func renderedBody(_ text: String, kind: String) -> NSAttributedString {
 }
 
 final class EventCard: NSView {
+    var contentChanged: (() -> Void)?
     private let footer = NSTextField(labelWithString: "")
     private let body = WrappingTextField(wrappingLabelWithString: "")
     private let stack = NSStackView()
@@ -247,6 +248,10 @@ final class EventCard: NSView {
         footer.stringValue = text
         footer.textColor = color
         footer.isHidden = false
+        stack.invalidateIntrinsicContentSize()
+        invalidateIntrinsicContentSize()
+        superview?.needsLayout = true
+        DispatchQueue.main.async { [weak self] in self?.contentChanged?() }
     }
 
     var layoutMetrics: (card: NSRect, body: NSRect, footer: NSRect) {
