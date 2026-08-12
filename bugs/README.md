@@ -16,3 +16,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-009](BUG-009-wrapped-peek-too-tall-and-clipped.md) | Wrapped resting summary was too tall and clipped its first line | Fixed |
 | [BUG-010](BUG-010-markdown-markers-in-ticker.md) | Markdown markers appeared literally in the ticker | Fixed |
 | [BUG-011](BUG-011-hover-conflated-reading-and-controls.md) | Hover conflated reading a message with opening controls | Fixed |
+| [BUG-012](BUG-012-ticker-speed-not-configurable.md) | Ticker reading speed was not configurable | Fixed |

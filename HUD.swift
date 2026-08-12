@@ -98,6 +98,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                                                  for: .horizontal)
 
         peekTicker = TickerView()
+        let savedSpeed = UserDefaults.standard.string(forKey: "tickerSpeed")
+            .flatMap(TickerSpeed.init(rawValue:)) ?? .normal
+        peekTicker.speed = savedSpeed
         peekTicker.text = "Watching Claude and Codex…"
 
         peekControlsButton = NSButton(
@@ -187,20 +190,23 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         latestButton.isHidden = true
 
         positionButton = NSPopUpButton(frame: .zero, pullsDown: true)
-        positionButton.addItems(withTitles: ["", "Top Left", "Top Center",
-                                              "Top Right", "Bottom Left",
-                                              "Bottom Center", "Bottom Right"])
+        positionButton.addItems(withTitles: ["", "Ticker: Slow", "Ticker: Normal",
+                                              "Ticker: Fast", "Top Left", "Top Center",
+                                              "Top Right", "Bottom Left", "Bottom Center",
+                                              "Bottom Right"])
         positionButton.item(at: 0)?.image = NSImage(
-            systemSymbolName: "move.3d", accessibilityDescription: "Position")
-            ?? NSImage(systemSymbolName: "arrow.up.and.down.and.arrow.left.and.right",
-                       accessibilityDescription: "Position")
+            systemSymbolName: "slider.horizontal.3",
+            accessibilityDescription: "Ticker and window settings")
+        for (index, speed) in TickerSpeed.allCases.enumerated() {
+            positionButton.item(at: index + 1)?.toolTip = "\(speed.title) ticker speed"
+        }
         let positionSymbols = [
-            (1, "arrow.up.left", "Top Left"),
-            (2, "arrow.up", "Top Center"),
-            (3, "arrow.up.right", "Top Right"),
-            (4, "arrow.down.left", "Bottom Left"),
-            (5, "arrow.down", "Bottom Center"),
-            (6, "arrow.down.right", "Bottom Right"),
+            (4, "arrow.up.left", "Top Left"),
+            (5, "arrow.up", "Top Center"),
+            (6, "arrow.up.right", "Top Right"),
+            (7, "arrow.down.left", "Bottom Left"),
+            (8, "arrow.down", "Bottom Center"),
+            (9, "arrow.down.right", "Bottom Right"),
         ]
         for (index, symbol, description) in positionSymbols {
             guard let item = positionButton.item(at: index) else { continue }
@@ -211,8 +217,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         positionButton.target = self
         positionButton.action = #selector(positionPicked(_:))
         positionButton.controlSize = .small
-        positionButton.toolTip = "Move HUD to a screen corner or edge"
+        positionButton.toolTip = "Ticker speed and window position"
         positionButton.widthAnchor.constraint(equalToConstant: 36).isActive = true
+        updateSettingsMenuChecks(savedSpeed)
 
         let controls = NSStackView(views: [previousButton, positionLabel, nextButton,
                                            restartTickerButton,
@@ -360,6 +367,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "peekText": peekTicker?.text ?? "",
             "tickerOverflowing": peekTicker?.isOverflowing ?? false,
             "tickerReduceMotion": NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            "tickerSpeed": peekTicker.speed.rawValue,
+            "tickerPointsPerSecond": Int(peekTicker.speed.pointsPerSecond),
             "operationPending": operationState.operationPending,
             "pendingSource": operationState.latestPendingSource ?? NSNull(),
             "hoverDisclosure": false,
@@ -457,6 +466,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case "restart-ticker": restartTickerAtBeginning(nil)
         case "message": showCurrentMessage()
         case "controls": applyPeekMode(false)
+        case let value where value.hasPrefix("speed/"):
+            setTickerSpeed(String(value.dropFirst("speed/".count)))
         case "reveal":
             applyPeekMode(false)
         case "hide":
@@ -470,10 +481,27 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func positionPicked(_ sender: NSPopUpButton) {
         let presets = ["top-left", "top-center", "top-right", "bottom-left",
                        "bottom-center", "bottom-right"]
-        let index = sender.indexOfSelectedItem - 1
-        guard presets.indices.contains(index) else { return }
-        movePanel(to: presets[index])
+        let selected = sender.indexOfSelectedItem
+        if (1...3).contains(selected) {
+            setTickerSpeed(TickerSpeed.allCases[selected - 1].rawValue)
+        } else if (4...9).contains(selected) {
+            movePanel(to: presets[selected - 4])
+        }
         sender.selectItem(at: 0)
+    }
+
+    private func setTickerSpeed(_ rawValue: String) {
+        guard let speed = TickerSpeed(rawValue: rawValue) else { return }
+        peekTicker.speed = speed
+        updateSettingsMenuChecks(speed)
+        UserDefaults.standard.set(speed.rawValue, forKey: "tickerSpeed")
+        publishAPI()
+    }
+
+    private func updateSettingsMenuChecks(_ speed: TickerSpeed) {
+        for (index, candidate) in TickerSpeed.allCases.enumerated() {
+            positionButton.item(at: index + 1)?.state = candidate == speed ? .on : .off
+        }
     }
 
     private func movePanel(to preset: String) {

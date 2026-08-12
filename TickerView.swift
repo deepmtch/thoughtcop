@@ -7,7 +7,19 @@ enum TickerTiming {
     static let startPause: TimeInterval = 1.2
     static let endPause: TimeInterval = 0.8
     static let returnDuration: TimeInterval = 0.15
-    static let pointsPerSecond: CGFloat = 34
+}
+
+enum TickerSpeed: String, CaseIterable {
+    case slow, normal, fast
+
+    var title: String { rawValue.capitalized }
+    var pointsPerSecond: CGFloat {
+        switch self {
+        case .slow: return 22
+        case .normal: return 34
+        case .fast: return 52
+        }
+    }
 }
 
 func normalizedTickerText(_ text: String) -> String {
@@ -41,6 +53,7 @@ final class TickerView: NSView {
     private let label = NSTextField(labelWithString: "")
     private var active = false
     private var optionsObserver: NSObjectProtocol?
+    var speed: TickerSpeed = .normal { didSet { restart() } }
 
     var text: String {
         get { label.stringValue }
@@ -115,7 +128,7 @@ final class TickerView: NSView {
               isOverflowing else { return }
 
         let distance = label.frame.width - viewport.bounds.width
-        let travelDuration = TimeInterval(distance / TickerTiming.pointsPerSecond)
+        let travelDuration = TimeInterval(distance / speed.pointsPerSecond)
         let total = TickerTiming.startPause + travelDuration +
             TickerTiming.endPause + TickerTiming.returnDuration
         guard total > 0 else { return }

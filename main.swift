@@ -147,10 +147,12 @@ if CommandLine.arguments.contains("--ticker-selftest") {
         "[linked summary](https://example.com)": "linked summary",
         "## Heading summary": "Heading summary",
     ]
+    let speeds = TickerSpeed.allCases.map(\.pointsPerSecond)
     guard ticker.isOverflowing,
           !ticker.text.contains("\n"),
           !ticker.text.contains("**"),
           markdownCases.allSatisfy({ normalizedTickerText($0.key) == $0.value }),
+          speeds == [22, 34, 52],
           metrics.label.minY >= metrics.viewport.minY,
           metrics.label.maxY <= metrics.viewport.maxY,
           TickerTiming.startPause >= 1,

@@ -76,8 +76,8 @@ Motion enabled, it remains clipped and stationary. Hover never changes the UI.
 A single click opens a dedicated full-message reader; **Done** returns to the
 ticker. The visible controls button or a deliberate double-click opens the
 separate navigation/settings view. The **↤** control returns directly to the
-ticker's beginning. Dragging still uses the hand cursor. The move icon provides
-Top/Bottom × Left/Center/Right presets.
+ticker's beginning. The settings menu selects and remembers Slow, Normal, or Fast
+ticker movement and provides Top/Bottom × Left/Center/Right presets.
 **Show all** explicitly locks open the full scrollable feed until **Collapse** is
 selected. Compact and full-feed widths are hard-capped at 560 and 700 points, so
 long reasoning wraps and scrolls vertically instead of stretching the window.
@@ -198,7 +198,8 @@ endpoint `http://127.0.0.1:17321/ui` (override with
 omitted blocks, activity, and drift results assertable without screen capture.
 The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
 by the running AppKit window, so layout and scrolling can be checked end to end.
-`/message`, `/controls`, `/hide`, `/previous`, `/next`, `/restart-ticker`, and
+`/message`, `/controls`, `/hide`, `/previous`, `/next`, `/restart-ticker`,
+`/speed/slow`, `/speed/normal`, `/speed/fast`, and
 `/toggle-expanded` exercise the same reader, settings, and carousel paths as the
 visible UI, allowing every presentation state to be tested through the complete
 running window. `/reveal` remains an alias for `/controls` for compatibility.
