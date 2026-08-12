@@ -324,6 +324,28 @@ if CommandLine.arguments.contains("--provider-icon-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--settings-menu-selftest") {
+    let button = NSPopUpButton(frame: .zero, pullsDown: true)
+    let settings = TickerSettingsMenu()
+    settings.install(on: button)
+    settings.update(speed: .normal, width: CompactWindowSizing.standardWidth,
+                    usesSystemBackground: true)
+    let expected = [
+        "Ticker Speed": ["Slow", "Normal", "Fast"],
+        "Window Width": ["Narrow", "Standard"],
+        "Window Position": ["Top Left", "Top Center", "Top Right", "Bottom Left",
+                            "Bottom Center", "Bottom Right"],
+        "Appearance": ["Ticker Background…", "Use System Background"],
+    ]
+    guard settings.structure == expected, button.numberOfItems == 5 else {
+        FileHandle.standardError.write(
+            "settings menu self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("settings menu: topLevel=4 hierarchical=true speed=true width=true position=true appearance=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--window-chrome-selftest") {
     let testPanel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 70),
                             styleMask: [.borderless, .resizable, .nonactivatingPanel],

@@ -32,6 +32,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var restartTickerButton: NSButton!
     private var positionLabel: NSTextField!
     private var positionButton: NSPopUpButton!
+    private var tickerSettingsMenu: TickerSettingsMenu!
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
     private var eventPreviews: [(source: String, text: String, kind: String)] = []
@@ -254,46 +255,23 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         latestButton.isHidden = true
 
         positionButton = NSPopUpButton(frame: .zero, pullsDown: true)
-        positionButton.addItems(withTitles: ["", "Ticker: Slow", "Ticker: Normal",
-                                              "Ticker: Fast", "Width: Narrow",
-                                              "Width: Standard", "Top Left", "Top Center",
-                                              "Top Right", "Bottom Left", "Bottom Center",
-                                              "Bottom Right", "Ticker Background…",
-                                              "Use System Ticker Background"])
-        positionButton.item(at: 0)?.image = NSImage(
-            systemSymbolName: "slider.horizontal.3",
-            accessibilityDescription: "Ticker and window settings")
-        for (index, speed) in TickerSpeed.allCases.enumerated() {
-            positionButton.item(at: index + 1)?.toolTip = "\(speed.title) ticker speed"
+        tickerSettingsMenu = TickerSettingsMenu()
+        tickerSettingsMenu.speedRequested = { [weak self] speed in
+            self?.setTickerSpeed(speed.rawValue)
         }
-        positionButton.item(at: 4)?.image = NSImage(
-            systemSymbolName: "arrow.left.and.right",
-            accessibilityDescription: "Narrow controls width")
-        positionButton.item(at: 5)?.image = NSImage(
-            systemSymbolName: "rectangle.expand.vertical",
-            accessibilityDescription: "Standard controls width")
-        let positionSymbols = [
-            (6, "arrow.up.left", "Top Left"),
-            (7, "arrow.up", "Top Center"),
-            (8, "arrow.up.right", "Top Right"),
-            (9, "arrow.down.left", "Bottom Left"),
-            (10, "arrow.down", "Bottom Center"),
-            (11, "arrow.down.right", "Bottom Right"),
-        ]
-        for (index, symbol, description) in positionSymbols {
-            guard let item = positionButton.item(at: index) else { continue }
-            item.toolTip = description
-            item.image = NSImage(systemSymbolName: symbol,
-                                 accessibilityDescription: description)
+        tickerSettingsMenu.widthRequested = { [weak self] width in
+            self?.setCompactWidth(width)
         }
-        positionButton.item(at: 12)?.image = NSImage(
-            systemSymbolName: "paintpalette",
-            accessibilityDescription: "Choose ticker background")
-        positionButton.item(at: 13)?.image = NSImage(
-            systemSymbolName: "arrow.counterclockwise",
-            accessibilityDescription: "Use system ticker background")
-        positionButton.target = self
-        positionButton.action = #selector(positionPicked(_:))
+        tickerSettingsMenu.positionRequested = { [weak self] preset in
+            self?.movePanel(to: preset)
+        }
+        tickerSettingsMenu.backgroundRequested = { [weak self] in
+            self?.showTickerBackgroundPicker(nil)
+        }
+        tickerSettingsMenu.systemBackgroundRequested = { [weak self] in
+            self?.setTickerBackground(nil)
+        }
+        tickerSettingsMenu.install(on: positionButton)
         positionButton.controlSize = .small
         positionButton.toolTip = "Ticker appearance and window settings"
         positionButton.setAccessibilityLabel("Ticker appearance and window settings")
@@ -486,6 +464,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": true,
             "tickerCornerButtons": peekCornerControls.accessibilityNames,
+            "settingsMenuStructure": tickerSettingsMenu?.structure ?? [:],
             "outsideClickDismissesMessage": true,
             "discardedEmptySummaryCount": discardedEmptySummaryCount,
             "userResizableWidth": true,
@@ -624,26 +603,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    @objc private func positionPicked(_ sender: NSPopUpButton) {
-        let presets = ["top-left", "top-center", "top-right", "bottom-left",
-                       "bottom-center", "bottom-right"]
-        let selected = sender.indexOfSelectedItem
-        if (1...3).contains(selected) {
-            setTickerSpeed(TickerSpeed.allCases[selected - 1].rawValue)
-        } else if selected == 4 {
-            setCompactWidth(CompactWindowSizing.narrowWidth)
-        } else if selected == 5 {
-            setCompactWidth(CompactWindowSizing.standardWidth)
-        } else if (6...11).contains(selected) {
-            movePanel(to: presets[selected - 6])
-        } else if selected == 12 {
-            showTickerBackgroundPicker(nil)
-        } else if selected == 13 {
-            setTickerBackground(nil)
-        }
-        sender.selectItem(at: 0)
-    }
-
     private func setTickerSpeed(_ rawValue: String) {
         guard let speed = TickerSpeed(rawValue: rawValue) else { return }
         peekTicker.speed = speed
@@ -670,6 +629,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func setTickerBackground(_ color: NSColor?) {
         TickerBackgroundPreference.save(color)
         applyTickerBackground(color)
+        updateSettingsMenuChecks(peekTicker.speed)
         publishAPI()
     }
 
@@ -693,13 +653,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func updateSettingsMenuChecks(_ speed: TickerSpeed) {
-        for (index, candidate) in TickerSpeed.allCases.enumerated() {
-            positionButton.item(at: index + 1)?.state = candidate == speed ? .on : .off
-        }
-        positionButton.item(at: 4)?.state = abs(compactWidth -
-            CompactWindowSizing.narrowWidth) < 1 ? .on : .off
-        positionButton.item(at: 5)?.state = abs(compactWidth -
-            CompactWindowSizing.standardWidth) < 1 ? .on : .off
+        tickerSettingsMenu?.update(speed: speed, width: compactWidth,
+                                   usesSystemBackground: tickerBackgroundColor == nil)
     }
 
     private func setCompactWidth(_ requestedWidth: CGFloat) {

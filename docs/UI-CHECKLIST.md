@@ -41,6 +41,7 @@ running `/ui` inspection surface. A checked item is not merely planned.
 
 ## Settings
 
+- [x] Settings use compact Speed, Width, Position, and Appearance submenus.
 - [x] Ticker speed offers Slow, Normal, and Fast and persists the choice.
 - [x] Width offers Narrow and Standard, supports drag resize, and persists.
 - [x] Position offers six Top/Bottom × Left/Center/Right presets.

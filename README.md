@@ -207,6 +207,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --window-position-selftest
 ./thinkpeek --ticker-corner-selftest
 ./thinkpeek --provider-icon-selftest
+./thinkpeek --settings-menu-selftest
 ./thinkpeek --window-chrome-selftest
 ./thinkpeek --compact-width-selftest
 ./thinkpeek --interaction-selftest
