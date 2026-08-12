@@ -337,12 +337,36 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
                             "Bottom Center", "Bottom Right"],
         "Appearance": ["Ticker Background…", "Use System Background"],
     ]
-    guard settings.structure == expected, button.numberOfItems == 5 else {
+    guard settings.structure == expected, button.numberOfItems == 6,
+          settings.topLevelTitles == ["Ticker Speed", "Window Width",
+                                      "Window Position", "Appearance",
+                                      "Check Prompt…"] else {
         FileHandle.standardError.write(
             "settings menu self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("settings menu: topLevel=4 hierarchical=true speed=true width=true position=true appearance=true")
+    print("settings menu: categories=4 checkPrompt=true hierarchical=true")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--check-prompt-selftest") {
+    guard let defaults = UserDefaults(suiteName: "thinkpeek.check-prompt-selftest") else {
+        exit(1)
+    }
+    defaults.removePersistentDomain(forName: "thinkpeek.check-prompt-selftest")
+    let custom = "Flag reasoning that changes public API behavior without verification."
+    guard CheckPromptPreference.load(defaults: defaults) == CheckPromptPreference.defaultValue,
+          !CheckPromptPreference.isCustomized(defaults: defaults) else { exit(1) }
+    CheckPromptPreference.save(custom, defaults: defaults)
+    let systemPrompt = makeCheckSystemPrompt(
+        instructions: CheckPromptPreference.load(defaults: defaults))
+    guard CheckPromptPreference.isCustomized(defaults: defaults),
+          systemPrompt.contains(custom),
+          systemPrompt.contains("Reply with JSON only") else { exit(1) }
+    CheckPromptPreference.restoreDefault(defaults: defaults)
+    guard !CheckPromptPreference.isCustomized(defaults: defaults) else { exit(1) }
+    defaults.removePersistentDomain(forName: "thinkpeek.check-prompt-selftest")
+    print("check prompt: editable=true persisted=true nextCheck=true schemaProtected=true restoreDefault=true")
     exit(0)
 }
 

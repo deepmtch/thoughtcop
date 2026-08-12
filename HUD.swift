@@ -271,6 +271,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tickerSettingsMenu.systemBackgroundRequested = { [weak self] in
             self?.setTickerBackground(nil)
         }
+        tickerSettingsMenu.checkPromptRequested = { [weak self] in
+            self?.showCheckPromptEditor()
+        }
         tickerSettingsMenu.install(on: positionButton)
         positionButton.controlSize = .small
         positionButton.toolTip = "Ticker appearance and window settings"
@@ -465,6 +468,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "doubleClickOpensControls": true,
             "tickerCornerButtons": peekCornerControls.accessibilityNames,
             "settingsMenuStructure": tickerSettingsMenu?.structure ?? [:],
+            "settingsMenuItems": tickerSettingsMenu?.topLevelTitles ?? [],
+            "checkPrompt": CheckPromptPreference.load(),
+            "checkPromptCustomized": CheckPromptPreference.isCustomized(),
             "outsideClickDismissesMessage": true,
             "discardedEmptySummaryCount": discardedEmptySummaryCount,
             "userResizableWidth": true,
@@ -631,6 +637,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         applyTickerBackground(color)
         updateSettingsMenuChecks(peekTicker.speed)
         publishAPI()
+    }
+
+    private func showCheckPromptEditor() {
+        CheckPromptEditor.present(current: CheckPromptPreference.load()) { [weak self] prompt in
+            CheckPromptPreference.save(prompt)
+            self?.refreshStatus()
+            self?.publishAPI()
+        }
     }
 
     private func applyTickerBackground(_ color: NSColor?) {

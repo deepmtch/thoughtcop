@@ -129,8 +129,13 @@ fast model and fires a terminal banner + bell + macOS notification if anything
 matches — typically 300–550 ms after the reasoning hits disk, well before the
 turn ends.
 
-`triggers.txt` is the whole configuration: one plain-English rule per line, `#`
+`triggers.txt` is the rule configuration: one plain-English rule per line, `#`
 for comments, re-read on every check so edits take effect with no restart.
+
+The settings menu's **Check Prompt…** editor changes the checker's instructions
+while Thinkpeek is running. The prompt persists, applies to the next reasoning
+block, and can be restored to the safe default without editing a file. The JSON
+response contract remains fixed so custom instructions cannot break parsing.
 
 ```
 Claude is guessing or assuming instead of verifying against the actual code
@@ -208,6 +213,7 @@ The tailing engine and the actual native window presentation are both testable.
 ./thinkpeek --ticker-corner-selftest
 ./thinkpeek --provider-icon-selftest
 ./thinkpeek --settings-menu-selftest
+./thinkpeek --check-prompt-selftest
 ./thinkpeek --window-chrome-selftest
 ./thinkpeek --compact-width-selftest
 ./thinkpeek --interaction-selftest

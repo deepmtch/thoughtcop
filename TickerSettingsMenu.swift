@@ -8,6 +8,7 @@ final class TickerSettingsMenu: NSObject {
     var positionRequested: ((String) -> Void)?
     var backgroundRequested: (() -> Void)?
     var systemBackgroundRequested: (() -> Void)?
+    var checkPromptRequested: (() -> Void)?
 
     private(set) var menu = NSMenu()
     private var speedItems: [TickerSpeed: NSMenuItem] = [:]
@@ -20,6 +21,8 @@ final class TickerSettingsMenu: NSObject {
             return (item.title, submenu.items.map(\.title))
         })
     }
+
+    var topLevelTitles: [String] { menu.items.dropFirst().map(\.title) }
 
     func install(on button: NSPopUpButton) {
         menu = NSMenu()
@@ -35,6 +38,13 @@ final class TickerSettingsMenu: NSObject {
                                  submenu: positionMenu()))
         menu.addItem(submenuItem(title: "Appearance", symbol: "paintpalette",
                                  submenu: appearanceMenu()))
+        let checkPrompt = NSMenuItem(title: "Check Prompt…",
+                                     action: #selector(checkPromptPicked(_:)),
+                                     keyEquivalent: "")
+        checkPrompt.target = self
+        checkPrompt.image = NSImage(systemSymbolName: "text.badge.checkmark",
+                                    accessibilityDescription: checkPrompt.title)
+        menu.addItem(checkPrompt)
         button.menu = menu
     }
 
@@ -144,4 +154,5 @@ final class TickerSettingsMenu: NSObject {
     @objc private func systemBackgroundPicked(_ sender: NSMenuItem) {
         systemBackgroundRequested?()
     }
+    @objc private func checkPromptPicked(_ sender: NSMenuItem) { checkPromptRequested?() }
 }
