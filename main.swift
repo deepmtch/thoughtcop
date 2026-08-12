@@ -140,6 +140,8 @@ if CommandLine.arguments.contains("--ticker-selftest") {
         "while the **complete text** remains available in the revealed card."
     ticker.layoutSubtreeIfNeeded()
     let metrics = ticker.layoutMetrics
+    let overflowing = ticker.isOverflowing
+    let normalizedOverflowText = ticker.text
     let markdownCases = [
         "**bold summary**": "bold summary",
         "__strong summary__": "strong summary",
@@ -148,10 +150,14 @@ if CommandLine.arguments.contains("--ticker-selftest") {
         "## Heading summary": "Heading summary",
     ]
     let speeds = TickerSpeed.allCases.map(\.pointsPerSecond)
-    guard ticker.isOverflowing,
-          !ticker.text.contains("\n"),
-          !ticker.text.contains("**"),
+    ticker.text = "Visible summary"
+    ticker.text = "  \n\t  "
+    guard overflowing,
+          !normalizedOverflowText.contains("\n"),
+          !normalizedOverflowText.contains("**"),
           markdownCases.allSatisfy({ normalizedTickerText($0.key) == $0.value }),
+          presentableTickerText("  \n\t  ") == nil,
+          ticker.text == "Visible summary",
           speeds == [22, 34, 52],
           metrics.label.minY >= metrics.viewport.minY,
           metrics.label.maxY <= metrics.viewport.maxY,
@@ -162,7 +168,8 @@ if CommandLine.arguments.contains("--ticker-selftest") {
                 .data(using: .utf8)!)
         exit(1)
     }
-    print("ticker: oneLine=true overflow=true verticallyContained=true reset=true")
+    print("ticker: oneLine=true overflow=true verticallyContained=true " +
+          "emptyRejected=true reset=true")
     exit(0)
 }
 

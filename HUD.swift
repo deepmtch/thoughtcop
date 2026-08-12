@@ -52,6 +52,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let api = UIStateServer()
     private let outsideClickMonitor = OutsideClickMonitor()
     private var apiEvents: [[String: Any]] = []
+    private var discardedEmptySummaryCount = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         panel = ConstrainedPanel(
@@ -392,6 +393,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": true,
             "outsideClickDismissesMessage": true,
+            "discardedEmptySummaryCount": discardedEmptySummaryCount,
             "currentIndex": compactIndex,
             "navigableCount": eventCards.count,
             "uiStyle": peekMode ? "single-line-ticker"
@@ -966,6 +968,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let ui = uiEvent(for: block)
             if ui.kind == "activity" {
                 operationStarted(source: source)
+                continue
+            }
+            if ui.readableAnalysis, presentableTickerText(ui.text) == nil {
+                discardedEmptySummaryCount += 1
+                publishAPI()
                 continue
             }
             readableContentArrived(source: source)

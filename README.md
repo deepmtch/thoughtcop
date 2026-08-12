@@ -73,6 +73,8 @@ Its borderless resting state keeps a fixed 460 × 70-point frame: the exact sour
 top and a single-line ticker below. Overflowing text pauses at the beginning,
 moves horizontally, pauses at the end, and quickly returns. With macOS Reduce
 Motion enabled, it remains clipped and stationary. Hover never changes the UI.
+A formatting-only or empty summary is discarded and cannot replace the last
+visible message.
 A single click opens a dedicated full-message reader; **Done** or a click outside
 the reader returns to the ticker. The visible controls button or a deliberate double-click opens the
 separate navigation/settings view. The **↤** control returns directly to the

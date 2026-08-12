@@ -48,6 +48,11 @@ func normalizedTickerText(_ text: String) -> String {
     return stripped.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
 }
 
+func presentableTickerText(_ text: String) -> String? {
+    let normalized = normalizedTickerText(text)
+    return normalized.isEmpty ? nil : normalized
+}
+
 final class TickerView: NSView {
     private let viewport = NSView()
     private let label = NSTextField(labelWithString: "")
@@ -58,7 +63,8 @@ final class TickerView: NSView {
     var text: String {
         get { label.stringValue }
         set {
-            label.stringValue = normalizedTickerText(newValue)
+            guard let normalized = presentableTickerText(newValue) else { return }
+            label.stringValue = normalized
             needsLayout = true
             layoutSubtreeIfNeeded()
             restart()
