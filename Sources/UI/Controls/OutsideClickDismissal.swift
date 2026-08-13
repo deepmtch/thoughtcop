@@ -3,9 +3,9 @@
 
 import AppKit
 
-func shouldDismissDetails(isShowingDetails: Bool, windowFrame: NSRect,
-                          clickLocation: NSPoint) -> Bool {
-    isShowingDetails && !windowFrame.contains(clickLocation)
+func shouldDismissDetails(isShowingDetails: Bool, isEditorVisible: Bool,
+                          windowFrame: NSRect, clickLocation: NSPoint) -> Bool {
+    isShowingDetails && !isEditorVisible && !windowFrame.contains(clickLocation)
 }
 
 final class OutsideClickMonitor {

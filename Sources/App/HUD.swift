@@ -431,6 +431,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             DispatchQueue.main.async {
                 guard let self,
                       shouldDismissDetails(isShowingDetails: !self.peekMode,
+                                           isEditorVisible:
+                                            self.checkRulesEditor?.window?.isVisible == true,
                                            windowFrame: self.panel.frame,
                                            clickLocation: location) else { return }
                 self.dismissDetailsToTicker()

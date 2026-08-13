@@ -238,16 +238,22 @@ if CommandLine.arguments.contains("--message-view-selftest") {
 
 if CommandLine.arguments.contains("--outside-click-selftest") {
     let frame = NSRect(x: 100, y: 100, width: 560, height: 300)
-    guard !shouldDismissDetails(isShowingDetails: true, windowFrame: frame,
+    guard !shouldDismissDetails(isShowingDetails: true, isEditorVisible: false,
+                                windowFrame: frame,
                                 clickLocation: NSPoint(x: 120, y: 120)),
-          shouldDismissDetails(isShowingDetails: true, windowFrame: frame,
+          !shouldDismissDetails(isShowingDetails: true, isEditorVisible: true,
+                                windowFrame: frame,
+                                clickLocation: NSPoint(x: 20, y: 20)),
+          shouldDismissDetails(isShowingDetails: true, isEditorVisible: false,
+                               windowFrame: frame,
                                clickLocation: NSPoint(x: 20, y: 20)),
-          !shouldDismissDetails(isShowingDetails: false, windowFrame: frame,
+          !shouldDismissDetails(isShowingDetails: false, isEditorVisible: false,
+                                windowFrame: frame,
                                 clickLocation: NSPoint(x: 20, y: 20)) else {
         FileHandle.standardError.write("outside click self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("outside click: message=true controls=true history=true insideIgnored=true")
+    print("outside click: details=true editorProtected=true insideIgnored=true")
     exit(0)
 }
 
