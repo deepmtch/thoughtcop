@@ -46,6 +46,9 @@ There were three independent boundaries:
   Ticker and full-message views render from that same object.
 - Invalid JSON, provider failure, and oversized evidence are visible failures,
   never silent clean results.
+- The obsolete Python watcher no longer contains a second heuristic checker. Its
+  compatibility entry point delegates one-shot checks and contract tests to the
+  native executable and fails visibly for the retired live-watcher mode.
 
 ## Verification
 

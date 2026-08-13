@@ -9,14 +9,14 @@ tails both sources and reacts when a readable reasoning summary lands on disk.
 | | | |
 |---|---|---|
 | **`.build/thinkpeek`** | always-on-top window | shows the reasoning |
-| **`Scripts/watch.py`** | drift alarm | shouts when it matches your check rules |
+| Native evaluator | drift alarm | evaluates structured records against your verbatim instruction |
 
 ```bash
 ./build.sh                                           # build once
 ./.build/thinkpeek                                   # the window
 ./restart.sh                                         # rebuild and replace a running copy
 ./.build/thinkpeek --local-only                      # never send reasoning externally
-python3 Scripts/watch.py --project /private/tmp -v   # the alarm (second terminal)
+./restart.sh                                          # native window + live evaluator
 ```
 
 Swift/AppKit + stdlib Python, no dependencies. **Nothing is ever written under
@@ -313,6 +313,10 @@ tailer called `splitlines()` on each chunk while advancing the file offset — s
 record still being flushed parsed as truncated JSON and was **silently dropped
 forever**. Reproduced against the pre-fix copy (block lost), fixed by holding the
 trailing partial line in a buffer, re-tested (block scored).
+
+That standalone alarm is now retired. `Scripts/watch.py` remains only as a
+compatibility wrapper for native one-shot checks and contract tests; it contains
+no separate prompt, input interpretation, or evaluator.
 
 Two things made the window bug slow to diagnose and are worth remembering: `tk.Tk()` blocks
 forever from a sandboxed/background shell (ignoring even `SIGALRM`), and
