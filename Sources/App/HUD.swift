@@ -210,7 +210,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekBar.addSubview(peekToolbar)
 
         fullMessageView = FullMessageView(frame: .zero)
-        fullMessageView.closeRequested = { [weak self] in self?.applyPeekMode(true) }
+        fullMessageView.closeRequested = { [weak self] in
+            self?.dismissDetailsToTicker()
+        }
         fullMessageView.controlsRequested = { [weak self] in self?.applyPeekMode(false) }
         fullMessageView.quitRequested = { [weak self] in self?.quitApplication() }
         content.addSubview(fullMessageView)
@@ -428,10 +430,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         outsideClickMonitor.start { [weak self] location in
             DispatchQueue.main.async {
                 guard let self,
-                      shouldDismissFullMessage(isShowing: self.messageMode,
-                                               windowFrame: self.panel.frame,
-                                               clickLocation: location) else { return }
-                self.applyPeekMode(true)
+                      shouldDismissDetails(isShowingDetails: !self.peekMode,
+                                           windowFrame: self.panel.frame,
+                                           clickLocation: location) else { return }
+                self.dismissDetailsToTicker()
             }
         }
         refreshPicker()
@@ -519,7 +521,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "checkRulesStorage": "local-app-preferences",
             "checkRulesCustomized": CheckRulesStore.isCustomized(),
             "checkRulesEditorVisible": checkRulesEditor?.window?.isVisible ?? false,
-            "outsideClickDismissesMessage": true,
+            "outsideClickDismissesDetails": true,
             "discardedEmptySummaryCount": discardedEmptySummaryCount,
             "userResizableWidth": true,
             "compactPreferredWidth": Int(compactWidth),

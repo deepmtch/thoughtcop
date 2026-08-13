@@ -34,3 +34,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-027](BUG-027-editor-ignored-existing-local-rules-file.md) | Check rules had competing app and file storage | Fixed |
 | [BUG-028](BUG-028-check-rules-save-used-wrong-preferences-domain.md) | Save wrote check rules to a preferences domain the app never read | Fixed |
 | [BUG-029](BUG-029-user-instruction-was-reinterpreted-and-alerts-were-hidden.md) | Checker reinterpreted user text and detached warnings from their evidence | Fixed |
+| [BUG-030](BUG-030-details-ignored-outside-click.md) | Controls and history ignored outside clicks | Fixed |

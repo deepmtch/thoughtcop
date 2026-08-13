@@ -1,11 +1,11 @@
-// Popover-style outside-click handling shared by the message presentation and
+// Popover-style outside-click handling shared by every detail presentation and
 // its headless regression test.
 
 import AppKit
 
-func shouldDismissFullMessage(isShowing: Bool, windowFrame: NSRect,
-                              clickLocation: NSPoint) -> Bool {
-    isShowing && !windowFrame.contains(clickLocation)
+func shouldDismissDetails(isShowingDetails: Bool, windowFrame: NSRect,
+                          clickLocation: NSPoint) -> Bool {
+    isShowingDetails && !windowFrame.contains(clickLocation)
 }
 
 final class OutsideClickMonitor {
