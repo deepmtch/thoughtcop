@@ -49,18 +49,33 @@ if CommandLine.arguments.contains("--sessions") {
 
 runRequestedSelfTest()
 
-// Headless check of the alarm path: no window, no transcript, just the model.
-if let index = CommandLine.arguments.firstIndex(of: "--check"),
-   index + 1 < CommandLine.arguments.count {
-    print("check rules: \(loadTriggers().count) from local app storage")
+// Headless check of the alarm path: no window or transcript tailing.
+var requestedEvidence: EvaluationRecord?
+if let index = CommandLine.arguments.firstIndex(of: "--check-record"),
+   index + 1 < CommandLine.arguments.count,
+   let data = FileManager.default.contents(atPath: CommandLine.arguments[index + 1]),
+   var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+   let eventType = object.removeValue(forKey: "event_type") as? String {
+    object.removeValue(forKey: "record_complete")
+    requestedEvidence = EvaluationRecord(eventType: eventType, fields: object)
+} else if let index = CommandLine.arguments.firstIndex(of: "--check"),
+          index + 1 < CommandLine.arguments.count {
+    requestedEvidence = EvaluationRecord(
+        eventType: "reasoning_summary",
+        fields: ["content": CommandLine.arguments[index + 1]])
+}
+
+if let requestedEvidence {
+    print("evaluation instruction: verbatim from local app storage")
     var finished = false
-    checkDrift(CommandLine.arguments[index + 1]) { outcome, milliseconds in
+    checkDrift(requestedEvidence) { outcome, milliseconds in
         print("latency : \(Int(milliseconds)) ms")
         switch outcome {
-        case .scored(let hits, let provider):
+        case .scored(let decision, let provider):
             print("provider: \(provider)")
-            print("fired   : \(hits.count)")
-            for hit in hits { print("          ▸ \(hit.trigger)  — \(hit.why)") }
+            print("alert   : \(decision.alert)")
+            print("reason  : \(decision.reason)")
+            print("evidence: \(decision.evidence)")
         case .failed(let message):
             print("failed  : \(message)")
         }

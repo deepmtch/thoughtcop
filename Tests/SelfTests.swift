@@ -17,6 +17,56 @@ if CommandLine.arguments.contains("--selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--evaluator-selftest") {
+    let instruction = "First line is not a category.\n# This remains user text.\nBANANA only.\n"
+    let evidence = EvaluationRecord(
+        eventType: "tool_call",
+        fields: ["tool_name": "apply_patch", "status": "completed",
+                 "input": ["path": "Sources/Test.swift"]])
+    let envelope = evaluationEnvelope(instruction: instruction, evidence: evidence)
+    guard envelope["EVALUATION_INSTRUCTION"] as? String == instruction,
+          let record = envelope["EVIDENCE_RECORD"] as? [String: Any],
+          record["event_type"] as? String == "tool_call",
+          record["record_complete"] as? Bool == true,
+          let decision = parseEvaluationDecision(Data(
+            #"{"alert":true,"reason":"changed","evidence":"Sources/Test.swift"}"#.utf8)),
+          decision.alert, decision.reason == "changed",
+          parseEvaluationDecision(Data(#"{"alert":"yes"}"#.utf8)) == nil else {
+        FileHandle.standardError.write(
+            "evaluator envelope self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+
+    let codexLine = #"{"timestamp":"2026-08-13T10:00:00.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","status":"completed","call_id":"call_1","input":"tools.apply_patch(...)"}}"#
+    let claudeLine = #"{"timestamp":"2026-08-13T10:00:01.000Z","type":"assistant","message":{"content":[{"type":"tool_use","id":"tool_1","name":"Edit","input":{"file_path":"Sources/Test.swift"}}]}}"#
+    let parsed = blocks(in: codexLine) + blocks(in: claudeLine)
+    guard parsed.count == 2,
+          parsed.allSatisfy({ $0.kind == .evidence }),
+          parsed[0].evaluationRecord.json["tool_name"] as? String == "exec",
+          parsed[1].evaluationRecord.json["tool_name"] as? String == "Edit" else {
+        FileHandle.standardError.write(
+            "structured evidence self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    let evidenceKeys = parsed.map {
+        $0.text + ($0.kind == .thinking ? "" : "\u{1f}" + $0.ts)
+    }
+    guard Set(evidenceKeys).count == 2 else { exit(1) }
+
+    let preview = MessagePreview(source: "Codex · Test", text: "Tool call: exec",
+                                 kind: "analysis")
+    preview.evaluation = .alert(decision)
+    guard preview.tickerText.contains("⚠ changed"),
+          preview.detailText.contains("Sources/Test.swift") else {
+        FileHandle.standardError.write(
+            "alert presentation self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("evaluator: verbatim=true binary=true structuredEvidence=true " +
+          "invalidVisible=true alertAttached=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--layout-selftest") {
     let sample = "Since the combined start.sh has debug mode always enabled rather than selecting the requested runtime configuration."
     let event = UIEvent(timestamp: "2026-08-12T00:00:00.000Z", kind: "analysis",
@@ -313,14 +363,17 @@ if CommandLine.arguments.contains("--check-rules-editor-selftest") ||
     defer { defaults.removePersistentDomain(forName: "thinkpeek.check-rules-selftest") }
     var saveActionRan = false
     let editor = CheckRulesEditor(contents: CheckRulesStore.loadRaw(defaults: defaults),
-                                  save: { text in
+                                  mode: .eachLine,
+                                  save: { text, mode in
         saveActionRan = true
         CheckRulesStore.saveRaw(text, defaults: defaults)
+        CheckRulesStore.saveMode(mode, defaults: defaults)
     }, closed: {})
     guard editor.currentText == CheckRulesStore.defaultValue,
           editor.actionTitles == ["Cancel", "Save"], editor.actionsAreHorizontal,
-          CheckRulesStore.rules(defaults: defaults) ==
-            ["Claude is confused or waiting for user to do someting."],
+          editor.currentMode == .eachLine,
+          CheckRulesStore.instruction(defaults: defaults) ==
+            CheckRulesStore.defaultValue,
           !CheckRulesStore.isCustomized(defaults: defaults)
     else { exit(1) }
     guard let saveButton = editor.window?.contentView?.subviews
@@ -332,10 +385,20 @@ if CommandLine.arguments.contains("--check-rules-editor-selftest") ||
     guard saveActionRan,
           CheckRulesStore.loadRaw(defaults: defaults) == CheckRulesStore.defaultValue,
           CheckRulesStore.isCustomized(defaults: defaults) else { exit(1) }
-    CheckRulesStore.saveRaw("Updated local rule", defaults: defaults)
-    guard CheckRulesStore.loadRaw(defaults: defaults) == "Updated local rule\n",
+    let verbatim = "Updated instruction\n# remains literal user text\nSecond paragraph"
+    CheckRulesStore.saveRaw(verbatim, defaults: defaults)
+    CheckRulesStore.saveMode(.wholeText, defaults: defaults)
+    guard CheckRulesStore.loadRaw(defaults: defaults) == verbatim + "\n",
+          CheckRulesStore.instruction(defaults: defaults) == verbatim + "\n",
+          CheckRulesStore.instructions(defaults: defaults) == [verbatim + "\n"],
           CheckRulesStore.isCustomized(defaults: defaults) else { exit(1) }
-    print("check rules editor: saveButton=true appLocalOnly=true noFiles=true persisted=true nextCheck=true compactWindow=true")
+    CheckRulesStore.saveMode(.eachLine, defaults: defaults)
+    guard CheckRulesStore.instructions(defaults: defaults) ==
+            ["Updated instruction", "# remains literal user text", "Second paragraph"] else {
+        exit(1)
+    }
+    print("check rules editor: saveButton=true verbatim=true explicitMode=true appLocalOnly=true " +
+          "noFiles=true persisted=true nextCheck=true compactWindow=true")
     exit(0)
 }
 

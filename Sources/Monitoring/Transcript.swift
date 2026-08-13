@@ -2,14 +2,46 @@
 
 import Foundation
 
+/// A factual record copied from the transcript without interpreting its meaning.
+struct EvaluationRecord {
+    let eventType: String
+    let fields: [String: Any]
+
+    var json: [String: Any] {
+        var value = fields
+        value["event_type"] = eventType
+        value["record_complete"] = true
+        return value
+    }
+}
+
 struct Block {
-    enum Kind { case activity, thinking }
+    enum Kind { case activity, thinking, evidence }
     let ts: String
     let text: String
     let sealed: Bool
     let signatureChars: Int
     let kind: Kind
-    var backfilled = false      // history shown on attach; never re-alerted
+    var backfilled: Bool
+    let evaluation: EvaluationRecord?
+
+    init(ts: String, text: String, sealed: Bool, signatureChars: Int,
+         kind: Kind, backfilled: Bool = false,
+         evaluation: EvaluationRecord? = nil) {
+        self.ts = ts
+        self.text = text
+        self.sealed = sealed
+        self.signatureChars = signatureChars
+        self.kind = kind
+        self.backfilled = backfilled
+        self.evaluation = evaluation
+    }
+
+    var evaluationRecord: EvaluationRecord {
+        evaluation ?? EvaluationRecord(
+            eventType: "reasoning_summary",
+            fields: ["content": text])
+    }
 }
 
 /// Stable presentation API shared by the AppKit window and headless tests.
@@ -38,6 +70,10 @@ func uiEvent(for block: Block) -> UIEvent {
             : "no readable text received"
         return UIEvent(timestamp: block.ts, kind: "omitted-analysis",
                        text: "⟨No readable analysis summary — \(received)⟩",
+                       readableAnalysis: false)
+    }
+    if block.kind == .evidence {
+        return UIEvent(timestamp: block.ts, kind: "evidence", text: block.text,
                        readableAnalysis: false)
     }
     return UIEvent(timestamp: block.ts, kind: "analysis", text: block.text,
@@ -96,6 +132,30 @@ func blocks(in line: String) -> [Block] {
         }
     }
     if obj["type"] as? String == "response_item",
+       let payload = obj["payload"] as? [String: Any] {
+        if payload["type"] as? String == "custom_tool_call",
+           let name = payload["name"] as? String {
+            var fields: [String: Any] = ["tool_name": name]
+            for key in ["call_id", "status", "input"] {
+                if let value = payload[key] { fields[key] = value }
+            }
+            return [Block(ts: ts, text: "Tool call: \(name)", sealed: false,
+                          signatureChars: 0, kind: .evidence,
+                          evaluation: EvaluationRecord(eventType: "tool_call",
+                                                       fields: fields))]
+        }
+        if payload["type"] as? String == "custom_tool_call_output" {
+            var fields: [String: Any] = [:]
+            for key in ["call_id", "output"] {
+                if let value = payload[key] { fields[key] = value }
+            }
+            return [Block(ts: ts, text: "Tool result", sealed: false,
+                          signatureChars: 0, kind: .evidence,
+                          evaluation: EvaluationRecord(eventType: "tool_result",
+                                                       fields: fields))]
+        }
+    }
+    if obj["type"] as? String == "response_item",
        let payload = obj["payload"] as? [String: Any],
        payload["type"] as? String == "reasoning",
        let encrypted = payload["encrypted_content"] as? String,
@@ -107,12 +167,35 @@ func blocks(in line: String) -> [Block] {
     guard let message = obj["message"] as? [String: Any],
           let content = message["content"] as? [[String: Any]] else { return [] }
     return content.compactMap { block in
-        guard block["type"] as? String == "thinking" else { return nil }
-        let text = ((block["thinking"] as? String) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let signatureChars = (block["signature"] as? String)?.count ?? 0
-        return Block(ts: ts, text: text, sealed: text.isEmpty,
-                     signatureChars: signatureChars, kind: .thinking)
+        switch block["type"] as? String {
+        case "thinking":
+            let text = ((block["thinking"] as? String) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let signatureChars = (block["signature"] as? String)?.count ?? 0
+            return Block(ts: ts, text: text, sealed: text.isEmpty,
+                         signatureChars: signatureChars, kind: .thinking)
+        case "tool_use":
+            guard let name = block["name"] as? String else { return nil }
+            var fields: [String: Any] = ["tool_name": name]
+            for key in ["id", "input"] {
+                if let value = block[key] { fields[key] = value }
+            }
+            return Block(ts: ts, text: "Tool call: \(name)", sealed: false,
+                         signatureChars: 0, kind: .evidence,
+                         evaluation: EvaluationRecord(eventType: "tool_call",
+                                                      fields: fields))
+        case "tool_result":
+            var fields: [String: Any] = [:]
+            for key in ["tool_use_id", "content", "is_error"] {
+                if let value = block[key] { fields[key] = value }
+            }
+            return Block(ts: ts, text: "Tool result", sealed: false,
+                         signatureChars: 0, kind: .evidence,
+                         evaluation: EvaluationRecord(eventType: "tool_result",
+                                                      fields: fields))
+        default:
+            return nil
+        }
     }
 }
 
@@ -146,7 +229,8 @@ final class Tailer {
         let all = backfillBlocks(limit: backfill)
         pending = Array(all.suffix(backfill)).map {
             Block(ts: $0.ts, text: $0.text, sealed: $0.sealed,
-                  signatureChars: $0.signatureChars, kind: $0.kind, backfilled: true)
+                  signatureChars: $0.signatureChars, kind: $0.kind, backfilled: true,
+                  evaluation: $0.evaluation)
         }
     }
 

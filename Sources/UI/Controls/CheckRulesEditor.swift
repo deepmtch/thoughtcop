@@ -4,18 +4,23 @@ import AppKit
 
 final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
     private let textView = NSTextView(frame: .zero)
-    private let saveHandler: (String) -> Void
+    private let modeButton = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let saveHandler: (String, CheckInstructionMode) -> Void
     private let closeHandler: () -> Void
     private let buttonRow = NSStackView()
 
     var currentText: String { textView.string }
+    var currentMode: CheckInstructionMode {
+        CheckInstructionMode(rawValue: modeButton.selectedItem?.representedObject as? String ?? "")
+            ?? .wholeText
+    }
     var actionTitles: [String] {
         buttonRow.arrangedSubviews.compactMap { ($0 as? NSButton)?.title }
     }
     var actionsAreHorizontal: Bool { buttonRow.orientation == .horizontal }
 
-    init(contents: String,
-         save: @escaping (String) -> Void,
+    init(contents: String, mode: CheckInstructionMode,
+         save: @escaping (String, CheckInstructionMode) -> Void,
          closed: @escaping () -> Void) {
         saveHandler = save
         closeHandler = closed
@@ -29,7 +34,7 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         super.init(window: window)
         window.delegate = self
-        buildContent(contents: contents)
+        buildContent(contents: contents, mode: mode)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -44,7 +49,7 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) { closeHandler() }
 
-    private func buildContent(contents: String) {
+    private func buildContent(contents: String, mode: CheckInstructionMode) {
         guard let content = window?.contentView else { return }
 
         let title = NSTextField(labelWithString: "What should Thinkpeek flag?")
@@ -52,10 +57,17 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
         title.translatesAutoresizingMaskIntoConstraints = false
 
         let help = NSTextField(labelWithString:
-            "One rule per line. Saved locally in Thinkpeek and used by the next check.")
+            "Your text is sent verbatim. Choose explicitly how multiple lines are evaluated.")
         help.font = .systemFont(ofSize: 12)
         help.textColor = .secondaryLabelColor
         help.translatesAutoresizingMaskIntoConstraints = false
+
+        CheckInstructionMode.allCases.forEach { value in
+            modeButton.addItem(withTitle: value.title)
+            modeButton.lastItem?.representedObject = value.rawValue
+        }
+        modeButton.selectItem(at: CheckInstructionMode.allCases.firstIndex(of: mode) ?? 0)
+        modeButton.translatesAutoresizingMaskIntoConstraints = false
 
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -90,7 +102,7 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
         buttonRow.addArrangedSubview(save)
         buttonRow.translatesAutoresizingMaskIntoConstraints = false
 
-        for view in [title, help, scrollView, buttonRow] { content.addSubview(view) }
+        for view in [title, help, modeButton, scrollView, buttonRow] { content.addSubview(view) }
         NSLayoutConstraint.activate([
             title.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             title.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
@@ -98,7 +110,10 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
             help.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 5),
             help.leadingAnchor.constraint(equalTo: title.leadingAnchor),
             help.trailingAnchor.constraint(equalTo: title.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: help.bottomAnchor, constant: 12),
+            modeButton.topAnchor.constraint(equalTo: help.bottomAnchor, constant: 10),
+            modeButton.leadingAnchor.constraint(equalTo: title.leadingAnchor),
+            modeButton.trailingAnchor.constraint(lessThanOrEqualTo: title.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: modeButton.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: title.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: title.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: buttonRow.topAnchor, constant: -14),
@@ -109,7 +124,7 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func save(_ sender: Any?) {
-        saveHandler(textView.string)
+        saveHandler(textView.string, currentMode)
         close()
     }
 

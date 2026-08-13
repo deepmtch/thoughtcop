@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 
 for test in \
     --selftest \
+    --evaluator-selftest \
     --layout-selftest \
     --presentation-selftest \
     --source-context-selftest \

@@ -8,6 +8,49 @@ func controlsExpansionTitle(compactMode: Bool) -> String? {
     compactMode ? "Show all" : nil
 }
 
+enum MessageEvaluationState {
+    case pending
+    case clear
+    case alert(EvaluationDecision)
+    case failed(String)
+}
+
+final class MessagePreview {
+    let source: String
+    let text: String
+    let kind: String
+    var evaluation: MessageEvaluationState = .pending
+
+    init(source: String, text: String, kind: String) {
+        self.source = source
+        self.text = text
+        self.kind = kind
+    }
+
+    var tickerText: String {
+        switch evaluation {
+        case .alert(let decision):
+            return "⚠ \(decision.reason) — \(text)"
+        case .failed:
+            return "⚠ Check failed — \(text)"
+        default:
+            return text
+        }
+    }
+
+    var detailText: String {
+        switch evaluation {
+        case .alert(let decision):
+            let proof = decision.evidence.isEmpty ? "" : "\nEvidence: \(decision.evidence)"
+            return "⚠ ALERT\n\(decision.reason)\(proof)\n\n\(text)"
+        case .failed(let message):
+            return "⚠ CHECK FAILED\n\(message)\n\n\(text)"
+        default:
+            return text
+        }
+    }
+}
+
 final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panel: NSPanel!
     private var scrollView: NSScrollView!
@@ -36,7 +79,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var checkRulesEditor: CheckRulesEditor?
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
-    private var eventPreviews: [(source: String, text: String, kind: String)] = []
+    private var eventPreviews: [MessagePreview] = []
     private var systemCards: [EventCard] = []
     private var compactIndex = -1
     private var compactMode = true
@@ -471,7 +514,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "settingsMenuStructure": tickerSettingsMenu?.structure ?? [:],
             "settingsMenuItems": tickerSettingsMenu?.topLevelTitles ?? [],
             "checkRulesText": CheckRulesStore.loadRaw(),
-            "checkRuleCount": loadTriggers().count,
+            "checkRuleCount": loadEvaluationInstructions().count,
+            "checkInstructionMode": CheckRulesStore.mode().rawValue,
             "checkRulesStorage": "local-app-preferences",
             "checkRulesCustomized": CheckRulesStore.isCustomized(),
             "checkRulesEditorVisible": checkRulesEditor?.window?.isVisible ?? false,
@@ -650,8 +694,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         let editor = CheckRulesEditor(contents: CheckRulesStore.loadRaw(),
-                                      save: { [weak self] text in
+                                      mode: CheckRulesStore.mode(),
+                                      save: { [weak self] text, mode in
             CheckRulesStore.saveRaw(text)
+            CheckRulesStore.saveMode(mode)
             self?.refreshStatus()
             self?.publishAPI()
         }, closed: { [weak self] in
@@ -806,7 +852,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showCurrentMessage() {
         guard compactIndex >= 0, compactIndex < eventPreviews.count else { return }
         let preview = eventPreviews[compactIndex]
-        fullMessageView.show(source: preview.source, text: preview.text, kind: preview.kind)
+        fullMessageView.show(source: preview.source, text: preview.detailText,
+                             kind: preview.kind)
         peekMode = false
         messageMode = true
         (panel.contentView as? CompactInteractionView)?.dragOnly = false
@@ -875,10 +922,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 ? "—" : "\(compactIndex + 1) / \(eventCards.count)"
             if compactIndex >= 0 && compactIndex < eventPreviews.count {
                 let preview = eventPreviews[compactIndex]
-                peekTicker.text = normalizedTickerText(preview.text)
+                peekTicker.text = normalizedTickerText(preview.tickerText)
                 updatePeekHeader(source: preview.source)
                 if messageMode {
-                    fullMessageView.show(source: preview.source, text: preview.text,
+                    fullMessageView.show(source: preview.source, text: preview.detailText,
                                          kind: preview.kind)
                 }
             }
@@ -980,7 +1027,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if navigable {
             let wasFollowingLatest = eventCards.isEmpty || compactIndex == eventCards.count - 1
             eventCards.append(card)
-            eventPreviews.append((source: source, text: event.text, kind: event.kind))
+            eventPreviews.append(MessagePreview(source: source, text: event.text,
+                                                kind: event.kind))
             if wasFollowingLatest { compactIndex = eventCards.count - 1 }
         } else {
             systemCards.append(card)
@@ -1142,19 +1190,93 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         monitorsReady = true
     }
 
-    private func showAlert(_ hits: [Fired], _ ms: Double, card: EventCard) {
-        let reasons = hits.map { hit in
-            hit.why.isEmpty ? hit.trigger : "\(hit.trigger) — \(hit.why)"
-        }.joined(separator: "\n")
-        card.setAlert("⚠ Drift detected · \(Int(ms)) ms\n\(reasons)")
+    private func refreshPreview(_ preview: MessagePreview) {
+        guard compactIndex >= 0, compactIndex < eventPreviews.count,
+              eventPreviews[compactIndex] === preview else { return }
+        peekTicker.text = normalizedTickerText(preview.tickerText)
+        if messageMode {
+            fullMessageView.show(source: preview.source, text: preview.detailText,
+                                 kind: preview.kind)
+        }
+    }
+
+    private func showAlert(_ decision: EvaluationDecision, provider: String,
+                           _ ms: Double, card: EventCard,
+                           preview: MessagePreview) {
+        preview.evaluation = .alert(decision)
+        let proof = decision.evidence.isEmpty ? "" : "\n\(decision.evidence)"
+        card.setAlert("⚠ Alert · \(provider) · \(Int(ms)) ms\n\(decision.reason)\(proof)")
         NSSound.beep()
         alertCount += 1
-        panel.title = "⚠ AI reasoning — \(alertCount)"
+        panel.title = "⚠ Thinkpeek alert — \(alertCount)"
         apiEvents.append([
-            "kind": "drift-alert", "text": hits.map(\.trigger).joined(separator: "; "),
+            "kind": "drift-alert", "text": decision.reason,
+            "evidence": decision.evidence, "source": preview.source,
+            "provider": provider, "latencyMs": Int(ms),
+        ])
+        refreshPreview(preview)
+        publishAPI()
+    }
+
+    private func showCheckFailure(_ message: String, _ ms: Double,
+                                  card: EventCard, preview: MessagePreview) {
+        preview.evaluation = .failed(message)
+        card.setFooter("AI check failed · \(message) · \(Int(ms)) ms",
+                       color: .systemRed)
+        apiEvents.append([
+            "kind": "drift-error", "text": message, "source": preview.source,
             "latencyMs": Int(ms),
         ])
+        refreshPreview(preview)
         publishAPI()
+    }
+
+    private func evaluate(_ block: Block, source: String,
+                          card existingCard: EventCard?,
+                          preview existingPreview: MessagePreview?) {
+        let destination = checkLabel()
+        existingCard?.setFooter("Sending evidence to \(destination)…")
+        apiEvents.append([
+            "kind": "drift-request-started", "text": "sent for evaluation",
+            "destination": destination, "source": source,
+            "evidenceType": block.evaluationRecord.eventType,
+        ])
+        publishAPI()
+        checkDrift(block.evaluationRecord) { [weak self] outcome, ms in
+            guard let self else { return }
+            var card = existingCard
+            var preview = existingPreview
+            switch outcome {
+            case .scored(let decision, let provider) where decision.alert:
+                if card == nil || preview == nil {
+                    let event = UIEvent(timestamp: block.ts, kind: "analysis",
+                                        text: block.text, readableAnalysis: true)
+                    card = self.addCard(source: source, event: event)
+                    preview = self.eventPreviews.last
+                }
+                guard let card, let preview else { return }
+                self.showAlert(decision, provider: provider, ms,
+                               card: card, preview: preview)
+            case .scored(_, let provider):
+                existingPreview?.evaluation = .clear
+                existingCard?.setFooter("✓ \(provider) checked · no alert · \(Int(ms)) ms",
+                                        color: .systemGreen)
+                self.apiEvents.append([
+                    "kind": "drift-clean", "text": "no alert", "provider": provider,
+                    "source": source, "latencyMs": Int(ms),
+                ])
+                self.publishAPI()
+            case .failed(let message):
+                if card == nil || preview == nil {
+                    let event = UIEvent(timestamp: block.ts, kind: "analysis",
+                                        text: block.text, readableAnalysis: true)
+                    card = self.addCard(source: source, event: event)
+                    preview = self.eventPreviews.last
+                }
+                guard let card, let preview else { return }
+                self.showCheckFailure(message, ms, card: card, preview: preview)
+            }
+        }
     }
 
     private func tick() {
@@ -1181,7 +1303,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let normalized = event.block.text
                 .split(whereSeparator: { $0.isWhitespace })
                 .joined(separator: " ")
-            let timestampPart = event.block.kind == .activity ? "\u{1f}" + event.block.ts : ""
+            let timestampPart = event.block.kind == .thinking ? "" : "\u{1f}" + event.block.ts
             let key = sourceName(for: event.path) + "\u{1f}" + normalized + timestampPart
             if presentationKeys.contains(key) { return true }
             presentationKeys.insert(key)
@@ -1202,6 +1324,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for event in arrived {
             let block = event.block
             let source = sourceName(for: event.path)
+            if block.kind == .evidence {
+                guard !block.backfilled else { continue }
+                let state = driftStatus()
+                guard state.ready else { continue }
+                // Factual tool records remain out of the feed when clean. An
+                // alert or failed check creates its own navigable origin card.
+                evaluate(block, source: source, card: nil, preview: nil)
+                continue
+            }
             let ui = uiEvent(for: block)
             if ui.kind == "activity" {
                 operationStarted(source: source)
@@ -1218,6 +1349,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             apiEvents.append(apiItem)
             let card = addCard(source: source, event: ui,
                                deferScrollAndLayout: isInitialHistoryBatch)
+            let preview = eventPreviews.last
             if ui.kind == "omitted-analysis" {
                 continue
             }
@@ -1233,35 +1365,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 card.setFooter("Local display only · \(state.detail)")
                 continue
             }
-            let destination = checkLabel()
-            card.setFooter("Sending \(block.text.count) characters to \(destination)…")
-            apiEvents.append([
-                "kind": "drift-request-started", "text": "sent for analysis",
-                "destination": destination,
-            ])
-            publishAPI()
-            checkDrift(block.text) { [weak self] outcome, ms in
-                guard let self else { return }
-                switch outcome {
-                case .scored(let hits, let provider) where hits.isEmpty:
-                    card.setFooter("✓ \(provider) checked · no drift · \(Int(ms)) ms",
-                                   color: .systemGreen)
-                    self.apiEvents.append([
-                        "kind": "drift-clean", "text": "no drift", "provider": provider,
-                        "latencyMs": Int(ms),
-                    ])
-                    self.publishAPI()
-                case .scored(let hits, _):
-                    self.showAlert(hits, ms, card: card)
-                case .failed(let message):
-                    card.setFooter("AI check failed · \(message) · \(Int(ms)) ms",
-                                   color: .systemRed)
-                    self.apiEvents.append([
-                        "kind": "drift-error", "text": message, "latencyMs": Int(ms),
-                    ])
-                    self.publishAPI()
-                }
-            }
+            evaluate(block, source: source, card: card, preview: preview)
         }
         if isInitialHistoryBatch {
             feedView.layoutSubtreeIfNeeded()

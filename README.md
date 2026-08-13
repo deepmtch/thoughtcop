@@ -145,23 +145,30 @@ was sent. Per-record `timestamp` fields advance monotonically within the turn.
 
 ## The drift alarm
 
-`Scripts/watch.py` sends each new reasoning block, plus your locally saved check
-rules, to a very fast model and fires a terminal banner + bell + macOS notification if anything
-matches — typically 300–550 ms after the reasoning hits disk, well before the
-turn ends.
+The native Thinkpeek app sends each new factual transcript record, plus your
+locally saved evaluation instruction, to a fast model. Reasoning summaries,
+structured tool calls, and structured tool results are evidence; Thinkpeek does
+not infer actions from keywords.
 
-Thinkpeek stores check rules locally in its app preferences: one plain-English
-rule per line, with `#` comments supported. They are read on every check, so edits
-take effect with no restart.
+The **What to Check…** editor has two explicit modes:
 
-The settings menu's **What to Check…** action edits that local value directly.
+- **Whole text is one instruction** sends the complete text verbatim once.
+- **Each non-empty line is independent** sends every line verbatim in a separate
+  evaluation and alerts when any evaluation returns `true`.
+
+No comments, categories, keywords, or trigger meanings are inferred. Edits take
+effect on the next transcript record without restarting Thinkpeek.
+
+The settings menu's **What to Check…** action edits that local value and mode directly.
 There is no file-backed configuration. The next reasoning block uses the saved
 rules without restarting Thinkpeek.
 
+For independent-line mode, an example is:
+
 ```
-Claude is guessing or assuming instead of verifying against the actual code
-Claude is about to run a destructive or irreversible command (rm -rf, force push)
-Claude misunderstood the request and is solving a different problem
+Alert when Claude is guessing instead of verifying against the actual code.
+Alert when Claude is about to run a destructive or irreversible command.
+Alert when Claude misunderstood the request and is solving a different problem.
 ```
 
 The integrated window calls providers directly: Groq first, then Cerebras as a
@@ -278,11 +285,11 @@ running window. `/reveal` remains an alias for `/controls` for compatibility.
 Use `./.build/thinkpeek --transcript /absolute/session.jsonl` to pin a deterministic
 input for an end-to-end UI test.
 
-For the alarm:
+For a direct native evaluator check:
 
 ```bash
-python3 Scripts/watch.py --selftest             # backend, model, latency, check rules
-python3 Scripts/watch.py --once "I'll rm -rf the build dir without checking"
+./.build/thinkpeek --drift-status
+./.build/thinkpeek --check "I'll remove the build directory now."
 ```
 
 ## History
