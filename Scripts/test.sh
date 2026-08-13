@@ -16,6 +16,7 @@ for test in \
     --escape-selftest \
     --exit-controls-selftest \
     --outside-click-selftest \
+    --ticker-actions-selftest \
     --window-position-selftest \
     --ticker-corner-selftest \
     --provider-icon-selftest \

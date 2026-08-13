@@ -18,6 +18,7 @@ swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o "$build_dir/thi
     Sources/UI/Layout/CompactWindowLayout.swift \
     Sources/UI/Controls/DetailExitControls.swift \
     Sources/UI/Ticker/TickerCornerControls.swift \
+    Sources/UI/Ticker/TickerPrimaryActions.swift \
     Sources/UI/Ticker/TickerSettingsMenu.swift \
     Sources/UI/Controls/CheckRulesEditor.swift \
     Sources/UI/Ticker/ProviderIcon.swift \

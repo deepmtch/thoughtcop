@@ -163,6 +163,9 @@ The settings menu's **What to Check…** action edits that local value and mode 
 There is no file-backed configuration. The next reasoning block uses the saved
 rules without restarting Thinkpeek.
 
+The ticker's checklist button opens **What to Check** directly in one click. The
+sliders button remains reserved for navigation and secondary display preferences.
+
 For independent-line mode, an example is:
 
 ```

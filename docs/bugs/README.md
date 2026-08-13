@@ -36,3 +36,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-029](BUG-029-user-instruction-was-reinterpreted-and-alerts-were-hidden.md) | Checker reinterpreted user text and detached warnings from their evidence | Fixed |
 | [BUG-030](BUG-030-details-ignored-outside-click.md) | Controls and history ignored outside clicks | Fixed |
 | [BUG-031](BUG-031-prompt-editor-dismissed-on-click.md) | Clicking in the prompt editor made it disappear | Fixed |
+| [BUG-032](BUG-032-primary-check-instruction-was-nested-in-settings.md) | Editing the primary check instruction required two clicks through settings | Fixed |

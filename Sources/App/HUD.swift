@@ -66,8 +66,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var peekProviderIcon: ProviderIconView!
     private var peekSourceLabel: NSTextField!
     private var peekTicker: TickerView!
-    private var peekControlsButton: NSButton!
     private var peekCornerControls: TickerCornerControls!
+    private var peekPrimaryActions: TickerPrimaryActions!
     private var peekToolbar: NSStackView!
     private var latestButton: NSButton!
     private var previousButton: NSButton!
@@ -180,27 +180,25 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekTicker.speed = savedSpeed
         peekTicker.text = "Watching Claude and Codex…"
 
-        peekControlsButton = NSButton(
-            image: NSImage(systemSymbolName: "slider.horizontal.3",
-                           accessibilityDescription: "Open controls") ?? NSImage(),
-            target: self, action: #selector(showControls(_:)))
-        peekControlsButton.bezelStyle = .accessoryBarAction
-        peekControlsButton.isBordered = false
-        peekControlsButton.toolTip = "Open navigation and ticker settings"
-        peekControlsButton.setAccessibilityLabel("Open controls and settings")
-        peekControlsButton.translatesAutoresizingMaskIntoConstraints = false
         peekCornerControls = TickerCornerControls(frame: .zero)
         peekCornerControls.cornerRequested = { [weak self] corner in
             self?.movePanel(toCorner: corner)
         }
-        peekToolbar = NSStackView(views: [peekCornerControls, peekControlsButton])
+        peekPrimaryActions = TickerPrimaryActions(frame: .zero)
+        peekPrimaryActions.checkRulesRequested = { [weak self] in
+            self?.showCheckRulesEditor()
+        }
+        peekPrimaryActions.controlsRequested = { [weak self] in
+            self?.applyPeekMode(false)
+        }
+        peekToolbar = NSStackView(views: [peekCornerControls, peekPrimaryActions])
         peekToolbar.orientation = .horizontal
         peekToolbar.alignment = .centerY
         peekToolbar.spacing = 2
         peekToolbar.translatesAutoresizingMaskIntoConstraints = false
         peekToolbar.setContentHuggingPriority(.required, for: .horizontal)
         peekToolbar.setContentCompressionResistancePriority(.required, for: .horizontal)
-        peekToolbar.widthAnchor.constraint(equalToConstant: 114).isActive = true
+        peekToolbar.widthAnchor.constraint(equalToConstant: 140).isActive = true
         applyTickerBackground(TickerBackgroundPreference.load())
         peekBar.addSubview(peekProviderIcon)
         peekBar.addSubview(peekSourceLabel)
@@ -395,9 +393,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                                    constant: -10),
             peekToolbar.topAnchor.constraint(equalTo: peekBar.topAnchor, constant: 7),
             peekToolbar.heightAnchor.constraint(equalToConstant: 24),
-            peekControlsButton.widthAnchor.constraint(equalToConstant: 24),
-            peekControlsButton.heightAnchor.constraint(equalToConstant: 28),
-
             fullMessageView.topAnchor.constraint(equalTo: content.topAnchor),
             fullMessageView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             fullMessageView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
@@ -515,6 +510,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": true,
             "tickerCornerButtons": peekCornerControls.accessibilityNames,
+            "tickerPrimaryActions": peekPrimaryActions.accessibilityNames,
             "settingsMenuStructure": tickerSettingsMenu?.structure ?? [:],
             "settingsMenuItems": tickerSettingsMenu?.topLevelTitles ?? [],
             "checkRulesText": CheckRulesStore.loadRaw(),
@@ -719,7 +715,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let color else {
             peekTicker?.foregroundColor = .labelColor
             peekSourceLabel?.textColor = .secondaryLabelColor
-            peekControlsButton?.contentTintColor = nil
+            peekPrimaryActions?.foregroundColor = nil
             peekCornerControls?.foregroundColor = nil
             return
         }
@@ -728,7 +724,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             : NSColor.white
         peekTicker?.foregroundColor = foreground
         peekSourceLabel?.textColor = foreground.withAlphaComponent(0.72)
-        peekControlsButton?.contentTintColor = foreground.withAlphaComponent(0.78)
+        peekPrimaryActions?.foregroundColor = foreground.withAlphaComponent(0.78)
         peekCornerControls?.foregroundColor = foreground.withAlphaComponent(0.78)
     }
 

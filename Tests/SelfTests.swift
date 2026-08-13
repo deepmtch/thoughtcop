@@ -257,6 +257,23 @@ if CommandLine.arguments.contains("--outside-click-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--ticker-actions-selftest") {
+    let actions = TickerPrimaryActions(frame: .zero)
+    var checkRules = false
+    var controls = false
+    actions.checkRulesRequested = { checkRules = true }
+    actions.controlsRequested = { controls = true }
+    actions.requestCheckRulesForTest()
+    actions.requestControlsForTest()
+    guard actions.accessibilityNames == ["Edit what to check", "Open controls and settings"],
+          checkRules, controls else {
+        FileHandle.standardError.write("ticker actions self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("ticker actions: checkRules=oneClick controls=oneClick accessible=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--window-position-selftest") {
     let visible = NSRect(x: 0, y: 0, width: 1440, height: 900)
     let bottomRightPeek = NSRect(x: 968, y: 12, width: 460, height: 70)
