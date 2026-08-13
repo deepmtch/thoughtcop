@@ -4,24 +4,23 @@
 import AppKit
 
 func shouldDismissDetails(isShowingDetails: Bool, windowFrame: NSRect,
-                          clickLocation: NSPoint,
-                          isThinkpeekWindow: Bool) -> Bool {
-    isShowingDetails && !isThinkpeekWindow && !windowFrame.contains(clickLocation)
+                          clickLocation: NSPoint) -> Bool {
+    isShowingDetails && !windowFrame.contains(clickLocation)
 }
 
 final class OutsideClickMonitor {
     private var localMonitor: Any?
     private var globalMonitor: Any?
 
-    func start(handler: @escaping (NSPoint, Bool) -> Void) {
+    func start(handler: @escaping (NSPoint) -> Void) {
         stop()
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { event in
-            handler(NSEvent.mouseLocation, event.window != nil)
+            handler(NSEvent.mouseLocation)
             return event
         }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { _ in
-            handler(NSEvent.mouseLocation, false)
+            handler(NSEvent.mouseLocation)
         }
     }
 

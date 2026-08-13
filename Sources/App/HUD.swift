@@ -427,13 +427,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         api.actionHandler = { [weak self] action in self?.handleAction(action) }
         api.refreshHandler = { [weak self] in self?.publishAPI() }
         api.start()
-        outsideClickMonitor.start { [weak self] location, isThinkpeekWindow in
+        outsideClickMonitor.start { [weak self] location in
             DispatchQueue.main.async {
                 guard let self,
                       shouldDismissDetails(isShowingDetails: !self.peekMode,
                                            windowFrame: self.panel.frame,
-                                           clickLocation: location,
-                                           isThinkpeekWindow: isThinkpeekWindow) else { return }
+                                           clickLocation: location) else { return }
                 self.dismissDetailsToTicker()
             }
         }
