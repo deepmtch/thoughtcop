@@ -19,8 +19,8 @@ tails both sources and reacts when a readable reasoning summary lands on disk.
 ```
 
 This checkout uses the repository-managed `.githooks/post-commit` hook. After
-each successful commit it queues a background rebuild and replaces the running
-Thinkpeek only when that build succeeds. Rapid commits are coalesced. Inspect
+each successful commit it rebuilds and asks macOS `launchctl` to replace the
+running Thinkpeek only when that build succeeds. Inspect
 `.local/post-commit/restart.log` if a restart does not complete. Install the hook
 for a fresh clone with:
 
