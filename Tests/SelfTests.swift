@@ -5,6 +5,21 @@ import Foundation
 
 func runRequestedSelfTest() {
 
+if CommandLine.arguments.contains("--config-path-selftest") {
+    let repo = "/Users/example/src/thinkpeek"
+    guard projectRoot(executablePath: repo + "/.build/thinkpeek",
+                      appBundlePath: nil) == repo,
+          projectRoot(
+            executablePath: repo + "/.build/Thinkpeek.app/Contents/MacOS/thinkpeek",
+            appBundlePath: repo + "/.build/Thinkpeek.app") == repo else {
+        FileHandle.standardError.write(
+            "config path self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("config path: rawBinary=true appBundle=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--selftest") {
     let path = FileManager.default.temporaryDirectory
         .appendingPathComponent("thinkpeek-selftest-\(UUID().uuidString).jsonl").path

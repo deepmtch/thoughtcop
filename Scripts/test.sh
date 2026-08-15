@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 ./build.sh
 
 for test in \
+    --config-path-selftest \
     --selftest \
     --evaluator-selftest \
     --provider-reasoning-selftest \

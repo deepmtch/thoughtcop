@@ -24,25 +24,38 @@ let ACCENT = NSColor(srgbRed: 0.79, green: 0.64, blue: 0.15, alpha: 1)
 let SEALED = NSColor(srgbRed: 0.48, green: 0.36, blue: 0.62, alpha: 1)
 let ALERT = NSColor(srgbRed: 0.95, green: 0.33, blue: 0.31, alpha: 1)
 
-/// Where this binary lives — local environment configuration sits beside it.
-/// argv[0] is often relative ("./thinkpeek"), which resolves to nothing useful —
-/// ask the loader for the real executable path instead.
-let PROJECT_ROOT: String = {
-    let argv0 = CommandLine.arguments[0]
-    let exe = Bundle.main.executablePath
-        ?? (argv0.hasPrefix("/") ? argv0
-            : FileManager.default.currentDirectoryPath + "/" + argv0)
-    let executableDirectory = ((exe as NSString).resolvingSymlinksInPath as NSString)
+/// Resolve the repository root for both supported launch artifacts:
+/// `.build/thinkpeek` and `.build/Thinkpeek.app/Contents/MacOS/thinkpeek`.
+func projectRoot(executablePath: String, appBundlePath: String?) -> String {
+    if let appBundlePath,
+       (appBundlePath as NSString).pathExtension == "app" {
+        let buildDirectory = (appBundlePath as NSString).deletingLastPathComponent
+        if (buildDirectory as NSString).lastPathComponent == ".build" {
+            return (buildDirectory as NSString).deletingLastPathComponent
+        }
+    }
+    let executableDirectory = ((executablePath as NSString).resolvingSymlinksInPath as NSString)
         .deletingLastPathComponent
     if (executableDirectory as NSString).lastPathComponent == ".build" {
         return (executableDirectory as NSString).deletingLastPathComponent
     }
     return executableDirectory
+}
+
+let PROJECT_ROOT: String = {
+    let argv0 = CommandLine.arguments[0]
+    let executablePath = Bundle.main.executablePath
+        ?? (argv0.hasPrefix("/") ? argv0
+            : FileManager.default.currentDirectoryPath + "/" + argv0)
+    let appBundlePath = Bundle.main.bundleURL.pathExtension == "app"
+        ? Bundle.main.bundlePath : nil
+    return projectRoot(executablePath: executablePath,
+                       appBundlePath: appBundlePath)
 }()
 let ENV_FILE = PROJECT_ROOT + "/.env"
 
 /// Read one dotenv value without mutating the process environment. Existing
-/// environment variables take precedence; otherwise use .env beside the binary.
+/// environment variables take precedence; otherwise use the repository `.env`.
 func dotenv(_ name: String) -> String? {
     if let value = ProcessInfo.processInfo.environment[name], !value.isEmpty {
         return value
