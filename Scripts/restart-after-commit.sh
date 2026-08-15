@@ -27,12 +27,12 @@ echo "Thinkpeek: rebuilding $commit after commit"
         exit 1
     fi
 
-    # launchctl owns the replacement process, so it survives Git and terminal
-    # process cleanup. SingleInstance replaces the old app only after this build.
-    job_label="com.thinkpeek.postcommit.$commit.$PPID"
-    /bin/launchctl submit -l "$job_label" -o "$app_log" -e "$app_log" -- \
-        "$repo_root/.build/thinkpeek"
-    echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') submitted $commit as $job_label"
+    # LaunchServices owns the app process, so it survives Git exiting without
+    # becoming a restartable service. SingleInstance replaces the old copy once.
+    /usr/bin/open -n -g "$repo_root/.build/Thinkpeek.app"
+    sleep 1
+    /usr/bin/pgrep -x thinkpeek >/dev/null
+    echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') opened app bundle for $commit"
 } >> "$restart_log" 2>&1
 
-echo "Thinkpeek: rebuilt and restart submitted; log: $restart_log"
+echo "Thinkpeek: rebuilt and opened replacement once; log: $restart_log"

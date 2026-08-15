@@ -19,8 +19,10 @@ tails both sources and reacts when a readable reasoning summary lands on disk.
 ```
 
 This checkout uses the repository-managed `.githooks/post-commit` hook. After
-each successful commit it rebuilds and asks macOS `launchctl` to replace the
-running Thinkpeek only when that build succeeds. Inspect
+each successful commit it rebuilds and replaces the running Thinkpeek exactly
+once, only when that build succeeds. The build produces a minimal macOS app
+bundle and the hook opens it through LaunchServices; it deliberately does not
+register a restartable `launchd` service. Inspect
 `.local/post-commit/restart.log` if a restart does not complete. Install the hook
 for a fresh clone with:
 

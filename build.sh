@@ -3,9 +3,11 @@ set -eu
 
 build_dir=".build"
 module_cache="$build_dir/module-cache"
+target_arch=$(/usr/bin/uname -m)
 mkdir -p "$module_cache"
 
-swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o "$build_dir/thinkpeek" \
+swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
+    -module-cache-path "$module_cache" -o "$build_dir/thinkpeek" \
     Sources/App/Config.swift \
     Sources/Checker/CheckRulesStore.swift \
     Sources/Monitoring/Transcript.swift \
@@ -32,6 +34,14 @@ swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o "$build_dir/thi
     Sources/App/HUD.swift \
     Tests/SelfTests.swift \
     Sources/App/main.swift
+
+# A minimal app bundle lets LaunchServices own the GUI process. Launching a raw
+# executable from a Git hook leaves it tied to the hook's process lifetime.
+app_contents="$build_dir/Thinkpeek.app/Contents"
+mkdir -p "$app_contents/MacOS"
+cp "$build_dir/thinkpeek" "$app_contents/MacOS/thinkpeek"
+cp "Resources/Thinkpeek-Info.plist" "$app_contents/Info.plist"
+/usr/bin/codesign --force --deep --sign - "$build_dir/Thinkpeek.app"
 
 if /usr/bin/pgrep -x thinkpeek >/dev/null 2>&1; then
     echo "build complete; a running Thinkpeek still uses its old binary"
