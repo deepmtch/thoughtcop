@@ -107,7 +107,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var peekMode = true
     private var messageMode = false
     private var messageReaderSnapshot: MessageReaderSnapshot?
-    private var messageHeight: CGFloat = 300
     private let peekWidth: CGFloat = 460
     private let peekHeight: CGFloat = 70
     private var compactWidth = CompactWindowSizing.savedWidth()
@@ -568,7 +567,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             publishAPI()
             return
         } else if messageMode {
-            messageHeight = panel.frame.height
             compactWidth = CompactWindowSizing.clamped(panel.frame.width)
         } else if compactMode {
             compactWidth = CompactWindowSizing.clamped(panel.frame.width)
@@ -907,8 +905,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         detailHeaderLayout.setActive(false, width: compactWidth)
         peekTicker.setActive(false)
         panel.becomesKeyOnlyIfNeeded = false
-        transitionPanel(to: max(220, messageHeight), width: compactWidth,
-                        minSize: NSSize(width: CompactWindowSizing.minimumWidth, height: 180),
+        let readerHeight = fullMessageView.preferredHeight(forWidth: compactWidth)
+        transitionPanel(to: readerHeight, width: compactWidth,
+                        minSize: NSSize(width: CompactWindowSizing.minimumWidth, height: 150),
                         maxSize: NSSize(width: CompactWindowSizing.maximumWidth, height: 520))
         focusDetails()
         publishAPI()

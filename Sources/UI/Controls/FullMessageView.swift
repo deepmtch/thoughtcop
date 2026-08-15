@@ -4,6 +4,9 @@
 import AppKit
 
 final class FullMessageView: NSVisualEffectView {
+    private static let minimumReaderHeight: CGFloat = 150
+    private static let maximumReaderHeight: CGFloat = 520
+    private static let headerAndMarginsHeight: CGFloat = 84
     private let toneWash = NSView()
     private let toneStripe = NSView()
     private let sourceLabel = NSTextField(labelWithString: "")
@@ -127,6 +130,23 @@ final class FullMessageView: NSVisualEffectView {
         textView.textStorage?.setAttributedString(renderedBody(text, kind: kind))
         textView.scrollToBeginningOfDocument(nil)
         applyTone(tone)
+    }
+
+    func preferredHeight(forWidth width: CGFloat) -> CGFloat {
+        let storage = NSTextStorage(attributedString:
+            textView.textStorage ?? NSAttributedString())
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(
+            width: max(1, width - textView.textContainerInset.width * 2),
+            height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = textView.textContainer?.lineFragmentPadding ?? 5
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+        layout.ensureLayout(for: container)
+        let renderedHeight = ceil(layout.usedRect(for: container).height)
+        return min(Self.maximumReaderHeight,
+                   max(Self.minimumReaderHeight,
+                       Self.headerAndMarginsHeight + renderedHeight))
     }
 
     private func applyTone(_ tone: MessageReaderTone) {

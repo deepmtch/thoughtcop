@@ -40,3 +40,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-033](BUG-033-open-reader-followed-new-messages.md) | Open reader replaced the message while the user was reading | Fixed |
 | [BUG-034](BUG-034-check-failure-looked-like-user-warning.md) | Checker failure looked like a user warning from the monitored task | Fixed |
 | [BUG-035](BUG-035-size-limit-was-misattributed-and-duplicated.md) | Local size limit was called a provider limit and repeated per instruction | Fixed |
+| [BUG-036](BUG-036-short-message-opened-in-stale-tall-reader.md) | Short summary inherited a stale oversized reader height | Fixed |

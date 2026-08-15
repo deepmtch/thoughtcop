@@ -244,10 +244,12 @@ if CommandLine.arguments.contains("--message-view-selftest") {
                  text: "**Complete rendered summary** with `inline code`.",
                  kind: "analysis")
     message.layoutSubtreeIfNeeded()
+    let shortHeight = message.preferredHeight(forWidth: 560)
     guard message.source == "Codex · Message test",
           message.text == "Complete rendered summary with inline code.",
           message.lifecycleButtonTitles == ["Done", "Quit"],
           message.tone == .normal,
+          shortHeight == 150,
           !message.text.contains("**") else {
         FileHandle.standardError.write("message view self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -262,8 +264,18 @@ if CommandLine.arguments.contains("--message-view-selftest") {
             "message error tone self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
+    message.show(source: "Codex · Long message",
+                 text: Array(repeating: "A complete rendered line.", count: 120)
+                    .joined(separator: "\n"),
+                 kind: "analysis")
+    let longHeight = message.preferredHeight(forWidth: 560)
+    guard longHeight == 520, longHeight > shortHeight else {
+        FileHandle.standardError.write(
+            "message content-fit self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
     print("message view: dedicated=true markdownRendered=true close=true quit=true " +
-          "errorTone=true")
+          "errorTone=true contentFit=true")
     exit(0)
 }
 
