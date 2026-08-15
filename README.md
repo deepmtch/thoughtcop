@@ -18,6 +18,16 @@ tails both sources and reacts when a readable reasoning summary lands on disk.
 ./.build/thinkpeek --local-only                      # never send reasoning externally
 ```
 
+This checkout uses the repository-managed `.githooks/post-commit` hook. After
+each successful commit it queues a background rebuild and replaces the running
+Thinkpeek only when that build succeeds. Rapid commits are coalesced. Inspect
+`.local/post-commit/restart.log` if a restart does not complete. Install the hook
+for a fresh clone with:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 Swift/AppKit + stdlib Python, no dependencies. **Nothing is ever written under
 `~/.claude/`** — that directory is Claude Code's, and thinkpeek only ever reads
 `~/.claude/projects/`.
