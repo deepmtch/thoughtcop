@@ -50,6 +50,16 @@ enum TickerBackgroundPreference {
     }
 }
 
+enum TickerAppearance {
+    static let normalBackground = NSColor.white
+
+    static func background(alarmActive: Bool,
+                           configuredAlarmColor: NSColor?) -> NSColor {
+        guard alarmActive else { return normalBackground }
+        return configuredAlarmColor ?? TickerBackgroundPreference.stickyYellow
+    }
+}
+
 final class TickerBackgroundView: NSView {
     var color: NSColor? { didSet { needsDisplay = true } }
 

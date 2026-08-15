@@ -294,6 +294,18 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
     TickerBackgroundPreference.save(sample, defaults: defaults)
     let restored = TickerBackgroundPreference.load(defaults: defaults)
     let values = restored.flatMap(TickerBackgroundPreference.components(of:)) ?? []
+    let normal = TickerAppearance.background(alarmActive: false,
+                                             configuredAlarmColor: sample)
+    let normalValues = TickerBackgroundPreference.components(of: normal) ?? []
+    let alarm = TickerAppearance.background(alarmActive: true,
+                                            configuredAlarmColor: sample)
+    let alarmValues = TickerBackgroundPreference.components(of: alarm) ?? []
+    let defaultAlarm = TickerAppearance.background(alarmActive: true,
+                                                   configuredAlarmColor: nil)
+    let defaultAlarmValues = TickerBackgroundPreference.components(of: defaultAlarm) ?? []
+    let ticker = TickerView(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+    let tickerIsBold = NSFontManager.shared.traits(of: ticker.textFont)
+        .contains(.boldFontMask)
     TickerBackgroundPreference.save(nil, defaults: defaults)
     guard initial.count == 4,
           abs(initial[0] - 0.97) < 0.001,
@@ -304,6 +316,13 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
           abs(values[1] - 0.4) < 0.001,
           abs(values[2] - 0.7) < 0.001,
           abs(values[3] - 0.85) < 0.001,
+          normalValues.count == 4,
+          abs(normalValues[0] - 1) < 0.001,
+          abs(normalValues[1] - 1) < 0.001,
+          abs(normalValues[2] - 1) < 0.001,
+          alarmValues == values,
+          defaultAlarmValues == initial,
+          !tickerIsBold,
           TickerBackgroundPreference.load(defaults: defaults) == nil,
           TickerBackgroundPreference.usesDarkForeground(on: .white),
           !TickerBackgroundPreference.usesDarkForeground(on: .black) else {
@@ -311,8 +330,8 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
             .data(using: .utf8)!)
         exit(1)
     }
-    print("ticker background: stickyDefault=true persisted=true custom=true " +
-          "systemReset=true autoContrast=true")
+    print("ticker background: normalWhite=true alarmOnly=true custom=true " +
+          "defaultAlarm=true autoContrast=true textWeight=regular")
     exit(0)
 }
 
@@ -509,13 +528,13 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
     let settings = TickerSettingsMenu()
     settings.install(on: button)
     settings.update(speed: .normal, width: CompactWindowSizing.standardWidth,
-                    usesSystemBackground: true)
+                    usesDefaultAlarmColor: true)
     let expected = [
         "Ticker Speed": ["Slow", "Normal", "Fast"],
         "Window Width": ["Narrow", "Standard"],
         "Window Position": ["Top Left", "Top Center", "Top Right", "Bottom Left",
                             "Bottom Center", "Bottom Right"],
-        "Appearance": ["Ticker Background…", "Use System Background"],
+        "Appearance": ["Alarm Color…", "Use Default Alarm Color"],
     ]
     guard settings.structure == expected, settings.menu.numberOfItems == 4,
           settings.usesSingleButtonLauncher,

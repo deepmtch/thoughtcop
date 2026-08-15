@@ -108,10 +108,11 @@ visible message.
 The ticker's top-right icon toolbar moves the window to the left, right, top, or
 bottom screen edge without changing the other axis; the settings icon follows the
 four position controls. The message row keeps the full ticker width below it.
-The settings menu's **Ticker Background…** item opens the native macOS color
-picker. Custom colors and opacity are remembered, ticker text/icons automatically
-switch contrast, and **Use System Ticker Background** restores the native material.
-The first-run default is a light Sticky-note yellow.
+The settings menu's **Alarm Color…** item opens the native macOS color picker.
+The ticker remains white during normal operation and uses the selected color only
+for an actual alert. Custom colors and opacity are remembered, text/icons
+automatically switch contrast, and **Use Default Alarm Color** restores the
+light Sticky-note yellow warning color.
 A single click opens a dedicated full-message reader; **Done** or a click outside
 the reader returns to the ticker. The visible controls button or a deliberate double-click opens the
 separate navigation/settings view. The **↤** control returns directly to the

@@ -50,3 +50,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-043](BUG-043-plaintext-provider-reasoning-was-not-preferred.md) | Plaintext provider reasoning was not preferred over summaries | Fixed |
 | [BUG-044](BUG-044-summary-only-history-stalled-startup.md) | Summary-only history stalled startup and left the interface empty | Fixed |
 | [BUG-045](BUG-045-ticker-background-used-hand-cursor.md) | Ticker background used a hand cursor | Fixed |
+| [BUG-046](BUG-046-alarm-color-was-permanent-and-ticker-text-was-bold.md) | Alarm color was permanent and ticker text was bold | Fixed |

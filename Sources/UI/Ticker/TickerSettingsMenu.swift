@@ -7,13 +7,13 @@ final class TickerSettingsMenu: NSObject {
     var widthRequested: ((CGFloat) -> Void)?
     var positionRequested: ((String) -> Void)?
     var backgroundRequested: (() -> Void)?
-    var systemBackgroundRequested: (() -> Void)?
+    var defaultAlarmColorRequested: (() -> Void)?
 
     private(set) var menu = NSMenu()
     private weak var launcherButton: NSButton?
     private var speedItems: [TickerSpeed: NSMenuItem] = [:]
     private var widthItems: [String: NSMenuItem] = [:]
-    private var systemBackgroundItem: NSMenuItem!
+    private var defaultAlarmColorItem: NSMenuItem!
 
     var structure: [String: [String]] {
         Dictionary(uniqueKeysWithValues: menu.items.compactMap { item in
@@ -54,13 +54,13 @@ final class TickerSettingsMenu: NSObject {
                    in: sender)
     }
 
-    func update(speed: TickerSpeed, width: CGFloat, usesSystemBackground: Bool) {
+    func update(speed: TickerSpeed, width: CGFloat, usesDefaultAlarmColor: Bool) {
         for (candidate, item) in speedItems { item.state = candidate == speed ? .on : .off }
         widthItems["narrow"]?.state = abs(width - CompactWindowSizing.narrowWidth) < 1
             ? .on : .off
         widthItems["standard"]?.state = abs(width - CompactWindowSizing.standardWidth) < 1
             ? .on : .off
-        systemBackgroundItem.state = usesSystemBackground ? .on : .off
+        defaultAlarmColorItem.state = usesDefaultAlarmColor ? .on : .off
     }
 
     private func submenuItem(title: String, symbol: String, submenu: NSMenu) -> NSMenuItem {
@@ -122,20 +122,20 @@ final class TickerSettingsMenu: NSObject {
 
     private func appearanceMenu() -> NSMenu {
         let submenu = NSMenu(title: "Appearance")
-        let choose = NSMenuItem(title: "Ticker Background…",
+        let choose = NSMenuItem(title: "Alarm Color…",
                                 action: #selector(backgroundPicked(_:)), keyEquivalent: "")
         choose.target = self
         choose.image = NSImage(systemSymbolName: "paintpalette",
                                accessibilityDescription: choose.title)
         submenu.addItem(choose)
-        systemBackgroundItem = NSMenuItem(title: "Use System Background",
+        defaultAlarmColorItem = NSMenuItem(title: "Use Default Alarm Color",
                                           action: #selector(systemBackgroundPicked(_:)),
                                           keyEquivalent: "")
-        systemBackgroundItem.target = self
-        systemBackgroundItem.image = NSImage(systemSymbolName: "arrow.counterclockwise",
+        defaultAlarmColorItem.target = self
+        defaultAlarmColorItem.image = NSImage(systemSymbolName: "arrow.counterclockwise",
                                               accessibilityDescription:
-                                                systemBackgroundItem.title)
-        submenu.addItem(systemBackgroundItem)
+                                                defaultAlarmColorItem.title)
+        submenu.addItem(defaultAlarmColorItem)
         return submenu
     }
 
@@ -158,6 +158,6 @@ final class TickerSettingsMenu: NSObject {
 
     @objc private func backgroundPicked(_ sender: NSMenuItem) { backgroundRequested?() }
     @objc private func systemBackgroundPicked(_ sender: NSMenuItem) {
-        systemBackgroundRequested?()
+        defaultAlarmColorRequested?()
     }
 }

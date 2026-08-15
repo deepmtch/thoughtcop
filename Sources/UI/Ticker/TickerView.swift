@@ -72,6 +72,7 @@ final class TickerView: NSView {
     var foregroundColor: NSColor = .labelColor {
         didSet { rebuildAttributedText() }
     }
+    var textFont: NSFont { .systemFont(ofSize: 14, weight: .regular) }
 
     var text: String {
         get { textStorage }
@@ -170,10 +171,9 @@ final class TickerView: NSView {
     }
 
     private func rebuildAttributedText() {
-        let font = NSFont.systemFont(ofSize: 14, weight: .semibold)
         attributedText = NSAttributedString(
             string: textStorage,
-            attributes: [.font: font, .foregroundColor: foregroundColor])
+            attributes: [.font: textFont, .foregroundColor: foregroundColor])
         measureAttributedText()
         needsDisplay = true
     }

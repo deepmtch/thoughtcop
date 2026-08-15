@@ -57,6 +57,11 @@ final class MessagePreview {
         }
     }
 
+    var alarmActive: Bool {
+        if case .alert = evaluation { return true }
+        return false
+    }
+
     var detailText: String {
         switch evaluation {
         case .alert(let decision):
@@ -82,7 +87,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var detailExitControls: DetailExitControls!
     private var peekBar: NSVisualEffectView!
     private var tickerBackgroundView: TickerBackgroundView!
-    private var tickerBackgroundColor: NSColor?
+    private var tickerAlarmColor: NSColor?
+    private var tickerAlarmActive = false
+    private var tickerActiveBackgroundColor = TickerAppearance.normalBackground
     private var fullMessageView: FullMessageView!
     private var peekProviderIcon: ProviderIconView!
     private var peekSourceLabel: NSTextField!
@@ -227,7 +234,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekToolbar.setContentHuggingPriority(.required, for: .horizontal)
         peekToolbar.setContentCompressionResistancePriority(.required, for: .horizontal)
         peekToolbar.widthAnchor.constraint(equalToConstant: 140).isActive = true
-        applyTickerBackground(TickerBackgroundPreference.load())
+        tickerAlarmColor = TickerBackgroundPreference.load()
+        applyTickerAppearance(alarmActive: false)
         peekBar.addSubview(peekProviderIcon)
         peekBar.addSubview(peekSourceLabel)
         peekBar.addSubview(peekTicker)
@@ -378,7 +386,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tickerSettingsMenu.backgroundRequested = { [weak self] in
             self?.api.perform(.chooseBackground, origin: .appKit)
         }
-        tickerSettingsMenu.systemBackgroundRequested = { [weak self] in
+        tickerSettingsMenu.defaultAlarmColorRequested = { [weak self] in
             self?.api.perform(.backgroundRGBA(nil), origin: .appKit)
         }
         tickerSettingsMenu.install(on: positionButton)
@@ -565,11 +573,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "tickerReduceMotion": NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
             "tickerSpeed": peekTicker.speed.rawValue,
             "tickerPointsPerSecond": Int(peekTicker.speed.pointsPerSecond),
-            "tickerBackgroundMode": tickerBackgroundColor == nil ? "system" : "custom",
-            "tickerBackgroundRGBA": tickerBackgroundColor.flatMap(
+            "tickerBackgroundMode": tickerAlarmActive ? "alarm" : "normal-white",
+            "tickerBackgroundRGBA": TickerBackgroundPreference.components(
+                of: tickerActiveBackgroundColor)?.map(Double.init) ?? NSNull(),
+            "tickerAlarmActive": tickerAlarmActive,
+            "tickerAlarmColorMode": tickerAlarmColor == nil ? "default" : "custom",
+            "tickerAlarmColorRGBA": tickerAlarmColor.flatMap(
                 TickerBackgroundPreference.components(of:))?.map(Double.init) ?? NSNull(),
-            "tickerUsesDarkForeground": tickerBackgroundColor.map(
-                TickerBackgroundPreference.usesDarkForeground(on:)) ?? false,
+            "tickerUsesDarkForeground":
+                TickerBackgroundPreference.usesDarkForeground(
+                    on: tickerActiveBackgroundColor),
+            "tickerTextWeight": "regular",
             "operationPending": operationState.operationPending,
             "pendingSource": operationState.latestPendingSource ?? NSNull(),
             "hoverDisclosure": false,
@@ -736,7 +750,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let colorPanel = NSColorPanel.shared
         colorPanel.showsAlpha = true
         colorPanel.isContinuous = true
-        colorPanel.color = tickerBackgroundColor ?? .controlAccentColor
+        colorPanel.color = tickerAlarmColor ?? TickerBackgroundPreference.stickyYellow
         colorPanel.setTarget(self)
         colorPanel.setAction(#selector(tickerBackgroundChanged(_:)))
         NSApp.activate(ignoringOtherApps: true)
@@ -753,7 +767,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func setTickerBackground(_ color: NSColor?) {
         TickerBackgroundPreference.save(color)
-        applyTickerBackground(color)
+        tickerAlarmColor = color
+        applyTickerAppearance(alarmActive: tickerAlarmActive)
         updateSettingsMenuChecks(peekTicker.speed)
         publishAPI()
     }
@@ -777,17 +792,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         publishAPI()
     }
 
-    private func applyTickerBackground(_ color: NSColor?) {
-        tickerBackgroundColor = color
-        tickerBackgroundView?.color = color
-        guard let color else {
-            peekTicker?.foregroundColor = .labelColor
-            peekSourceLabel?.textColor = .secondaryLabelColor
-            peekPrimaryActions?.foregroundColor = nil
-            peekCornerControls?.foregroundColor = nil
-            return
-        }
-        let foreground: NSColor = TickerBackgroundPreference.usesDarkForeground(on: color)
+    private func applyTickerAppearance(alarmActive: Bool) {
+        tickerAlarmActive = alarmActive
+        let background = TickerAppearance.background(
+            alarmActive: alarmActive, configuredAlarmColor: tickerAlarmColor)
+        tickerActiveBackgroundColor = background
+        tickerBackgroundView?.color = background
+        let foreground: NSColor = TickerBackgroundPreference.usesDarkForeground(on: background)
             ? NSColor(calibratedWhite: 0.08, alpha: 1)
             : NSColor.white
         peekTicker?.foregroundColor = foreground
@@ -798,7 +809,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func updateSettingsMenuChecks(_ speed: TickerSpeed) {
         tickerSettingsMenu?.update(speed: speed, width: compactWidth,
-                                   usesSystemBackground: tickerBackgroundColor == nil)
+                                   usesDefaultAlarmColor: tickerAlarmColor == nil)
     }
 
     private func setCompactWidth(_ requestedWidth: CGFloat) {
@@ -1025,6 +1036,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let preview = eventPreviews[compactIndex]
                 peekTicker.text = normalizedTickerText(preview.tickerText)
                 updatePeekHeader(source: preview.displaySource)
+                applyTickerAppearance(alarmActive: preview.alarmActive)
+            } else {
+                applyTickerAppearance(alarmActive: false)
             }
             previousButton.isEnabled = compactIndex > 0
             nextButton.isEnabled = compactIndex >= 0 && compactIndex + 1 < eventCards.count
@@ -1322,6 +1336,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
               eventPreviews[compactIndex] === preview else { return }
         peekTicker.text = normalizedTickerText(preview.tickerText)
         updatePeekHeader(source: preview.displaySource)
+        applyTickerAppearance(alarmActive: preview.alarmActive)
         // The reader displays an immutable snapshot. Async evaluator updates
         // remain on the underlying message and appear after the reader closes.
     }
@@ -1390,6 +1405,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     "kind": "drift-clean", "text": "no alert", "provider": provider,
                     "source": source, "latencyMs": Int(ms),
                 ])
+                if let existingPreview { self.refreshPreview(existingPreview) }
                 self.publishAPI()
             case .failed(let message):
                 if card == nil || preview == nil {
