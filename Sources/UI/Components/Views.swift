@@ -39,6 +39,31 @@ final class WrappingTextField: NSTextField {
     }
 }
 
+/// Intrinsically sized rich text for card bodies. NSTextField can retain the
+/// full attributed string while drawing only its first paragraph; NSTextView's
+/// text layout manager renders every paragraph and exposes its exact height.
+final class IntrinsicTextView: NSTextView {
+    private var measuredWidth: CGFloat = 0
+
+    override var intrinsicContentSize: NSSize {
+        let width = bounds.width > 1 ? bounds.width : 496
+        textContainer?.containerSize = NSSize(
+            width: width, height: CGFloat.greatestFiniteMagnitude)
+        layoutManager?.ensureLayout(for: textContainer!)
+        let height = layoutManager.map { ceil($0.usedRect(for: textContainer!).height) } ?? 0
+        return NSSize(width: NSView.noIntrinsicMetric, height: height)
+    }
+
+    override func layout() {
+        super.layout()
+        guard bounds.width > 1, abs(bounds.width - measuredWidth) > 0.5 else { return }
+        measuredWidth = bounds.width
+        textContainer?.containerSize = NSSize(
+            width: bounds.width, height: CGFloat.greatestFiniteMagnitude)
+        invalidateIntrinsicContentSize()
+    }
+}
+
 final class ConstrainedPanel: NSPanel {
     var escapeRequested: (() -> Void)?
     override var canBecomeKey: Bool { true }
@@ -171,7 +196,7 @@ func renderedBody(_ text: String, kind: String) -> NSAttributedString {
 final class EventCard: NSView {
     var contentChanged: (() -> Void)?
     private let footer = NSTextField(labelWithString: "")
-    private let body = WrappingTextField(wrappingLabelWithString: "")
+    private let body = IntrinsicTextView(frame: .zero)
     private let stack = NSStackView()
 
     init(source: String, time: String, event: UIEvent) {
@@ -201,19 +226,22 @@ final class EventCard: NSView {
         header.addArrangedSubview(NSView())
         header.addArrangedSubview(timeLabel)
 
+        body.isEditable = false
         body.isSelectable = true
-        body.maximumNumberOfLines = 0
-        body.usesSingleLineMode = false
-        body.lineBreakMode = .byWordWrapping
-        body.preferredMaxLayoutWidth = 500
-        body.cell?.wraps = true
-        body.cell?.isScrollable = false
-        body.cell?.truncatesLastVisibleLine = false
+        body.drawsBackground = false
+        body.isRichText = true
+        body.textContainerInset = .zero
+        body.textContainer?.lineFragmentPadding = 0
+        body.isHorizontallyResizable = false
+        body.isVerticallyResizable = true
+        body.textContainer?.widthTracksTextView = true
+        body.textContainer?.containerSize = NSSize(
+            width: 496, height: CGFloat.greatestFiniteMagnitude)
         body.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         body.setContentHuggingPriority(.defaultLow, for: .horizontal)
         body.setContentCompressionResistancePriority(.required, for: .vertical)
         body.setContentHuggingPriority(.required, for: .vertical)
-        body.attributedStringValue = renderedBody(event.text, kind: event.kind)
+        body.textStorage?.setAttributedString(renderedBody(event.text, kind: event.kind))
 
         footer.font = .systemFont(ofSize: 11, weight: .medium)
         footer.textColor = .secondaryLabelColor
@@ -234,6 +262,8 @@ final class EventCard: NSView {
         stack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         addSubview(stack)
         setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        setContentHuggingPriority(.required, for: .vertical)
+        setContentCompressionResistancePriority(.required, for: .vertical)
 
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 14),
@@ -274,6 +304,8 @@ final class EventCard: NSView {
     var layoutMetrics: (card: NSRect, body: NSRect, footer: NSRect) {
         (frame, body.convert(body.bounds, to: self), footer.convert(footer.bounds, to: self))
     }
+
+    var displayedText: String { body.string }
 
     func setAlert(_ text: String) {
         layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.10).cgColor

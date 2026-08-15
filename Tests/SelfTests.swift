@@ -101,7 +101,8 @@ if CommandLine.arguments.contains("--layout-selftest") {
     guard abs(metrics.card.width - fixedCardWidth) < 0.5,
           metrics.body.minX >= 12,
           metrics.body.maxX <= fixedCardWidth - 12,
-          metrics.body.height > singleLineHeight * 1.5 else {
+          metrics.body.height > singleLineHeight * 1.5,
+          card.contentHuggingPriority(for: .vertical) == .required else {
         FileHandle.standardError.write(
             "layout self-test failed: card=\(metrics.card) body=\(metrics.body)\n"
                 .data(using: .utf8)!)
@@ -139,6 +140,31 @@ if CommandLine.arguments.contains("--presentation-selftest") {
         exit(1)
     }
     print("presentation: useful summary preserved until readable content arrives")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--two-summary-card-selftest") {
+    let text = "**Planning visualization with OpenRouter Kimi K3**\n\n" +
+        "**Verifying OpenRouter API access and environment**"
+    let event = UIEvent(timestamp: "2026-08-15T00:00:00Z", kind: "analysis",
+                        text: text, readableAnalysis: true)
+    let card = EventCard(source: "Codex · guidelet", time: "00:00:00", event: event)
+    card.translatesAutoresizingMaskIntoConstraints = true
+    card.frame = NSRect(x: 0, y: 0, width: 524, height: 300)
+    card.setFooter("History · already seen")
+    card.layoutSubtreeIfNeeded()
+    let metrics = card.layoutMetrics
+    let line = NSFont.systemFont(ofSize: 15).boundingRectForFont.height
+    guard card.displayedText ==
+            "Planning visualization with OpenRouter Kimi K3\n\n" +
+            "Verifying OpenRouter API access and environment",
+          metrics.body.height >= line * 2.5 else {
+        let failure = "two-summary card failed: bodyHeight=\(metrics.body.height) " +
+            "text=\(card.displayedText.debugDescription)\n"
+        FileHandle.standardError.write(failure.data(using: .utf8)!)
+        exit(1)
+    }
+    print("two-summary card: complete=true bodyHeight=\(Int(metrics.body.height))")
     exit(0)
 }
 
@@ -247,9 +273,9 @@ if CommandLine.arguments.contains("--message-view-selftest") {
     let shortHeight = message.preferredHeight(forWidth: 560)
     guard message.source == "Codex · Message test",
           message.text == "Complete rendered summary with inline code.",
-          message.lifecycleButtonTitles == ["Done", "Quit"],
+          message.lifecycleButtonTitles == ["Done", "More"],
           message.tone == .normal,
-          shortHeight == 150,
+          shortHeight == 118,
           !message.text.contains("**") else {
         FileHandle.standardError.write("message view self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -269,12 +295,12 @@ if CommandLine.arguments.contains("--message-view-selftest") {
                     .joined(separator: "\n"),
                  kind: "analysis")
     let longHeight = message.preferredHeight(forWidth: 560)
-    guard longHeight == 520, longHeight > shortHeight else {
+    guard longHeight == 420, longHeight > shortHeight else {
         FileHandle.standardError.write(
             "message content-fit self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("message view: dedicated=true markdownRendered=true close=true quit=true " +
+    print("message view: dedicated=true markdownRendered=true done=true overflow=true " +
           "errorTone=true contentFit=true")
     exit(0)
 }
@@ -427,7 +453,7 @@ if CommandLine.arguments.contains("--provider-icon-selftest") {
 }
 
 if CommandLine.arguments.contains("--settings-menu-selftest") {
-    let button = NSPopUpButton(frame: .zero, pullsDown: true)
+    let button = NSButton(frame: .zero)
     let settings = TickerSettingsMenu()
     settings.install(on: button)
     settings.update(speed: .normal, width: CompactWindowSizing.standardWidth,
@@ -439,15 +465,15 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
                             "Bottom Center", "Bottom Right"],
         "Appearance": ["Ticker Background…", "Use System Background"],
     ]
-    guard settings.structure == expected, button.numberOfItems == 6,
+    guard settings.structure == expected, settings.menu.numberOfItems == 4,
+          settings.usesSingleButtonLauncher,
           settings.topLevelTitles == ["Ticker Speed", "Window Width",
-                                      "Window Position", "Appearance",
-                                      "What to Check…"] else {
+                                      "Window Position", "Appearance"] else {
         FileHandle.standardError.write(
             "settings menu self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("settings menu: categories=4 whatToCheck=true hierarchical=true")
+    print("settings menu: categories=4 singleButton=true hierarchical=true")
     exit(0)
 }
 
@@ -520,13 +546,15 @@ if CommandLine.arguments.contains("--compact-width-selftest") {
           CompactWindowSizing.clamped(440) == 440,
           CompactWindowSizing.clamped(700) == 560,
           CompactWindowSizing.headerStyle(for: 400) == .stacked,
-          CompactWindowSizing.headerStyle(for: 560) == .inline,
-          CompactWindowSizing.headerHeight(for: 400) == 88,
-          CompactWindowSizing.headerHeight(for: 560) == 52,
-          CompactWindowSizing.controlsHeight(for: 400) == 88,
-          CompactWindowSizing.controlsHeight(for: 560) == 52,
-          !shouldShowHistoryFeed(peekMode: false, messageMode: false,
-                                 compactMode: true),
+          CompactWindowSizing.headerStyle(for: 560) == .stacked,
+          CompactWindowSizing.headerStyle(for: 700) == .inline,
+          CompactWindowSizing.headerHeight(for: 400) == 82,
+          CompactWindowSizing.headerHeight(for: 560) == 82,
+          CompactWindowSizing.headerHeight(for: 700) == 52,
+          CompactWindowSizing.controlsHeight(for: 400) == 292,
+          CompactWindowSizing.controlsHeight(for: 560) == 292,
+          shouldShowHistoryFeed(peekMode: false, messageMode: false,
+                                compactMode: true),
           shouldShowHistoryFeed(peekMode: false, messageMode: false,
                                 compactMode: false) else {
         FileHandle.standardError.write("compact width self-test failed\n".data(using: .utf8)!)
@@ -587,15 +615,15 @@ if CommandLine.arguments.contains("--exit-controls-selftest") {
     controls.quitRequested = { quit = true }
     controls.requestClose(nil)
     controls.requestQuit(nil)
-    guard controls.buttonTitles == ["Close", "Quit"],
+    guard controls.buttonTitles == ["Done", "More"],
           controls.accessibilityNames == ["Close details and return to ticker",
-                                          "Quit Thinkpeek"],
-          controls.usesSymbolButtons, closed, quit else {
+                                          "More application actions"],
+          controls.overflowMenuTitles == ["Quit Thinkpeek"], closed, quit else {
         FileHandle.standardError.write(
             "exit controls self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("exit controls: close=true quit=true symbols=true visible=true accessible=true")
+    print("exit controls: done=true quitInOverflow=true visible=true accessible=true")
     exit(0)
 }
 
@@ -623,6 +651,30 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
         exit(1)
     }
     print("privacy audit: reasoning=true toolsDiscarded=true outbound=true contentLogged=false")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--ui-command-api-selftest") {
+    let logURL = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("thinkpeek-ui-api-\(UUID().uuidString).jsonl")
+    let api = UIStateServer(logURL: logURL)
+    var handled: [String] = []
+    api.actionHandler = { handled.append($0.name) }
+    api.perform(.showControls, origin: .appKit)
+    api.perform(.next, origin: .http)
+    api.perform(.saveCheckRules(text: "SECRET_RULE_CONTENT", mode: "whole-text"),
+                origin: .appKit)
+    let log = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+    try? FileManager.default.removeItem(at: logURL)
+    guard handled == ["controls", "next", "save-check-rules"],
+          log.contains("\"origin\":\"appKit\""),
+          log.contains("\"origin\":\"http\""),
+          !log.contains("SECRET_RULE_CONTENT") else {
+        FileHandle.standardError.write(
+            "UI command API self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("UI command API: appKit=true http=true sameHandler=true contentFreeLog=true")
     exit(0)
 }
 }

@@ -95,7 +95,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var nextButton: NSButton!
     private var restartTickerButton: NSButton!
     private var positionLabel: NSTextField!
-    private var positionButton: NSPopUpButton!
+    private var positionButton: NSButton!
+    private var checkRulesButton: NSButton!
     private var tickerSettingsMenu: TickerSettingsMenu!
     private var checkRulesEditor: CheckRulesEditor?
     private var expandButton: NSButton!
@@ -122,6 +123,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var lastScan = Date.distantPast
     private var lastPickerRefresh = Date.distantPast
     private var monitorsReady = false
+    private var initialScanComplete = false
     private var names: [String: String] = [:]
     private var knownOffsets: [String: UInt64] = [:]
     private var alertCount = 0
@@ -157,7 +159,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.isMovableByWindowBackground = true
         (panel as? ConstrainedPanel)?.escapeRequested = { [weak self] in
             guard let self, !self.peekMode else { return }
-            self.dismissDetailsToTicker()
+            self.api.perform(.close, origin: .appKit)
         }
 
         let content = CompactInteractionView(
@@ -169,8 +171,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         content.layer?.cornerRadius = 14
         content.layer?.cornerCurve = .continuous
         content.layer?.masksToBounds = true
-        content.clicked = { [weak self] in self?.showCurrentMessage() }
-        content.doubleClicked = { [weak self] in self?.applyPeekMode(false) }
+        content.clicked = { [weak self] in
+            self?.api.perform(.showMessage, origin: .appKit)
+        }
+        content.doubleClicked = { [weak self] in
+            self?.api.perform(.showControls, origin: .appKit)
+        }
 
         peekBar = NSVisualEffectView()
         peekBar.material = .headerView
@@ -204,14 +210,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         peekCornerControls = TickerCornerControls(frame: .zero)
         peekCornerControls.cornerRequested = { [weak self] corner in
-            self?.movePanel(toCorner: corner)
+            self?.api.perform(.corner(corner.routeName), origin: .appKit)
         }
         peekPrimaryActions = TickerPrimaryActions(frame: .zero)
         peekPrimaryActions.checkRulesRequested = { [weak self] in
-            self?.showCheckRulesEditor()
+            self?.api.perform(.editCheckRules, origin: .appKit)
         }
         peekPrimaryActions.controlsRequested = { [weak self] in
-            self?.applyPeekMode(false)
+            self?.api.perform(.showControls, origin: .appKit)
         }
         peekToolbar = NSStackView(views: [peekCornerControls, peekPrimaryActions])
         peekToolbar.orientation = .horizontal
@@ -231,12 +237,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         fullMessageView = FullMessageView(frame: .zero)
         fullMessageView.closeRequested = { [weak self] in
-            self?.dismissDetailsToTicker()
+            self?.api.perform(.close, origin: .appKit)
         }
         fullMessageView.controlsRequested = { [weak self] in
-            self?.showControlsFromMessageReader()
+            self?.api.perform(.showControls, origin: .appKit)
         }
-        fullMessageView.quitRequested = { [weak self] in self?.quitApplication() }
+        fullMessageView.quitRequested = { [weak self] in
+            self?.api.perform(.quit, origin: .appKit)
+        }
         content.addSubview(fullMessageView)
 
         detailHeader = NSVisualEffectView()
@@ -249,8 +257,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         picker = NSPopUpButton(frame: .zero, pullsDown: false)
         picker.translatesAutoresizingMaskIntoConstraints = false
         picker.target = self
-        picker.action = #selector(sessionPicked(_:))
-        picker.font = .systemFont(ofSize: 14, weight: .semibold)
+        picker.action = #selector(requestSessionSelection(_:))
+        picker.font = .systemFont(ofSize: 13, weight: .medium)
         picker.setAccessibilityLabel("Monitored session")
         detailHeader.addSubview(picker)
 
@@ -266,15 +274,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         detailExitControls = DetailExitControls(frame: .zero)
         detailExitControls.closeRequested = { [weak self] in
-            self?.dismissDetailsToTicker()
+            self?.api.perform(.close, origin: .appKit)
         }
         detailExitControls.quitRequested = { [weak self] in
-            self?.quitApplication()
+            self?.api.perform(.quit, origin: .appKit)
         }
         detailHeader.addSubview(detailExitControls)
 
         latestButton = NSButton(title: "Latest ↓", target: self,
-                                action: #selector(scrollToLatest(_:)))
+                                action: #selector(requestLatest(_:)))
         latestButton.bezelStyle = .rounded
         latestButton.controlSize = .small
         latestButton.translatesAutoresizingMaskIntoConstraints = false
@@ -285,8 +293,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         picker.setContentHuggingPriority(.defaultLow, for: .horizontal)
         picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        previousButton = NSButton(title: "", target: self, action: #selector(showPrevious(_:)))
-        nextButton = NSButton(title: "", target: self, action: #selector(showNext(_:)))
+        previousButton = NSButton(title: "", target: self,
+                                  action: #selector(requestPrevious(_:)))
+        nextButton = NSButton(title: "", target: self,
+                              action: #selector(requestNext(_:)))
         previousButton.image = NSImage(systemSymbolName: "chevron.left",
                                        accessibilityDescription: "Previous message")
         nextButton.image = NSImage(systemSymbolName: "chevron.right",
@@ -296,15 +306,18 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         nextButton.toolTip = "Next message"
         nextButton.setAccessibilityLabel("Next message")
         for button in [previousButton!, nextButton!] {
-            button.bezelStyle = .rounded
+            button.bezelStyle = .accessoryBarAction
+            button.isBordered = false
             button.controlSize = .small
             button.imagePosition = .imageOnly
             button.translatesAutoresizingMaskIntoConstraints = false
-            button.widthAnchor.constraint(equalToConstant: 32).isActive = true
+            button.widthAnchor.constraint(equalToConstant: 28).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 26).isActive = true
         }
         restartTickerButton = NSButton(title: "", target: self,
-                                       action: #selector(restartTickerAtBeginning(_:)))
-        restartTickerButton.bezelStyle = .rounded
+                                       action: #selector(requestTickerRestart(_:)))
+        restartTickerButton.bezelStyle = .accessoryBarAction
+        restartTickerButton.isBordered = false
         restartTickerButton.controlSize = .small
         restartTickerButton.image = NSImage(systemSymbolName: "backward.end",
                                              accessibilityDescription: "Restart summary")
@@ -312,61 +325,77 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         restartTickerButton.toolTip = "Return to the beginning of this summary"
         restartTickerButton.setAccessibilityLabel("Restart summary ticker")
         restartTickerButton.translatesAutoresizingMaskIntoConstraints = false
-        restartTickerButton.widthAnchor.constraint(equalToConstant: 32).isActive = true
+        restartTickerButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        restartTickerButton.heightAnchor.constraint(equalToConstant: 26).isActive = true
         positionLabel = NSTextField(labelWithString: "—")
         positionLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         positionLabel.textColor = .secondaryLabelColor
         positionLabel.alignment = .center
         positionLabel.setAccessibilityLabel("Current message position")
         positionLabel.translatesAutoresizingMaskIntoConstraints = false
-        positionLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 42).isActive = true
+        positionLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
 
         expandButton = NSButton(title: "Show all", target: self,
-                                action: #selector(toggleExpanded(_:)))
-        expandButton.bezelStyle = .rounded
+                                action: #selector(requestHistory(_:)))
+        expandButton.bezelStyle = .accessoryBarAction
+        expandButton.isBordered = false
         expandButton.controlSize = .small
         expandButton.title = ""
-        expandButton.image = NSImage(systemSymbolName: "rectangle.stack",
+        expandButton.image = NSImage(systemSymbolName: "clock.arrow.circlepath",
                                      accessibilityDescription: "Show message history")
         expandButton.imagePosition = .imageOnly
-        expandButton.widthAnchor.constraint(equalToConstant: 32).isActive = true
+        expandButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        expandButton.heightAnchor.constraint(equalToConstant: 26).isActive = true
         expandButton.toolTip = "Show complete message history"
         expandButton.setAccessibilityLabel("Show complete message history")
         latestButton.isHidden = true
 
-        positionButton = NSPopUpButton(frame: .zero, pullsDown: true)
+        checkRulesButton = NSButton(
+            image: NSImage(systemSymbolName: "checklist",
+                           accessibilityDescription: "Edit what to check") ?? NSImage(),
+            target: self, action: #selector(requestCheckRules(_:)))
+        checkRulesButton.bezelStyle = .accessoryBarAction
+        checkRulesButton.isBordered = false
+        checkRulesButton.imagePosition = .imageOnly
+        checkRulesButton.controlSize = .small
+        checkRulesButton.toolTip = "Edit what Thinkpeek checks"
+        checkRulesButton.setAccessibilityLabel("Edit what Thinkpeek checks")
+        checkRulesButton.translatesAutoresizingMaskIntoConstraints = false
+        checkRulesButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        checkRulesButton.heightAnchor.constraint(equalToConstant: 26).isActive = true
+
+        positionButton = NSButton(frame: .zero)
         tickerSettingsMenu = TickerSettingsMenu()
         tickerSettingsMenu.speedRequested = { [weak self] speed in
-            self?.setTickerSpeed(speed.rawValue)
+            self?.api.perform(.speed(speed.rawValue), origin: .appKit)
         }
         tickerSettingsMenu.widthRequested = { [weak self] width in
-            self?.setCompactWidth(width)
+            self?.api.perform(.width(width), origin: .appKit)
         }
         tickerSettingsMenu.positionRequested = { [weak self] preset in
-            self?.movePanel(to: preset)
+            self?.api.perform(.position(preset), origin: .appKit)
         }
         tickerSettingsMenu.backgroundRequested = { [weak self] in
-            self?.showTickerBackgroundPicker(nil)
+            self?.api.perform(.chooseBackground, origin: .appKit)
         }
         tickerSettingsMenu.systemBackgroundRequested = { [weak self] in
-            self?.setTickerBackground(nil)
-        }
-        tickerSettingsMenu.checkRulesRequested = { [weak self] in
-            self?.showCheckRulesEditor()
+            self?.api.perform(.backgroundRGBA(nil), origin: .appKit)
         }
         tickerSettingsMenu.install(on: positionButton)
         positionButton.controlSize = .small
-        positionButton.toolTip = "Ticker appearance and window settings"
-        positionButton.setAccessibilityLabel("Ticker appearance and window settings")
-        positionButton.widthAnchor.constraint(equalToConstant: 36).isActive = true
+        positionButton.translatesAutoresizingMaskIntoConstraints = false
+        positionButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        positionButton.heightAnchor.constraint(equalToConstant: 26).isActive = true
         updateSettingsMenuChecks(savedSpeed)
 
-        let controls = NSStackView(views: [previousButton, positionLabel, nextButton,
-                                           restartTickerButton,
-                                           positionButton, expandButton, latestButton])
+        let navigation = DetailToolbarGroup(
+            views: [previousButton, positionLabel, nextButton, restartTickerButton])
+        let utilities = DetailToolbarGroup(
+            views: [checkRulesButton, positionButton, expandButton, latestButton])
+        let controls = NSStackView(views: [navigation, utilities])
         controls.orientation = .horizontal
         controls.alignment = .centerY
-        controls.spacing = 4
+        controls.spacing = 8
         controls.translatesAutoresizingMaskIntoConstraints = false
         controls.setContentHuggingPriority(.required, for: .horizontal)
         controls.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -455,8 +484,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         knownOffsets = transcriptSizes()
         api.captureHandler = { [weak self] in self?.captureWindowPNG() }
-        api.actionHandler = { [weak self] action in self?.handleAction(action) }
-        api.refreshHandler = { [weak self] in self?.publishAPI() }
+        api.actionHandler = { [weak self] command in self?.handleCommand(command) }
         api.start()
         outsideClickMonitor.start { [weak self] location in
             DispatchQueue.main.async {
@@ -466,7 +494,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                             self.checkRulesEditor?.window?.isVisible == true,
                                            windowFrame: self.panel.frame,
                                            clickLocation: location) else { return }
-                self.dismissDetailsToTicker()
+                self.api.perform(.close, origin: .appKit)
             }
         }
         refreshPicker()
@@ -486,6 +514,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         api.publish([
             "schemaVersion": 1,
             "ready": true,
+            "initialScanComplete": initialScanComplete,
             "windowTitle": panel.title,
             "selection": picker.titleOfSelectedItem ?? "",
             "status": status.stringValue,
@@ -660,38 +689,39 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.maxSize = maxSize
     }
 
-    private func handleAction(_ action: String) {
-        switch action {
-        case "previous": showPrevious(nil)
-        case "next": showNext(nil)
-        case "toggle-expanded": toggleExpanded(nil)
-        case "restart-ticker": restartTickerAtBeginning(nil)
-        case "message": showCurrentMessage()
-        case "controls": applyPeekMode(false)
-        case "close": dismissDetailsToTicker()
-        case "quit": quitApplication()
-        case "check-rules": showCheckRulesEditor()
-        case let value where value.hasPrefix("corner/"):
-            if let corner = TickerWindowCorner.allCases.first(where: {
-                $0.routeName == String(value.dropFirst("corner/".count))
-            }) {
-                movePanel(toCorner: corner)
-            }
-        case let value where value.hasPrefix("speed/"):
-            setTickerSpeed(String(value.dropFirst("speed/".count)))
-        case "width/narrow": setCompactWidth(CompactWindowSizing.narrowWidth)
-        case "width/standard": setCompactWidth(CompactWindowSizing.standardWidth)
-        case "background/blue":
-            setTickerBackground(NSColor(srgbRed: 0.16, green: 0.38,
-                                        blue: 0.68, alpha: 1))
-        case "background/system": setTickerBackground(nil)
-        case "reveal":
-            applyPeekMode(false)
-        case "hide":
-            applyPeekMode(true)
-        case let value where value.hasPrefix("position/"):
-            movePanel(to: String(value.dropFirst("position/".count)))
-        default: break
+    private func handleCommand(_ command: UICommand) {
+        switch command {
+        case .previous: showPrevious()
+        case .next: showNext()
+        case .latest: scrollToLatest()
+        case .showHistory: showHistory()
+        case .restartTicker: restartTickerAtBeginning()
+        case .showMessage: showCurrentMessage()
+        case .showControls: showControlsFromMessageReader()
+        case .close: dismissDetailsToTicker()
+        case .quit: quitApplication()
+        case .editCheckRules: showCheckRulesEditor()
+        case .saveCheckRules(let text, let rawMode):
+            guard let mode = CheckInstructionMode(rawValue: rawMode) else { return }
+            CheckRulesStore.saveRaw(text)
+            CheckRulesStore.saveMode(mode)
+            refreshStatus()
+            publishAPI()
+        case .selectSession(let path): applySessionSelection(path: path)
+        case .corner(let name):
+            guard let corner = TickerWindowCorner.allCases.first(where: {
+                $0.routeName == name
+            }) else { return }
+            movePanel(toCorner: corner)
+        case .speed(let raw): setTickerSpeed(raw)
+        case .width(let width): setCompactWidth(width)
+        case .position(let preset): movePanel(to: preset)
+        case .chooseBackground: showTickerBackgroundPicker(nil)
+        case .backgroundRGBA(let components):
+            guard let components else { setTickerBackground(nil); return }
+            guard components.count == 4 else { return }
+            setTickerBackground(NSColor(srgbRed: components[0], green: components[1],
+                                        blue: components[2], alpha: components[3]))
         }
     }
 
@@ -715,7 +745,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func tickerBackgroundChanged(_ sender: NSColorPanel) {
-        setTickerBackground(sender.color)
+        let color = sender.color.usingColorSpace(.sRGB) ?? sender.color
+        api.perform(.backgroundRGBA([
+            Double(color.redComponent), Double(color.greenComponent),
+            Double(color.blueComponent), Double(color.alphaComponent),
+        ]), origin: .appKit)
     }
 
     private func setTickerBackground(_ color: NSColor?) {
@@ -733,10 +767,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let editor = CheckRulesEditor(contents: CheckRulesStore.loadRaw(),
                                       mode: CheckRulesStore.mode(),
                                       save: { [weak self] text, mode in
-            CheckRulesStore.saveRaw(text)
-            CheckRulesStore.saveMode(mode)
-            self?.refreshStatus()
-            self?.publishAPI()
+            self?.api.perform(.saveCheckRules(text: text, mode: mode.rawValue),
+                              origin: .appKit)
         }, closed: { [weak self] in
             self?.checkRulesEditor = nil
             self?.publishAPI()
@@ -891,9 +923,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func showControlsFromMessageReader() {
-        if messageMode {
-            compactIndex = MessageReaderSelection.latestIndex(eventCount: eventCards.count)
-        }
         applyPeekMode(false)
         updateCardVisibility()
     }
@@ -920,33 +949,51 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.becomesKeyOnlyIfNeeded = false
         let readerHeight = fullMessageView.preferredHeight(forWidth: compactWidth)
         transitionPanel(to: readerHeight, width: compactWidth,
-                        minSize: NSSize(width: CompactWindowSizing.minimumWidth, height: 150),
-                        maxSize: NSSize(width: CompactWindowSizing.maximumWidth, height: 520))
+                        minSize: NSSize(width: CompactWindowSizing.minimumWidth, height: 118),
+                        maxSize: NSSize(width: CompactWindowSizing.maximumWidth, height: 420))
         focusDetails()
         publishAPI()
     }
 
-    @objc private func showControls(_ sender: Any?) { applyPeekMode(false) }
+    @objc private func requestPrevious(_ sender: Any?) {
+        api.perform(.previous, origin: .appKit)
+    }
 
-    @objc private func showPrevious(_ sender: Any?) {
+    @objc private func requestNext(_ sender: Any?) {
+        api.perform(.next, origin: .appKit)
+    }
+
+    @objc private func requestTickerRestart(_ sender: Any?) {
+        api.perform(.restartTicker, origin: .appKit)
+    }
+
+    @objc private func requestHistory(_ sender: Any?) {
+        api.perform(.showHistory, origin: .appKit)
+    }
+
+    @objc private func requestCheckRules(_ sender: Any?) {
+        api.perform(.editCheckRules, origin: .appKit)
+    }
+
+    private func showPrevious() {
         guard compactMode, compactIndex > 0 else { return }
         compactIndex -= 1
         updateCardVisibility()
     }
 
-    @objc private func showNext(_ sender: Any?) {
+    private func showNext() {
         guard compactMode, compactIndex + 1 < eventCards.count else { return }
         compactIndex += 1
         updateCardVisibility()
     }
 
-    @objc private func restartTickerAtBeginning(_ sender: Any?) {
+    private func restartTickerAtBeginning() {
         guard compactMode else { return }
         peekTicker.restart()
         if !peekMode { applyPeekMode(true) }
     }
 
-    @objc private func toggleExpanded(_ sender: Any?) {
+    private func showHistory() {
         guard compactMode else { return }
         if peekMode || messageMode { applyPeekMode(false) }
         compactMode = false
@@ -998,11 +1045,27 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             latestButton.isHidden = false
         }
         feedView.layoutSubtreeIfNeeded()
+        fitCompactControlsToContent()
         if compactMode {
             scrollView.contentView.scroll(to: .zero)
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
         publishAPI()
+    }
+
+    private func fitCompactControlsToContent() {
+        guard compactMode, !peekMode, !messageMode else { return }
+        let previewHeight = min(CompactWindowSizing.messagePreviewHeight,
+                                ceil(feedStack.fittingSize.height))
+        let targetHeight = CompactWindowSizing.headerHeight(for: compactWidth) +
+            previewHeight
+        guard abs(panel.frame.height - targetHeight) > 0.5 else { return }
+        transitionPanel(to: targetHeight, width: compactWidth,
+                        minSize: NSSize(width: CompactWindowSizing.minimumWidth,
+                                        height: targetHeight),
+                        maxSize: NSSize(width: CompactWindowSizing.maximumWidth,
+                                        height: targetHeight),
+                        animated: false)
     }
 
     private func updatePeekHeader(source: String) {
@@ -1046,7 +1109,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return feedView.bounds.maxY - visible.maxY < 64
     }
 
-    @objc private func scrollToLatest(_ sender: Any?) {
+    @objc private func requestLatest(_ sender: Any?) {
+        api.perform(.latest, origin: .appKit)
+    }
+
+    private func scrollToLatest() {
         feedView.layoutSubtreeIfNeeded()
         // A compact carousel shows one card, so it must open at that card's
         // beginning. Scrolling to the feed bottom hid its header and body as
@@ -1092,7 +1159,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if deferScrollAndLayout { return card }
         feedView.layoutSubtreeIfNeeded()
         if follow {
-            DispatchQueue.main.async { [weak self] in self?.scrollToLatest(nil) }
+            DispatchQueue.main.async { [weak self] in self?.scrollToLatest() }
         } else {
             unseenCount += 1
             latestButton.title = "\(unseenCount) new ↓"
@@ -1156,9 +1223,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     // MARK: session picker
 
-    @objc private func sessionPicked(_ sender: NSPopUpButton) {
+    @objc private func requestSessionSelection(_ sender: NSPopUpButton) {
         let i = sender.indexOfSelectedItem
-        pinned = (i <= 0 || i - 1 >= sessions.count) ? nil : sessions[i - 1].path
+        let path = (i <= 0 || i - 1 >= sessions.count) ? nil : sessions[i - 1].path
+        api.perform(.selectSession(path: path), origin: .appKit)
+    }
+
+    private func applySessionSelection(path: String?) {
+        pinned = path
         for (path, tailer) in tailers { knownOffsets[path] = tailer.resumeOffset }
         tailers.removeAll()
         clearFeed()
@@ -1414,8 +1486,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         if isInitialHistoryBatch {
             feedView.layoutSubtreeIfNeeded()
-            scrollToLatest(nil)
+            scrollToLatest()
         }
+        initialScanComplete = true
         publishAPI()
     }
 }

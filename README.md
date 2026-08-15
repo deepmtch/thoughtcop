@@ -16,7 +16,6 @@ tails both sources and reacts when a readable reasoning summary lands on disk.
 ./.build/thinkpeek                                   # the window
 ./restart.sh                                         # rebuild and replace a running copy
 ./.build/thinkpeek --local-only                      # never send reasoning externally
-./restart.sh                                          # native window + live evaluator
 ```
 
 Swift/AppKit + stdlib Python, no dependencies. **Nothing is ever written under
@@ -112,18 +111,20 @@ the reader returns to the ticker. The visible controls button or a deliberate do
 separate navigation/settings view. The **↤** control returns directly to the
 ticker's beginning. The settings menu selects and remembers Slow, Normal, or Fast
 ticker movement and provides Top/Bottom × Left/Center/Right presets.
-The reader also keeps **Quit** visible because the accessory HUD has no standard
-application menu.
+The reader keeps **Done** visible and places **Quit Thinkpeek** in the standard
+ellipsis overflow menu because the accessory HUD has no standard application menu.
 Escape from the reader, controls, or full history always returns directly to the
 one-line ticker.
-Controls and full history also keep explicit **Close** and **Quit** buttons visible;
-Close returns to the ticker without terminating the monitor, while Quit exits it.
+Controls and full history use the same lifecycle pattern: **Done** returns to the
+ticker without terminating the monitor, while **Quit Thinkpeek** remains in the
+ellipsis overflow menu.
 The controls and full-message views can be resized horizontally from 380 to 560
 points. Their width is remembered; below 500 points the header stacks into two
 rows so the session selector and controls remain usable. The settings menu also
 offers **Width: Narrow** and **Width: Standard** shortcuts.
-Compact controls are header-only: message content is reserved for the dedicated
-reader, while **Show all** is the only view that displays history cards.
+Compact controls show the currently selected message beneath the toolbar in a
+content-sized viewport capped at 210 points. Clicking the ticker opens the
+dedicated reader, while **Show all** displays the complete history.
 **Show all** opens the full scrollable feed. It has no intermediate **Collapse**
 action; Escape returns directly to the ticker. Compact and full-feed widths are
 hard-capped at 560 and 700 points, so
@@ -262,6 +263,7 @@ Scripts/test.sh
 ./.build/thinkpeek --window-chrome-selftest
 ./.build/thinkpeek --compact-width-selftest
 ./.build/thinkpeek --interaction-selftest
+./.build/thinkpeek --ui-command-api-selftest
 ```
 
 prints the active transcript and its last 5 reasoning blocks — no window involved.

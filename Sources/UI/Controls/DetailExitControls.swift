@@ -4,24 +4,25 @@ import AppKit
 
 final class DetailExitControls: NSStackView {
     private let closeButton: NSButton
-    private let quitButton: NSButton
+    private let moreButton: NSButton
+    private let overflowMenu = NSMenu()
     var closeRequested: (() -> Void)?
     var quitRequested: (() -> Void)?
 
-    var buttonTitles: [String] { ["Close", "Quit"] }
+    var buttonTitles: [String] { ["Done", "More"] }
     var accessibilityNames: [String] {
-        [closeButton.accessibilityLabel() ?? "", quitButton.accessibilityLabel() ?? ""]
+        [closeButton.accessibilityLabel() ?? "", moreButton.accessibilityLabel() ?? ""]
     }
-    var usesSymbolButtons: Bool { closeButton.image != nil && quitButton.image != nil }
+    var overflowMenuTitles: [String] { overflowMenu.items.map(\.title) }
 
     override init(frame frameRect: NSRect) {
-        closeButton = NSButton(title: "Close", target: nil, action: nil)
-        quitButton = NSButton(title: "Quit", target: nil, action: nil)
+        closeButton = NSButton(title: "Done", target: nil, action: nil)
+        moreButton = NSButton(title: "", target: nil, action: nil)
         super.init(frame: frameRect)
 
         orientation = .horizontal
         alignment = .centerY
-        spacing = 6
+        spacing = 4
         translatesAutoresizingMaskIntoConstraints = false
         setContentHuggingPriority(.required, for: .horizontal)
         setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -32,29 +33,39 @@ final class DetailExitControls: NSStackView {
         closeButton.setAccessibilityLabel("Close details and return to ticker")
         closeButton.keyEquivalent = "\u{1b}"
 
-        quitButton.target = self
-        quitButton.action = #selector(requestQuit(_:))
-        quitButton.toolTip = "Quit Thinkpeek (Command-Q)"
-        quitButton.setAccessibilityLabel("Quit Thinkpeek")
-        quitButton.keyEquivalent = "q"
-        quitButton.keyEquivalentModifierMask = [.command]
+        closeButton.bezelStyle = .rounded
+        closeButton.controlSize = .small
+        closeButton.setContentHuggingPriority(.required, for: .horizontal)
+        addArrangedSubview(closeButton)
 
-        for button in [closeButton, quitButton] {
-            button.bezelStyle = .rounded
-            button.controlSize = .small
-            button.title = ""
-            button.imagePosition = .imageOnly
-            button.widthAnchor.constraint(equalToConstant: 30).isActive = true
-            addArrangedSubview(button)
-        }
-        closeButton.image = NSImage(systemSymbolName: "chevron.down",
-                                    accessibilityDescription: "Return to ticker")
-        quitButton.image = NSImage(systemSymbolName: "power",
-                                   accessibilityDescription: "Quit Thinkpeek")
+        let quitItem = NSMenuItem(title: "Quit Thinkpeek",
+                                  action: #selector(requestQuit(_:)),
+                                  keyEquivalent: "q")
+        quitItem.keyEquivalentModifierMask = [.command]
+        quitItem.target = self
+        overflowMenu.addItem(quitItem)
+        moreButton.image = NSImage(systemSymbolName: "ellipsis.circle",
+                                   accessibilityDescription: "More application actions")
+        moreButton.imagePosition = .imageOnly
+        moreButton.bezelStyle = .accessoryBarAction
+        moreButton.isBordered = false
+        moreButton.target = self
+        moreButton.action = #selector(showOverflow(_:))
+        moreButton.toolTip = "More application actions"
+        moreButton.setAccessibilityLabel("More application actions")
+        moreButton.translatesAutoresizingMaskIntoConstraints = false
+        moreButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        addArrangedSubview(moreButton)
     }
 
     required init?(coder: NSCoder) { nil }
 
     @objc func requestClose(_ sender: Any?) { closeRequested?() }
     @objc func requestQuit(_ sender: Any?) { quitRequested?() }
+
+    @objc private func showOverflow(_ sender: NSButton) {
+        overflowMenu.popUp(positioning: nil,
+                           at: NSPoint(x: 0, y: sender.bounds.maxY + 4),
+                           in: sender)
+    }
 }

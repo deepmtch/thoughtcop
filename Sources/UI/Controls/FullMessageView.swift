@@ -4,15 +4,16 @@
 import AppKit
 
 final class FullMessageView: NSVisualEffectView {
-    private static let minimumReaderHeight: CGFloat = 150
-    private static let maximumReaderHeight: CGFloat = 520
-    private static let headerAndMarginsHeight: CGFloat = 84
+    private static let minimumReaderHeight: CGFloat = 118
+    private static let maximumReaderHeight: CGFloat = 420
+    private static let headerAndMarginsHeight: CGFloat = 62
     private let toneWash = NSView()
     private let toneStripe = NSView()
+    private let providerIcon = ProviderIconView(frame: .zero)
     private let sourceLabel = NSTextField(labelWithString: "")
     private let textView = NSTextView()
     private let scrollView = NSScrollView()
-    private let quitButton = NSButton(title: "Quit", target: nil, action: nil)
+    private let exitControls = DetailExitControls(frame: .zero)
     var closeRequested: (() -> Void)?
     var controlsRequested: (() -> Void)?
     var quitRequested: (() -> Void)?
@@ -20,7 +21,7 @@ final class FullMessageView: NSVisualEffectView {
     var source: String { sourceLabel.stringValue }
     var text: String { textView.string }
     private(set) var tone: MessageReaderTone = .normal
-    var lifecycleButtonTitles: [String] { ["Done", quitButton.title] }
+    var lifecycleButtonTitles: [String] { exitControls.buttonTitles }
     var requiresScroll: Bool {
         textView.bounds.height > scrollView.contentView.bounds.height + 0.5
     }
@@ -40,43 +41,39 @@ final class FullMessageView: NSVisualEffectView {
         toneStripe.translatesAutoresizingMaskIntoConstraints = false
         addSubview(toneStripe)
 
-        sourceLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        providerIcon.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(providerIcon)
+
+        sourceLabel.font = .systemFont(ofSize: 12, weight: .medium)
         sourceLabel.textColor = .secondaryLabelColor
         sourceLabel.lineBreakMode = .byTruncatingMiddle
         sourceLabel.translatesAutoresizingMaskIntoConstraints = false
         sourceLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         addSubview(sourceLabel)
 
-        let controlsButton = NSButton(title: "Controls…", target: self,
-                                      action: #selector(showControls(_:)))
-        controlsButton.bezelStyle = .rounded
+        let controlsButton = NSButton(
+            image: NSImage(systemSymbolName: "rectangle.grid.1x2",
+                           accessibilityDescription: "Show controls") ?? NSImage(),
+            target: self, action: #selector(showControls(_:)))
+        controlsButton.bezelStyle = .accessoryBarAction
+        controlsButton.isBordered = false
         controlsButton.controlSize = .small
+        controlsButton.imagePosition = .imageOnly
+        controlsButton.toolTip = "Show navigation and history controls"
+        controlsButton.setAccessibilityLabel("Show navigation and history controls")
         controlsButton.translatesAutoresizingMaskIntoConstraints = false
+        controlsButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
         addSubview(controlsButton)
 
-        let doneButton = NSButton(title: "Done", target: self,
-                                  action: #selector(close(_:)))
-        doneButton.bezelStyle = .rounded
-        doneButton.controlSize = .small
-        doneButton.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(doneButton)
-
-        quitButton.target = self
-        quitButton.action = #selector(quit(_:))
-        quitButton.bezelStyle = .rounded
-        quitButton.controlSize = .small
-        quitButton.toolTip = "Quit Thinkpeek (Command-Q)"
-        quitButton.setAccessibilityLabel("Quit Thinkpeek")
-        quitButton.keyEquivalent = "q"
-        quitButton.keyEquivalentModifierMask = [.command]
-        quitButton.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(quitButton)
+        exitControls.closeRequested = { [weak self] in self?.closeRequested?() }
+        exitControls.quitRequested = { [weak self] in self?.quitRequested?() }
+        addSubview(exitControls)
 
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
         textView.isRichText = true
-        textView.textContainerInset = NSSize(width: 16, height: 14)
+        textView.textContainerInset = NSSize(width: 14, height: 8)
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
         textView.autoresizingMask = [.width]
@@ -101,19 +98,21 @@ final class FullMessageView: NSVisualEffectView {
             toneStripe.leadingAnchor.constraint(equalTo: leadingAnchor),
             toneStripe.bottomAnchor.constraint(equalTo: bottomAnchor),
             toneStripe.widthAnchor.constraint(equalToConstant: 6),
-            sourceLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            sourceLabel.centerYAnchor.constraint(equalTo: doneButton.centerYAnchor),
+            providerIcon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            providerIcon.centerYAnchor.constraint(equalTo: exitControls.centerYAnchor),
+            providerIcon.widthAnchor.constraint(equalToConstant: 18),
+            providerIcon.heightAnchor.constraint(equalToConstant: 18),
+            sourceLabel.leadingAnchor.constraint(equalTo: providerIcon.trailingAnchor,
+                                                   constant: 6),
+            sourceLabel.centerYAnchor.constraint(equalTo: exitControls.centerYAnchor),
             sourceLabel.trailingAnchor.constraint(lessThanOrEqualTo: controlsButton.leadingAnchor,
                                                    constant: -12),
-            controlsButton.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            controlsButton.trailingAnchor.constraint(equalTo: doneButton.leadingAnchor,
-                                                      constant: -8),
-            doneButton.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            doneButton.trailingAnchor.constraint(equalTo: quitButton.leadingAnchor,
-                                                  constant: -8),
-            quitButton.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            quitButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            scrollView.topAnchor.constraint(equalTo: doneButton.bottomAnchor, constant: 8),
+            exitControls.topAnchor.constraint(equalTo: topAnchor, constant: 9),
+            exitControls.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            controlsButton.centerYAnchor.constraint(equalTo: exitControls.centerYAnchor),
+            controlsButton.trailingAnchor.constraint(equalTo: exitControls.leadingAnchor,
+                                                      constant: -6),
+            scrollView.topAnchor.constraint(equalTo: exitControls.bottomAnchor, constant: 3),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -127,6 +126,7 @@ final class FullMessageView: NSVisualEffectView {
               tone: MessageReaderTone = .normal) {
         sourceLabel.stringValue = source
         sourceLabel.toolTip = source
+        providerIcon.update(source: source)
         textView.textStorage?.setAttributedString(renderedBody(text, kind: kind))
         textView.scrollToBeginningOfDocument(nil)
         applyTone(tone)
@@ -169,7 +169,5 @@ final class FullMessageView: NSVisualEffectView {
         }
     }
 
-    @objc private func close(_ sender: Any?) { closeRequested?() }
     @objc private func showControls(_ sender: Any?) { controlsRequested?() }
-    @objc private func quit(_ sender: Any?) { quitRequested?() }
 }

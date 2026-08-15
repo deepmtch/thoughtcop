@@ -45,3 +45,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-038](BUG-038-automatic-checker-read-tool-records.md) | Automatic checker read tool calls and tool results instead of reasoning only | Fixed |
 | [BUG-039](BUG-039-codex-reasoning-item-was-split-into-summary-lines.md) | Codex reasoning item was split into separate one-line messages | Fixed |
 | [BUG-040](BUG-040-reasoning-only-boundary-had-no-runtime-audit.md) | Reasoning-only boundary had no content-free runtime audit | Fixed |
+| [BUG-041](BUG-041-controls-were-empty-and-command-paths-diverged.md) | Controls hid the message and UI/API command paths diverged | Fixed |

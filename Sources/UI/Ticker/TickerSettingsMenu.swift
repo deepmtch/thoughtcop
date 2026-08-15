@@ -8,28 +8,25 @@ final class TickerSettingsMenu: NSObject {
     var positionRequested: ((String) -> Void)?
     var backgroundRequested: (() -> Void)?
     var systemBackgroundRequested: (() -> Void)?
-    var checkRulesRequested: (() -> Void)?
 
     private(set) var menu = NSMenu()
+    private weak var launcherButton: NSButton?
     private var speedItems: [TickerSpeed: NSMenuItem] = [:]
     private var widthItems: [String: NSMenuItem] = [:]
     private var systemBackgroundItem: NSMenuItem!
 
     var structure: [String: [String]] {
-        Dictionary(uniqueKeysWithValues: menu.items.dropFirst().compactMap { item in
+        Dictionary(uniqueKeysWithValues: menu.items.compactMap { item in
             guard let submenu = item.submenu else { return nil }
             return (item.title, submenu.items.map(\.title))
         })
     }
 
-    var topLevelTitles: [String] { menu.items.dropFirst().map(\.title) }
+    var topLevelTitles: [String] { menu.items.map(\.title) }
+    var usesSingleButtonLauncher: Bool { launcherButton != nil }
 
-    func install(on button: NSPopUpButton) {
+    func install(on button: NSButton) {
         menu = NSMenu()
-        let launcher = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        launcher.image = NSImage(systemSymbolName: "slider.horizontal.3",
-                                 accessibilityDescription: "Ticker settings")
-        menu.addItem(launcher)
         menu.addItem(submenuItem(title: "Ticker Speed", symbol: "speedometer",
                                  submenu: speedMenu()))
         menu.addItem(submenuItem(title: "Window Width", symbol: "arrow.left.and.right",
@@ -38,14 +35,23 @@ final class TickerSettingsMenu: NSObject {
                                  submenu: positionMenu()))
         menu.addItem(submenuItem(title: "Appearance", symbol: "paintpalette",
                                  submenu: appearanceMenu()))
-        let checkRules = NSMenuItem(title: "What to Check…",
-                                     action: #selector(checkRulesPicked(_:)),
-                                     keyEquivalent: "")
-        checkRules.target = self
-        checkRules.image = NSImage(systemSymbolName: "checklist",
-                                   accessibilityDescription: checkRules.title)
-        menu.addItem(checkRules)
-        button.menu = menu
+        launcherButton = button
+        button.title = ""
+        button.image = NSImage(systemSymbolName: "gearshape",
+                               accessibilityDescription: "Display settings")
+        button.imagePosition = .imageOnly
+        button.bezelStyle = .accessoryBarAction
+        button.isBordered = false
+        button.target = self
+        button.action = #selector(showMenu(_:))
+        button.toolTip = "Display settings"
+        button.setAccessibilityLabel("Display settings")
+    }
+
+    @objc private func showMenu(_ sender: NSButton) {
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: 0, y: sender.bounds.maxY + 4),
+                   in: sender)
     }
 
     func update(speed: TickerSpeed, width: CGFloat, usesSystemBackground: Bool) {
@@ -154,5 +160,4 @@ final class TickerSettingsMenu: NSObject {
     @objc private func systemBackgroundPicked(_ sender: NSMenuItem) {
         systemBackgroundRequested?()
     }
-    @objc private func checkRulesPicked(_ sender: NSMenuItem) { checkRulesRequested?() }
 }
