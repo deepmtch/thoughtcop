@@ -43,3 +43,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-036](BUG-036-short-message-opened-in-stale-tall-reader.md) | Short summary inherited a stale oversized reader height | Fixed |
 | [BUG-037](BUG-037-detail-header-looked-like-debug-toolbar.md) | Detail controls looked like a dense two-row debug toolbar | Fixed |
 | [BUG-038](BUG-038-automatic-checker-read-tool-records.md) | Automatic checker read tool calls and tool results instead of reasoning only | Fixed |
+| [BUG-039](BUG-039-codex-reasoning-item-was-split-into-summary-lines.md) | Codex reasoning item was split into separate one-line messages | Fixed |

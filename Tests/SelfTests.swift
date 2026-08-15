@@ -42,12 +42,16 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
 
     let codexLine = #"{"timestamp":"2026-08-13T10:00:00.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","status":"completed","call_id":"call_1","input":"tools.apply_patch(...)"}}"#
     let claudeLine = #"{"timestamp":"2026-08-13T10:00:01.000Z","type":"assistant","message":{"content":[{"type":"tool_use","id":"tool_1","name":"Edit","input":{"file_path":"Sources/Test.swift"}}]}}"#
-    let reasoningLine = #"{"timestamp":"2026-08-13T10:00:02.000Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"Planning a safe change"}}"#
+    let duplicateEventLine = #"{"timestamp":"2026-08-13T10:00:01.900Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"**Assessing safe change**"}}"#
+    let reasoningLine = #"{"timestamp":"2026-08-13T10:00:02.000Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"**Assessing safe change**"},{"type":"summary_text","text":"**Planning a safe change**"}],"encrypted_content":"sealed"}}"#
     let toolRecords = blocks(in: codexLine) + blocks(in: claudeLine)
     let reasoningRecords = blocks(in: reasoningLine)
     guard toolRecords.isEmpty,
+          blocks(in: duplicateEventLine).isEmpty,
           reasoningRecords.count == 1,
           reasoningRecords[0].kind == .thinking,
+          reasoningRecords[0].text ==
+            "**Assessing safe change**\n\n**Planning a safe change**",
           reasoningRecords[0].evaluationRecord.json["event_type"] as? String ==
             "reasoning_summary" else {
         FileHandle.standardError.write(
@@ -77,6 +81,7 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
         exit(1)
     }
     print("evaluator: verbatim=true binary=true reasoningOnly=true toolRecordsExcluded=true " +
+          "completeSummaryArrays=true " +
           "oversizeMeasured=true invalidVisible=true alertAttached=true")
     exit(0)
 }

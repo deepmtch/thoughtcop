@@ -112,11 +112,10 @@ func blocks(in line: String) -> [Block] {
                           signatureChars: 0, kind: .activity)]
         }
         if payload["type"] as? String == "agent_reasoning" {
-            let text = (payload["text"] as? String ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { return [] }
-            return [Block(ts: ts, text: text, sealed: false,
-                          signatureChars: 0, kind: .thinking)]
+            // Codex repeats these individual entries in the following
+            // response_item.reasoning.summary array. That array is the complete,
+            // ordered reasoning item and is the sole readable source below.
+            return []
         }
     }
     if obj["type"] as? String == "response_item",
@@ -128,12 +127,21 @@ func blocks(in line: String) -> [Block] {
     }
     if obj["type"] as? String == "response_item",
        let payload = obj["payload"] as? [String: Any],
-       payload["type"] as? String == "reasoning",
-       let encrypted = payload["encrypted_content"] as? String,
-       !encrypted.isEmpty,
-       (payload["summary"] as? [[String: Any]] ?? []).isEmpty {
-        return [Block(ts: ts, text: "", sealed: true,
-                      signatureChars: encrypted.count, kind: .thinking)]
+       payload["type"] as? String == "reasoning" {
+        let summaries = (payload["summary"] as? [[String: Any]] ?? []).compactMap {
+            ($0["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+        let encryptedChars = (payload["encrypted_content"] as? String)?.count ?? 0
+        if !summaries.isEmpty {
+            return [Block(ts: ts, text: summaries.joined(separator: "\n\n"),
+                          sealed: false, signatureChars: encryptedChars,
+                          kind: .thinking)]
+        }
+        if encryptedChars > 0 {
+            return [Block(ts: ts, text: "", sealed: true,
+                          signatureChars: encryptedChars, kind: .thinking)]
+        }
+        return []
     }
     guard let message = obj["message"] as? [String: Any],
           let content = message["content"] as? [[String: Any]] else { return [] }
