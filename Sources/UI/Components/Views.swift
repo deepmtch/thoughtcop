@@ -174,7 +174,10 @@ func renderedBody(_ text: String, kind: String) -> NSAttributedString {
         guard let number = value as? NSNumber else { return }
         let intent = InlinePresentationIntent(rawValue: number.uintValue)
         var font = baseFont
-        if intent.contains(.stronglyEmphasized) {
+        // Codex summary_text entries are emitted as bold Markdown headings.
+        // In a reasoning card they are body paragraphs, so analysis uses the
+        // app's regular body font instead of turning every entry into a title.
+        if kind != "analysis" && intent.contains(.stronglyEmphasized) {
             font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
         }
         if intent.contains(.emphasized) {

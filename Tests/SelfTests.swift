@@ -149,22 +149,29 @@ if CommandLine.arguments.contains("--two-summary-card-selftest") {
     let event = UIEvent(timestamp: "2026-08-15T00:00:00Z", kind: "analysis",
                         text: text, readableAnalysis: true)
     let card = EventCard(source: "Codex · guidelet", time: "00:00:00", event: event)
+    let rendered = renderedBody(text, kind: "analysis")
     card.translatesAutoresizingMaskIntoConstraints = true
     card.frame = NSRect(x: 0, y: 0, width: 524, height: 300)
     card.setFooter("History · already seen")
     card.layoutSubtreeIfNeeded()
     let metrics = card.layoutMetrics
     let line = NSFont.systemFont(ofSize: 15).boundingRectForFont.height
+    let firstFont = rendered.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+    let isBold = firstFont.map {
+        NSFontManager.shared.traits(of: $0).contains(.boldFontMask)
+    } ?? true
     guard card.displayedText ==
             "Planning visualization with OpenRouter Kimi K3\n\n" +
             "Verifying OpenRouter API access and environment",
-          metrics.body.height >= line * 2.5 else {
+          metrics.body.height >= line * 2.5,
+          !isBold else {
         let failure = "two-summary card failed: bodyHeight=\(metrics.body.height) " +
-            "text=\(card.displayedText.debugDescription)\n"
+            "bold=\(isBold) text=\(card.displayedText.debugDescription)\n"
         FileHandle.standardError.write(failure.data(using: .utf8)!)
         exit(1)
     }
-    print("two-summary card: complete=true bodyHeight=\(Int(metrics.body.height))")
+    print("two-summary card: complete=true normalWeight=true " +
+          "bodyHeight=\(Int(metrics.body.height))")
     exit(0)
 }
 
