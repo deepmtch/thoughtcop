@@ -103,6 +103,10 @@ final class CompactInteractionView: NSView {
     private var dragging = false
     private var pendingClick: DispatchWorkItem?
 
+    /// Native macOS window backgrounds keep the standard arrow even when the
+    /// surface can initiate a window drag. Hand cursors are reserved for links.
+    var backgroundCursor: NSCursor { .arrow }
+
     override var mouseDownCanMoveWindow: Bool { dragOnly }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -113,7 +117,7 @@ final class CompactInteractionView: NSView {
 
     override func resetCursorRects() {
         super.resetCursorRects()
-        if dragOnly { addCursorRect(bounds, cursor: .openHand) }
+        if dragOnly { addCursorRect(bounds, cursor: backgroundCursor) }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -126,9 +130,7 @@ final class CompactInteractionView: NSView {
         dragging = true
         draggingChanged?(true)
         let startOrigin = window?.frame.origin
-        NSCursor.closedHand.push()
         window?.performDrag(with: event)
-        NSCursor.pop()
         let endOrigin = window?.frame.origin
         dragging = false
         draggingChanged?(false)

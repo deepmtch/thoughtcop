@@ -618,14 +618,18 @@ if CommandLine.arguments.contains("--compact-width-selftest") {
 
 if CommandLine.arguments.contains("--interaction-selftest") ||
    CommandLine.arguments.contains("--hover-ux-selftest") {
+    let interactionView = CompactInteractionView(frame: NSRect(x: 0, y: 0,
+                                                               width: 460, height: 70))
+    interactionView.dragOnly = true
     guard CompactInteractionUX.clickDecisionDelay >= 0.18,
           CompactInteractionUX.clickDecisionDelay <= 0.30,
-          CompactInteractionUX.dragTolerance >= 2 else {
+          CompactInteractionUX.dragTolerance >= 2,
+          interactionView.backgroundCursor === NSCursor.arrow else {
         FileHandle.standardError.write("compact interaction self-test failed\n"
             .data(using: .utf8)!)
         exit(1)
     }
-    print("compact interaction: hover=false singleClick=message doubleClick=controls")
+    print("compact interaction: cursor=arrow singleClick=message doubleClick=controls")
     exit(0)
 }
 
