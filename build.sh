@@ -9,6 +9,7 @@ swiftc -O -swift-version 5 -module-cache-path "$module_cache" -o "$build_dir/thi
     Sources/App/Config.swift \
     Sources/Checker/CheckRulesStore.swift \
     Sources/Monitoring/Transcript.swift \
+    Sources/Monitoring/PrivacyAudit.swift \
     Sources/Monitoring/Sessions.swift \
     Sources/Monitoring/MessageReaderState.swift \
     Sources/Checker/DriftCheck.swift \

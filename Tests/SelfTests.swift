@@ -598,4 +598,31 @@ if CommandLine.arguments.contains("--exit-controls-selftest") {
     print("exit controls: close=true quit=true symbols=true visible=true accessible=true")
     exit(0)
 }
+
+if CommandLine.arguments.contains("--privacy-audit-selftest") {
+    let path = NSTemporaryDirectory() + "/thinkpeek-audit-\(UUID().uuidString).jsonl"
+    let audit = PrivacyAudit(path: path)
+    audit.start()
+    let toolLine = #"{"timestamp":"2026-08-15T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call_1","output":"TOP_SECRET_TOOL_CONTENT"}}"#
+    let reasoningLine = #"{"timestamp":"2026-08-15T00:00:01Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"PRIVATE_REASONING_CONTENT"}],"encrypted_content":"sealed"}}"#
+    audit.recordTranscriptLine(toolLine, sourcePath: "/tmp/session.jsonl")
+    audit.recordTranscriptLine(reasoningLine, sourcePath: "/tmp/session.jsonl")
+    audit.recordExternalRequest(source: "Codex · Test", destination: "Provider · Model",
+                                envelopeBytes: 321)
+    let log = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+    try? FileManager.default.removeItem(atPath: path)
+    guard log.contains("app_started"),
+          log.contains("tool_record_discarded"),
+          log.contains("reasoning_selected"),
+          log.contains("external_reasoning_request"),
+          log.contains("\"envelope_bytes\":321"),
+          !log.contains("TOP_SECRET_TOOL_CONTENT"),
+          !log.contains("PRIVATE_REASONING_CONTENT") else {
+        FileHandle.standardError.write(
+            "privacy audit self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("privacy audit: reasoning=true toolsDiscarded=true outbound=true contentLogged=false")
+    exit(0)
+}
 }

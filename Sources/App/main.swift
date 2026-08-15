@@ -59,7 +59,8 @@ if let index = CommandLine.arguments.firstIndex(of: "--check"),
 if let requestedEvidence {
     print("evaluation instruction: verbatim from local app storage")
     var finished = false
-    checkDrift(requestedEvidence) { outcome, milliseconds in
+    PrivacyAudit.shared.start()
+    checkDrift(requestedEvidence, source: "explicit command") { outcome, milliseconds in
         print("latency : \(Int(milliseconds)) ms")
         switch outcome {
         case .scored(let decision, let provider):

@@ -240,7 +240,10 @@ final class Tailer {
         buf += String(data: data, encoding: .utf8) ?? ""
         var lines = buf.components(separatedBy: "\n")
         buf = lines.removeLast()                     // trailing partial line
-        for line in lines { out += blocks(in: line) }
+        for line in lines {
+            PrivacyAudit.shared.recordTranscriptLine(line, sourcePath: path)
+            out += blocks(in: line)
+        }
         return out
     }
 }

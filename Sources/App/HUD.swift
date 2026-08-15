@@ -133,6 +133,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var discardedEmptySummaryCount = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        PrivacyAudit.shared.start()
         panel = ConstrainedPanel(
             contentRect: NSRect(x: 60, y: 140, width: 560, height: 210),
             styleMask: [.borderless, .resizable, .nonactivatingPanel],
@@ -1295,7 +1296,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "evidenceType": block.evaluationRecord.eventType,
         ])
         publishAPI()
-        checkDrift(block.evaluationRecord) { [weak self] outcome, ms in
+        checkDrift(block.evaluationRecord, source: source) { [weak self] outcome, ms in
             guard let self else { return }
             var card = existingCard
             var preview = existingPreview

@@ -166,6 +166,14 @@ rules without restarting Thinkpeek.
 The ticker's checklist button opens **What to Check** directly in one click. The
 sliders button remains reserved for navigation and secondary display preferences.
 
+### Privacy audit log
+
+Each app start resets `~/Library/Logs/Thinkpeek/privacy-audit.jsonl`. The JSONL
+records only metadata: session filename, transcript record type, disposition,
+byte count, and actual external reasoning-request destination/size. It records
+tool calls and results as `tool_record_discarded`; it never records reasoning,
+tool input, tool output, API keys, or other transcript content.
+
 For independent-line mode, an example is:
 
 ```

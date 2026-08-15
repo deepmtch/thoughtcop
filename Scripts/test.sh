@@ -25,7 +25,8 @@ for test in \
     --check-rules-editor-selftest \
     --window-chrome-selftest \
     --compact-width-selftest \
-    --interaction-selftest
+    --interaction-selftest \
+    --privacy-audit-selftest
 do
     ./.build/thinkpeek "$test"
 done
