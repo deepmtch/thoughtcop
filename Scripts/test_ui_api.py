@@ -39,6 +39,9 @@ assert 0 < controls["viewportHeight"] <= 210, controls["viewportHeight"]
 assert controls["contentHeight"] > 0, controls["contentHeight"]
 assert abs(controls["viewportHeight"] - min(210, controls["contentHeight"])) <= 1
 assert controls["cardCount"] > 0, controls["cardCount"]
+assert controls["closeControlVisible"] is True
+assert controls["quitControlVisible"] is True
+assert controls["quitControlInOverflow"] is False
 selected_index = controls["currentIndex"]
 
 get("/message")
@@ -47,6 +50,9 @@ reader = state()
 assert reader["uiStyle"] == "full-message", reader["uiStyle"]
 assert reader["messageReaderFrozen"] is True
 assert 118 <= reader["windowHeight"] <= 420, reader["windowHeight"]
+assert reader["closeControlVisible"] is True
+assert reader["quitControlVisible"] is True
+assert reader["quitControlInOverflow"] is False
 
 get("/controls")
 time.sleep(0.15)
@@ -68,6 +74,7 @@ get("/close")
 time.sleep(0.15)
 closed = state()
 assert closed["uiStyle"] == "single-line-ticker"
+assert closed["tickerSettingsControlVisible"] is True
 
 records = [json.loads(line) for line in LOG.read_text().splitlines() if line.strip()]
 allowed = {

@@ -7,6 +7,7 @@ final class TickerPrimaryActions: NSStackView {
     var controlsRequested: (() -> Void)?
 
     private let checkRulesButton: NSButton
+    private(set) var displaySettingsButton: NSButton
     private let controlsButton: NSButton
 
     var accessibilityNames: [String] {
@@ -16,6 +17,7 @@ final class TickerPrimaryActions: NSStackView {
     var foregroundColor: NSColor? {
         didSet {
             checkRulesButton.contentTintColor = foregroundColor
+            displaySettingsButton.contentTintColor = foregroundColor
             controlsButton.contentTintColor = foregroundColor
         }
     }
@@ -25,6 +27,7 @@ final class TickerPrimaryActions: NSStackView {
             image: NSImage(systemSymbolName: "checklist",
                            accessibilityDescription: "Edit what to check") ?? NSImage(),
             target: nil, action: nil)
+        displaySettingsButton = NSButton(frame: .zero)
         controlsButton = NSButton(
             image: NSImage(systemSymbolName: "slider.horizontal.3",
                            accessibilityDescription: "Open controls") ?? NSImage(),
@@ -34,7 +37,7 @@ final class TickerPrimaryActions: NSStackView {
         orientation = .horizontal
         alignment = .centerY
         spacing = 2
-        for button in [checkRulesButton, controlsButton] {
+        for button in [checkRulesButton, displaySettingsButton, controlsButton] {
             button.bezelStyle = .accessoryBarAction
             button.isBordered = false
             button.translatesAutoresizingMaskIntoConstraints = false
@@ -46,10 +49,12 @@ final class TickerPrimaryActions: NSStackView {
         checkRulesButton.action = #selector(openCheckRules(_:))
         checkRulesButton.toolTip = "Edit what Thinkpeek checks"
         checkRulesButton.setAccessibilityLabel("Edit what to check")
+        displaySettingsButton.toolTip = "Display settings"
+        displaySettingsButton.setAccessibilityLabel("Display settings")
         controlsButton.target = self
         controlsButton.action = #selector(openControls(_:))
-        controlsButton.toolTip = "Open navigation and ticker settings"
-        controlsButton.setAccessibilityLabel("Open controls and settings")
+        controlsButton.toolTip = "Open message navigation"
+        controlsButton.setAccessibilityLabel("Open message navigation")
     }
 
     required init?(coder: NSCoder) { nil }

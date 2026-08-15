@@ -344,7 +344,7 @@ if CommandLine.arguments.contains("--message-view-selftest") {
     let shortHeight = message.preferredHeight(forWidth: 560)
     guard message.source == "Codex · Message test",
           message.text == "Complete rendered summary with inline code.",
-          message.lifecycleButtonTitles == ["Done", "More"],
+          message.lifecycleButtonTitles == ["Close", "Quit"],
           message.tone == .normal,
           shortHeight == 118,
           !message.text.contains("**") else {
@@ -371,7 +371,7 @@ if CommandLine.arguments.contains("--message-view-selftest") {
             "message content-fit self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("message view: dedicated=true markdownRendered=true done=true overflow=true " +
+    print("message view: dedicated=true markdownRendered=true close=true quit=true " +
           "errorTone=true contentFit=true")
     exit(0)
 }
@@ -430,18 +430,23 @@ if CommandLine.arguments.contains("--outside-click-selftest") {
 
 if CommandLine.arguments.contains("--ticker-actions-selftest") {
     let actions = TickerPrimaryActions(frame: .zero)
+    let settingsMenu = TickerSettingsMenu()
+    settingsMenu.install(on: actions.displaySettingsButton)
     var checkRules = false
     var controls = false
     actions.checkRulesRequested = { checkRules = true }
     actions.controlsRequested = { controls = true }
     actions.requestCheckRulesForTest()
     actions.requestControlsForTest()
-    guard actions.accessibilityNames == ["Edit what to check", "Open controls and settings"],
+    guard actions.accessibilityNames == ["Edit what to check", "Display settings",
+                                         "Open message navigation"],
+          actions.displaySettingsButton.target != nil,
+          actions.displaySettingsButton.action != nil,
           checkRules, controls else {
         FileHandle.standardError.write("ticker actions self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("ticker actions: checkRules=oneClick controls=oneClick accessible=true")
+    print("ticker actions: checkRules=oneClick settings=oneClick controls=oneClick accessible=true")
     exit(0)
 }
 
@@ -690,15 +695,14 @@ if CommandLine.arguments.contains("--exit-controls-selftest") {
     controls.quitRequested = { quit = true }
     controls.requestClose(nil)
     controls.requestQuit(nil)
-    guard controls.buttonTitles == ["Done", "More"],
+    guard controls.buttonTitles == ["Close", "Quit"],
           controls.accessibilityNames == ["Close details and return to ticker",
-                                          "More application actions"],
-          controls.overflowMenuTitles == ["Quit Thinkpeek"], closed, quit else {
+                                          "Quit Thinkpeek"], closed, quit else {
         FileHandle.standardError.write(
             "exit controls self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("exit controls: done=true quitInOverflow=true visible=true accessible=true")
+    print("exit controls: close=true quit=true overflow=false visible=true accessible=true")
     exit(0)
 }
 

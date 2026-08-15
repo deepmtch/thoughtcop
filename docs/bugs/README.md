@@ -51,3 +51,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-044](BUG-044-summary-only-history-stalled-startup.md) | Summary-only history stalled startup and left the interface empty | Fixed |
 | [BUG-045](BUG-045-ticker-background-used-hand-cursor.md) | Ticker background used a hand cursor | Fixed |
 | [BUG-046](BUG-046-alarm-color-was-permanent-and-ticker-text-was-bold.md) | Alarm color was permanent and ticker text was bold | Fixed |
+| [BUG-047](BUG-047-settings-and-exit-actions-were-hidden.md) | Display settings required opening controls and Quit was hidden in overflow | Fixed |

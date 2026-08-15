@@ -105,6 +105,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var positionButton: NSButton!
     private var checkRulesButton: NSButton!
     private var tickerSettingsMenu: TickerSettingsMenu!
+    private var peekSettingsMenu: TickerSettingsMenu!
     private var checkRulesEditor: CheckRulesEditor?
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
@@ -226,6 +227,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekPrimaryActions.controlsRequested = { [weak self] in
             self?.api.perform(.showControls, origin: .appKit)
         }
+        peekSettingsMenu = TickerSettingsMenu()
+        configureSettingsMenu(peekSettingsMenu)
+        peekSettingsMenu.install(on: peekPrimaryActions.displaySettingsButton)
         peekToolbar = NSStackView(views: [peekCornerControls, peekPrimaryActions])
         peekToolbar.orientation = .horizontal
         peekToolbar.alignment = .centerY
@@ -233,7 +237,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekToolbar.translatesAutoresizingMaskIntoConstraints = false
         peekToolbar.setContentHuggingPriority(.required, for: .horizontal)
         peekToolbar.setContentCompressionResistancePriority(.required, for: .horizontal)
-        peekToolbar.widthAnchor.constraint(equalToConstant: 140).isActive = true
+        peekToolbar.widthAnchor.constraint(equalToConstant: 166).isActive = true
         tickerAlarmColor = TickerBackgroundPreference.load()
         applyTickerAppearance(alarmActive: false)
         peekBar.addSubview(peekProviderIcon)
@@ -374,21 +378,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         positionButton = NSButton(frame: .zero)
         tickerSettingsMenu = TickerSettingsMenu()
-        tickerSettingsMenu.speedRequested = { [weak self] speed in
-            self?.api.perform(.speed(speed.rawValue), origin: .appKit)
-        }
-        tickerSettingsMenu.widthRequested = { [weak self] width in
-            self?.api.perform(.width(width), origin: .appKit)
-        }
-        tickerSettingsMenu.positionRequested = { [weak self] preset in
-            self?.api.perform(.position(preset), origin: .appKit)
-        }
-        tickerSettingsMenu.backgroundRequested = { [weak self] in
-            self?.api.perform(.chooseBackground, origin: .appKit)
-        }
-        tickerSettingsMenu.defaultAlarmColorRequested = { [weak self] in
-            self?.api.perform(.backgroundRGBA(nil), origin: .appKit)
-        }
+        configureSettingsMenu(tickerSettingsMenu)
         tickerSettingsMenu.install(on: positionButton)
         positionButton.controlSize = .small
         positionButton.translatesAutoresizingMaskIntoConstraints = false
@@ -561,6 +551,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 !detailExitControls.isHidden),
             "quitControlVisible": messageMode || (!detailHeader.isHidden &&
                 !detailExitControls.isHidden),
+            "quitControlInOverflow": false,
+            "tickerSettingsControlVisible": peekMode &&
+                !peekPrimaryActions.displaySettingsButton.isHidden,
             "peekProvider": peekProviderIcon?.provider.rawValue ?? "unknown",
             "peekSource": peekSourceLabel?.stringValue ?? "",
             "peekText": peekTicker?.text ?? "",
@@ -810,6 +803,26 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func updateSettingsMenuChecks(_ speed: TickerSpeed) {
         tickerSettingsMenu?.update(speed: speed, width: compactWidth,
                                    usesDefaultAlarmColor: tickerAlarmColor == nil)
+        peekSettingsMenu?.update(speed: speed, width: compactWidth,
+                                 usesDefaultAlarmColor: tickerAlarmColor == nil)
+    }
+
+    private func configureSettingsMenu(_ menu: TickerSettingsMenu) {
+        menu.speedRequested = { [weak self] speed in
+            self?.api.perform(.speed(speed.rawValue), origin: .appKit)
+        }
+        menu.widthRequested = { [weak self] width in
+            self?.api.perform(.width(width), origin: .appKit)
+        }
+        menu.positionRequested = { [weak self] preset in
+            self?.api.perform(.position(preset), origin: .appKit)
+        }
+        menu.backgroundRequested = { [weak self] in
+            self?.api.perform(.chooseBackground, origin: .appKit)
+        }
+        menu.defaultAlarmColorRequested = { [weak self] in
+            self?.api.perform(.backgroundRGBA(nil), origin: .appKit)
+        }
     }
 
     private func setCompactWidth(_ requestedWidth: CGFloat) {
