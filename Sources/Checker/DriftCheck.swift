@@ -21,6 +21,8 @@ struct DriftBackend {
     var label: String { "\(name) · \(model)" }
 }
 
+let MAX_EXTERNAL_ENVELOPE_BYTES = 32_000
+
 /// Re-read per check so changes made in the editor apply immediately.
 func loadEvaluationInstructions() -> [String] {
     CheckRulesStore.instructions()
@@ -66,6 +68,12 @@ func evaluationEnvelope(instruction: String,
      "EVIDENCE_RECORD": evidence.json]
 }
 
+func serializedEvaluationEnvelope(instruction: String,
+                                  evidence: EvaluationRecord) -> Data? {
+    try? JSONSerialization.data(
+        withJSONObject: evaluationEnvelope(instruction: instruction, evidence: evidence))
+}
+
 func parseEvaluationDecision(_ data: Data) -> EvaluationDecision? {
     guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
           let alert = object["alert"] as? Bool,
@@ -80,10 +88,9 @@ private func checkOneInstruction(_ instruction: String,
                                  evidence: EvaluationRecord,
                                  backends: [DriftBackend],
                                  done: @escaping (DriftOutcome) -> Void) {
-    let envelope = evaluationEnvelope(instruction: instruction, evidence: evidence)
-    guard let envelopeData = try? JSONSerialization.data(withJSONObject: envelope),
-          envelopeData.count <= 32_000 else {
-        done(.failed("evidence record exceeds the 32 KB provider limit"))
+    guard let envelopeData = serializedEvaluationEnvelope(
+        instruction: instruction, evidence: evidence) else {
+        done(.failed("could not serialize the evidence record"))
         return
     }
     let envelopeText = String(decoding: envelopeData, as: UTF8.self)
@@ -149,6 +156,18 @@ func checkDrift(_ evidence: EvaluationRecord,
     let backends = driftBackends()
     guard !backends.isEmpty else {
         done(.failed(LOCAL_ONLY ? "local-only mode" : "no Groq or Cerebras key in .env"), 0)
+        return
+    }
+    let envelopeSizes = instructions.compactMap {
+        serializedEvaluationEnvelope(instruction: $0, evidence: evidence)?.count
+    }
+    guard envelopeSizes.count == instructions.count else {
+        done(.failed("Thinkpeek could not serialize this evidence record"), 0)
+        return
+    }
+    if let largest = envelopeSizes.max(), largest > MAX_EXTERNAL_ENVELOPE_BYTES {
+        done(.failed("Thinkpeek did not send this record: the \(largest)-byte request " +
+            "exceeds its \(MAX_EXTERNAL_ENVELOPE_BYTES)-byte local transmission limit"), 0)
         return
     }
     let started = Date()

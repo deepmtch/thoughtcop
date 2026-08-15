@@ -24,6 +24,11 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
         fields: ["tool_name": "apply_patch", "status": "completed",
                  "input": ["path": "Sources/Test.swift"]])
     let envelope = evaluationEnvelope(instruction: instruction, evidence: evidence)
+    let oversizedEvidence = EvaluationRecord(
+        eventType: "tool_result",
+        fields: ["output": String(repeating: "x", count: 41_245)])
+    let oversizedEnvelope = serializedEvaluationEnvelope(
+        instruction: instruction, evidence: oversizedEvidence)
     guard envelope["EVALUATION_INSTRUCTION"] as? String == instruction,
           let record = envelope["EVIDENCE_RECORD"] as? [String: Any],
           record["event_type"] as? String == "tool_call",
@@ -31,7 +36,9 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
           let decision = parseEvaluationDecision(Data(
             #"{"alert":true,"reason":"changed","evidence":"Sources/Test.swift"}"#.utf8)),
           decision.alert, decision.reason == "changed",
-          parseEvaluationDecision(Data(#"{"alert":"yes"}"#.utf8)) == nil else {
+          parseEvaluationDecision(Data(#"{"alert":"yes"}"#.utf8)) == nil,
+          let oversizedEnvelope,
+          oversizedEnvelope.count > MAX_EXTERNAL_ENVELOPE_BYTES else {
         FileHandle.standardError.write(
             "evaluator envelope self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -75,7 +82,7 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
         exit(1)
     }
     print("evaluator: verbatim=true binary=true structuredEvidence=true " +
-          "invalidVisible=true alertAttached=true")
+          "oversizeMeasured=true invalidVisible=true alertAttached=true")
     exit(0)
 }
 
