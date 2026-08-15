@@ -12,7 +12,7 @@ enum CompactWindowSizing {
     static let narrowWidth: CGFloat = 400
     static let standardWidth: CGFloat = 560
     static let maximumWidth: CGFloat = 560
-    static let stackThreshold: CGFloat = 500
+    static let stackThreshold: CGFloat = 520
     static let defaultsKey = "compactWindowWidth"
 
     static func clamped(_ width: CGFloat) -> CGFloat {
@@ -29,7 +29,7 @@ enum CompactWindowSizing {
     }
 
     static func headerHeight(for width: CGFloat) -> CGFloat {
-        headerStyle(for: width) == .stacked ? 106 : 74
+        headerStyle(for: width) == .stacked ? 88 : 52
     }
 
     static func controlsHeight(for width: CGFloat) -> CGFloat {
@@ -50,34 +50,28 @@ final class DetailHeaderLayout {
     private(set) var style: CompactHeaderStyle?
     private var isActive = false
 
-    init(header: NSView, picker: NSView, status: NSView, controls: NSView,
-         actions: NSView) {
-        heightConstraint = header.heightAnchor.constraint(equalToConstant: 74)
+    init(header: NSView, picker: NSView, controls: NSView, actions: NSView) {
+        heightConstraint = header.heightAnchor.constraint(equalToConstant: 52)
 
         commonConstraints = [
             heightConstraint,
             picker.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 14),
             picker.heightAnchor.constraint(equalToConstant: 30),
-            status.heightAnchor.constraint(equalToConstant: 16),
             actions.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14),
-            actions.topAnchor.constraint(equalTo: header.topAnchor, constant: 10),
         ]
         inlineConstraints = [
-            picker.topAnchor.constraint(equalTo: header.topAnchor, constant: 10),
-            picker.trailingAnchor.constraint(equalTo: actions.leadingAnchor, constant: -8),
-            status.leadingAnchor.constraint(equalTo: picker.leadingAnchor, constant: 2),
-            status.trailingAnchor.constraint(equalTo: controls.leadingAnchor, constant: -12),
-            status.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -8),
-            controls.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -6),
-            controls.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14),
+            picker.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            picker.trailingAnchor.constraint(lessThanOrEqualTo: controls.leadingAnchor,
+                                              constant: -8),
+            controls.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            controls.trailingAnchor.constraint(equalTo: actions.leadingAnchor, constant: -8),
+            actions.centerYAnchor.constraint(equalTo: header.centerYAnchor),
         ]
         stackedConstraints = [
             picker.topAnchor.constraint(equalTo: header.topAnchor, constant: 8),
             picker.trailingAnchor.constraint(equalTo: actions.leadingAnchor, constant: -8),
-            status.leadingAnchor.constraint(equalTo: picker.leadingAnchor, constant: 2),
-            status.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
-            status.topAnchor.constraint(equalTo: picker.bottomAnchor, constant: 3),
-            controls.topAnchor.constraint(equalTo: status.bottomAnchor, constant: 4),
+            actions.centerYAnchor.constraint(equalTo: picker.centerYAnchor),
+            controls.topAnchor.constraint(equalTo: picker.bottomAnchor, constant: 6),
             controls.leadingAnchor.constraint(greaterThanOrEqualTo: header.leadingAnchor,
                                                 constant: 14),
             controls.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14),

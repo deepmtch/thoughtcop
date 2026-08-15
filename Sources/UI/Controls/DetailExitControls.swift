@@ -8,10 +8,11 @@ final class DetailExitControls: NSStackView {
     var closeRequested: (() -> Void)?
     var quitRequested: (() -> Void)?
 
-    var buttonTitles: [String] { [closeButton.title, quitButton.title] }
+    var buttonTitles: [String] { ["Close", "Quit"] }
     var accessibilityNames: [String] {
         [closeButton.accessibilityLabel() ?? "", quitButton.accessibilityLabel() ?? ""]
     }
+    var usesSymbolButtons: Bool { closeButton.image != nil && quitButton.image != nil }
 
     override init(frame frameRect: NSRect) {
         closeButton = NSButton(title: "Close", target: nil, action: nil)
@@ -41,8 +42,15 @@ final class DetailExitControls: NSStackView {
         for button in [closeButton, quitButton] {
             button.bezelStyle = .rounded
             button.controlSize = .small
+            button.title = ""
+            button.imagePosition = .imageOnly
+            button.widthAnchor.constraint(equalToConstant: 30).isActive = true
             addArrangedSubview(button)
         }
+        closeButton.image = NSImage(systemSymbolName: "chevron.down",
+                                    accessibilityDescription: "Return to ticker")
+        quitButton.image = NSImage(systemSymbolName: "power",
+                                   accessibilityDescription: "Quit Thinkpeek")
     }
 
     required init?(coder: NSCoder) { nil }

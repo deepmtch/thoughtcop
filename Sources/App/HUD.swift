@@ -260,6 +260,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         status.lineBreakMode = .byTruncatingMiddle
         status.setAccessibilityLabel("Drift check status")
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        status.isHidden = true
         detailHeader.addSubview(status)
 
         detailExitControls = DetailExitControls(frame: .zero)
@@ -283,8 +284,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         picker.setContentHuggingPriority(.defaultLow, for: .horizontal)
         picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        previousButton = NSButton(title: "‹", target: self, action: #selector(showPrevious(_:)))
-        nextButton = NSButton(title: "›", target: self, action: #selector(showNext(_:)))
+        previousButton = NSButton(title: "", target: self, action: #selector(showPrevious(_:)))
+        nextButton = NSButton(title: "", target: self, action: #selector(showNext(_:)))
+        previousButton.image = NSImage(systemSymbolName: "chevron.left",
+                                       accessibilityDescription: "Previous message")
+        nextButton.image = NSImage(systemSymbolName: "chevron.right",
+                                   accessibilityDescription: "Next message")
         previousButton.toolTip = "Previous message"
         previousButton.setAccessibilityLabel("Previous message")
         nextButton.toolTip = "Next message"
@@ -292,15 +297,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for button in [previousButton!, nextButton!] {
             button.bezelStyle = .rounded
             button.controlSize = .small
-            button.font = .systemFont(ofSize: 17, weight: .semibold)
+            button.imagePosition = .imageOnly
             button.translatesAutoresizingMaskIntoConstraints = false
             button.widthAnchor.constraint(equalToConstant: 32).isActive = true
         }
-        restartTickerButton = NSButton(title: "↤", target: self,
+        restartTickerButton = NSButton(title: "", target: self,
                                        action: #selector(restartTickerAtBeginning(_:)))
         restartTickerButton.bezelStyle = .rounded
         restartTickerButton.controlSize = .small
-        restartTickerButton.font = .systemFont(ofSize: 15, weight: .semibold)
+        restartTickerButton.image = NSImage(systemSymbolName: "backward.end",
+                                             accessibilityDescription: "Restart summary")
+        restartTickerButton.imagePosition = .imageOnly
         restartTickerButton.toolTip = "Return to the beginning of this summary"
         restartTickerButton.setAccessibilityLabel("Restart summary ticker")
         restartTickerButton.translatesAutoresizingMaskIntoConstraints = false
@@ -317,6 +324,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                 action: #selector(toggleExpanded(_:)))
         expandButton.bezelStyle = .rounded
         expandButton.controlSize = .small
+        expandButton.title = ""
+        expandButton.image = NSImage(systemSymbolName: "rectangle.stack",
+                                     accessibilityDescription: "Show message history")
+        expandButton.imagePosition = .imageOnly
+        expandButton.widthAnchor.constraint(equalToConstant: 32).isActive = true
         expandButton.toolTip = "Show complete message history"
         expandButton.setAccessibilityLabel("Show complete message history")
         latestButton.isHidden = true
@@ -353,13 +365,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                            positionButton, expandButton, latestButton])
         controls.orientation = .horizontal
         controls.alignment = .centerY
-        controls.spacing = 6
+        controls.spacing = 4
         controls.translatesAutoresizingMaskIntoConstraints = false
         controls.setContentHuggingPriority(.required, for: .horizontal)
         controls.setContentCompressionResistancePriority(.required, for: .horizontal)
         detailHeader.addSubview(controls)
         detailHeaderLayout = DetailHeaderLayout(header: detailHeader, picker: picker,
-                                                status: status, controls: controls,
+                                                controls: controls,
                                                 actions: detailExitControls)
 
         scrollView = NSScrollView()
@@ -969,7 +981,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             previousButton.isEnabled = compactIndex > 0
             nextButton.isEnabled = compactIndex >= 0 && compactIndex + 1 < eventCards.count
-            expandButton.title = controlsExpansionTitle(compactMode: true) ?? ""
+            expandButton.title = expandButton.image == nil
+                ? (controlsExpansionTitle(compactMode: true) ?? "") : ""
             expandButton.isHidden = false
             restartTickerButton.isEnabled = !eventCards.isEmpty
             latestButton.isHidden = true
@@ -1183,6 +1196,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let d = driftStatus()
         status.stringValue = d.ready ? "drift check: \(d.detail)" : "drift check OFF — \(d.detail)"
         status.toolTip = status.stringValue
+        picker.toolTip = status.stringValue
         status.textColor = d.ready ? .secondaryLabelColor : .systemPurple
     }
 

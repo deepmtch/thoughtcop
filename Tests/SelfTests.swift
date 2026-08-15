@@ -521,10 +521,10 @@ if CommandLine.arguments.contains("--compact-width-selftest") {
           CompactWindowSizing.clamped(700) == 560,
           CompactWindowSizing.headerStyle(for: 400) == .stacked,
           CompactWindowSizing.headerStyle(for: 560) == .inline,
-          CompactWindowSizing.headerHeight(for: 400) == 106,
-          CompactWindowSizing.headerHeight(for: 560) == 74,
-          CompactWindowSizing.controlsHeight(for: 400) == 106,
-          CompactWindowSizing.controlsHeight(for: 560) == 74,
+          CompactWindowSizing.headerHeight(for: 400) == 88,
+          CompactWindowSizing.headerHeight(for: 560) == 52,
+          CompactWindowSizing.controlsHeight(for: 400) == 88,
+          CompactWindowSizing.controlsHeight(for: 560) == 52,
           !shouldShowHistoryFeed(peekMode: false, messageMode: false,
                                  compactMode: true),
           shouldShowHistoryFeed(peekMode: false, messageMode: false,
@@ -590,12 +590,12 @@ if CommandLine.arguments.contains("--exit-controls-selftest") {
     guard controls.buttonTitles == ["Close", "Quit"],
           controls.accessibilityNames == ["Close details and return to ticker",
                                           "Quit Thinkpeek"],
-          closed, quit else {
+          controls.usesSymbolButtons, closed, quit else {
         FileHandle.standardError.write(
             "exit controls self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("exit controls: close=true quit=true visible=true accessible=true")
+    print("exit controls: close=true quit=true symbols=true visible=true accessible=true")
     exit(0)
 }
 }
