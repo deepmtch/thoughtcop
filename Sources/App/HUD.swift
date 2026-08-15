@@ -85,6 +85,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var compactMode = true
     private var peekMode = true
     private var messageMode = false
+    private var messageReaderSnapshot: MessageReaderSnapshot?
     private var messageHeight: CGFloat = 300
     private let peekWidth: CGFloat = 460
     private let peekHeight: CGFloat = 70
@@ -211,7 +212,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         fullMessageView.closeRequested = { [weak self] in
             self?.dismissDetailsToTicker()
         }
-        fullMessageView.controlsRequested = { [weak self] in self?.applyPeekMode(false) }
+        fullMessageView.controlsRequested = { [weak self] in
+            self?.showControlsFromMessageReader()
+        }
         fullMessageView.quitRequested = { [weak self] in self?.quitApplication() }
         content.addSubview(fullMessageView)
 
@@ -483,6 +486,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "compactMode": compactMode,
             "peekMode": peekMode,
             "messageMode": messageMode,
+            "messageReaderFrozen": messageMode && messageReaderSnapshot != nil,
+            "messageReaderIndex": messageMode ? compactIndex : NSNull(),
             "closeControlVisible": messageMode || (!detailHeader.isHidden &&
                 !detailExitControls.isHidden),
             "quitControlVisible": messageMode || (!detailHeader.isHidden &&
@@ -776,6 +781,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func applyPeekMode(_ peek: Bool, animated: Bool = false) {
         peekMode = peek
         messageMode = false
+        messageReaderSnapshot = nil
         panel.becomesKeyOnlyIfNeeded = peek
         (panel.contentView as? CompactInteractionView)?.dragOnly = peek
         peekBar.isHidden = !peek
@@ -836,24 +842,39 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func dismissDetailsToTicker() {
+        let shouldResumeLatest = messageMode || !compactMode
         if !compactMode {
             expandedHeight = panel.frame.height
             compactMode = true
-            compactIndex = max(0, eventCards.count - 1)
-            updateCardVisibility()
+        }
+        if shouldResumeLatest {
+            compactIndex = MessageReaderSelection.latestIndex(eventCount: eventCards.count)
         }
         applyPeekMode(true)
+        updateCardVisibility()
     }
 
     private func quitApplication() {
         NSApp.terminate(nil)
     }
 
+    private func showControlsFromMessageReader() {
+        if messageMode {
+            compactIndex = MessageReaderSelection.latestIndex(eventCount: eventCards.count)
+        }
+        applyPeekMode(false)
+        updateCardVisibility()
+    }
+
     private func showCurrentMessage() {
         guard compactIndex >= 0, compactIndex < eventPreviews.count else { return }
         let preview = eventPreviews[compactIndex]
-        fullMessageView.show(source: preview.source, text: preview.detailText,
-                             kind: preview.kind)
+        let snapshot = MessageReaderSnapshot(source: preview.source,
+                                             text: preview.detailText,
+                                             kind: preview.kind)
+        messageReaderSnapshot = snapshot
+        fullMessageView.show(source: snapshot.source, text: snapshot.text,
+                             kind: snapshot.kind)
         peekMode = false
         messageMode = true
         (panel.contentView as? CompactInteractionView)?.dragOnly = false
@@ -924,10 +945,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let preview = eventPreviews[compactIndex]
                 peekTicker.text = normalizedTickerText(preview.tickerText)
                 updatePeekHeader(source: preview.source)
-                if messageMode {
-                    fullMessageView.show(source: preview.source, text: preview.detailText,
-                                         kind: preview.kind)
-                }
             }
             previousButton.isEnabled = compactIndex > 0
             nextButton.isEnabled = compactIndex >= 0 && compactIndex + 1 < eventCards.count
@@ -1029,7 +1046,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             eventCards.append(card)
             eventPreviews.append(MessagePreview(source: source, text: event.text,
                                                 kind: event.kind))
-            if wasFollowingLatest { compactIndex = eventCards.count - 1 }
+            if MessageReaderSelection.shouldAdvanceForNewMessage(
+                isReaderOpen: messageMode, wasFollowingLatest: wasFollowingLatest) {
+                compactIndex = eventCards.count - 1
+            }
         } else {
             systemCards.append(card)
         }
@@ -1194,10 +1214,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard compactIndex >= 0, compactIndex < eventPreviews.count,
               eventPreviews[compactIndex] === preview else { return }
         peekTicker.text = normalizedTickerText(preview.tickerText)
-        if messageMode {
-            fullMessageView.show(source: preview.source, text: preview.detailText,
-                                 kind: preview.kind)
-        }
+        // The reader displays an immutable snapshot. Async evaluator updates
+        // remain on the underlying message and appear after the reader closes.
     }
 
     private func showAlert(_ decision: EvaluationDecision, provider: String,

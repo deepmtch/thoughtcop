@@ -37,3 +37,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-030](BUG-030-details-ignored-outside-click.md) | Controls and history ignored outside clicks | Fixed |
 | [BUG-031](BUG-031-prompt-editor-dismissed-on-click.md) | Clicking in the prompt editor made it disappear | Fixed |
 | [BUG-032](BUG-032-primary-check-instruction-was-nested-in-settings.md) | Editing the primary check instruction required two clicks through settings | Fixed |
+| [BUG-033](BUG-033-open-reader-followed-new-messages.md) | Open reader replaced the message while the user was reading | Fixed |

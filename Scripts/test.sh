@@ -13,6 +13,7 @@ for test in \
     --ticker-selftest \
     --ticker-background-selftest \
     --message-view-selftest \
+    --message-reader-freeze-selftest \
     --escape-selftest \
     --exit-controls-selftest \
     --outside-click-selftest \

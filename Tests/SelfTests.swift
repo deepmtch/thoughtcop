@@ -236,6 +236,36 @@ if CommandLine.arguments.contains("--message-view-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--message-reader-freeze-selftest") {
+    var selectedIndex = 2
+    var eventCount = 3
+    let snapshot = MessageReaderSnapshot(source: "Codex · frozen",
+                                         text: "Message being read", kind: "analysis")
+    eventCount += 1
+    if MessageReaderSelection.shouldAdvanceForNewMessage(
+        isReaderOpen: true, wasFollowingLatest: selectedIndex == eventCount - 2) {
+        selectedIndex = eventCount - 1
+    }
+    eventCount += 1
+    if MessageReaderSelection.shouldAdvanceForNewMessage(
+        isReaderOpen: true, wasFollowingLatest: selectedIndex == eventCount - 2) {
+        selectedIndex = eventCount - 1
+    }
+    guard selectedIndex == 2,
+          snapshot.source == "Codex · frozen",
+          snapshot.text == "Message being read",
+          MessageReaderSelection.latestIndex(eventCount: eventCount) == 4,
+          MessageReaderSelection.latestIndex(eventCount: 0) == -1,
+          MessageReaderSelection.shouldAdvanceForNewMessage(
+            isReaderOpen: false, wasFollowingLatest: true) else {
+        FileHandle.standardError.write("message reader freeze self-test failed\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    print("message reader: snapshot=frozen incomingIgnored=true closeResumesLatest=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--outside-click-selftest") {
     let frame = NSRect(x: 100, y: 100, width: 560, height: 300)
     guard !shouldDismissDetails(isShowingDetails: true, isEditorVisible: false,
