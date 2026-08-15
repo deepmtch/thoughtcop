@@ -23,6 +23,7 @@ swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
     Sources/UI/Controls/DetailExitControls.swift \
     Sources/UI/Ticker/TickerCornerControls.swift \
     Sources/UI/Ticker/TickerPrimaryActions.swift \
+    Sources/UI/Ticker/CheckerActivityIndicator.swift \
     Sources/UI/Ticker/TickerSettingsMenu.swift \
     Sources/UI/Controls/CheckRulesEditor.swift \
     Sources/UI/Ticker/ProviderIcon.swift \

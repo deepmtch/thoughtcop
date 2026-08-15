@@ -460,6 +460,7 @@ if CommandLine.arguments.contains("--outside-click-selftest") {
 
 if CommandLine.arguments.contains("--ticker-actions-selftest") {
     let actions = TickerPrimaryActions(frame: .zero)
+    let activity = CheckerActivityIndicator(frame: .zero)
     let settingsMenu = TickerSettingsMenu()
     settingsMenu.install(on: actions.displaySettingsButton)
     var checkRules = false
@@ -468,15 +469,26 @@ if CommandLine.arguments.contains("--ticker-actions-selftest") {
     actions.controlsRequested = { controls = true }
     actions.requestCheckRulesForTest()
     actions.requestControlsForTest()
+    activity.begin(destination: "Groq · Test")
     guard actions.accessibilityNames == ["Edit check prompt", "Display settings",
                                          "Open message navigation"],
           actions.displaySettingsButton.target != nil,
           actions.displaySettingsButton.action != nil,
-          checkRules, controls else {
+          checkRules, controls,
+          activity.isChecking, !activity.isHidden,
+          activity.destination == "Groq · Test",
+          activity.accessibilityLabel() == "Checking reasoning with Groq · Test" else {
         FileHandle.standardError.write("ticker actions self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("ticker actions: checkRules=oneClick settings=oneClick controls=oneClick accessible=true")
+    activity.finish()
+    guard !activity.isChecking, activity.isHidden else {
+        FileHandle.standardError.write("checker activity reset self-test failed\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    print("ticker actions: checkRules=oneClick settings=oneClick controls=oneClick " +
+          "checkerLight=true accessible=true")
     exit(0)
 }
 
@@ -745,6 +757,7 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
     audit.recordTranscriptLine(toolLine, sourcePath: "/tmp/session.jsonl")
     audit.recordTranscriptLine(reasoningLine, sourcePath: "/tmp/session.jsonl")
     audit.recordExternalRequest(source: "Codex · Test", destination: "Provider · Model",
+                                recordType: "reasoning_text",
                                 envelopeBytes: 321)
     let log = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
     try? FileManager.default.removeItem(atPath: path)
@@ -752,6 +765,7 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
           log.contains("tool_record_discarded"),
           log.contains("reasoning_selected"),
           log.contains("external_reasoning_request"),
+          log.contains("\"record_type\":\"reasoning_text\""),
           log.contains("\"envelope_bytes\":321"),
           !log.contains("TOP_SECRET_TOOL_CONTENT"),
           !log.contains("PRIVATE_REASONING_CONTENT") else {

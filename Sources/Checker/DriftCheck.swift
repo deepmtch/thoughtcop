@@ -88,6 +88,7 @@ private func checkOneInstruction(_ instruction: String,
                                  evidence: EvaluationRecord,
                                  backends: [DriftBackend],
                                  source: String,
+                                 requestStarted: @escaping (String) -> Void,
                                  done: @escaping (DriftOutcome) -> Void) {
     guard let envelopeData = serializedEvaluationEnvelope(
         instruction: instruction, evidence: evidence) else {
@@ -120,8 +121,10 @@ private func checkOneInstruction(_ instruction: String,
         request.setValue("Bearer " + backend.key, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        DispatchQueue.main.async { requestStarted(backend.label) }
         PrivacyAudit.shared.recordExternalRequest(
             source: source, destination: backend.label,
+            recordType: evidence.eventType,
             envelopeBytes: envelopeData.count)
 
         URLSession.shared.dataTask(with: request) { data, response, error in
@@ -152,6 +155,7 @@ private func checkOneInstruction(_ instruction: String,
 
 func checkDrift(_ evidence: EvaluationRecord,
                 source: String = "explicit command",
+                requestStarted: @escaping (String) -> Void = { _ in },
                 done: @escaping (DriftOutcome, Double) -> Void) {
     let instructions = loadEvaluationInstructions()
     guard !instructions.isEmpty else {
@@ -195,7 +199,8 @@ func checkDrift(_ evidence: EvaluationRecord,
             return
         }
         checkOneInstruction(instructions[index], evidence: evidence,
-                            backends: backends, source: source) { outcome in
+                            backends: backends, source: source,
+                            requestStarted: requestStarted) { outcome in
             switch outcome {
             case .scored(let decision, let provider) where decision.alert:
                 finish(.scored(decision, provider))

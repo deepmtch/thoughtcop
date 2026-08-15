@@ -94,9 +94,9 @@ final class PrivacyAudit {
     }
 
     func recordExternalRequest(source: String, destination: String,
-                               envelopeBytes: Int) {
+                               recordType: String, envelopeBytes: Int) {
         append(["action": "external_reasoning_request",
-                "record_type": "reasoning_summary", "source": source,
+                "record_type": recordType, "source": source,
                 "destination": destination, "envelope_bytes": envelopeBytes])
     }
 

@@ -93,6 +93,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var fullMessageView: FullMessageView!
     private var peekProviderIcon: ProviderIconView!
     private var peekSourceLabel: NSTextField!
+    private var checkerActivityIndicator: CheckerActivityIndicator!
     private var peekTicker: TickerView!
     private var peekCornerControls: TickerCornerControls!
     private var peekPrimaryActions: TickerPrimaryActions!
@@ -135,6 +136,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var names: [String: String] = [:]
     private var knownOffsets: [String: UInt64] = [:]
     private var alertCount = 0
+    private var checkerRequestTokens = Set<UUID>()
+    private var checkerActivityDestination: String?
     private var operationState = OperationPresentationState()
     private let api = UIStateServer()
     private let outsideClickMonitor = OutsideClickMonitor()
@@ -209,6 +212,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekSourceLabel.setContentCompressionResistancePriority(.defaultLow,
                                                                  for: .horizontal)
 
+        checkerActivityIndicator = CheckerActivityIndicator(frame: .zero)
+        checkerActivityIndicator.translatesAutoresizingMaskIntoConstraints = false
+
         peekTicker = TickerView()
         peekTicker.translatesAutoresizingMaskIntoConstraints = false
         let savedSpeed = UserDefaults.standard.string(forKey: "tickerSpeed")
@@ -242,6 +248,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         applyTickerAppearance(alarmActive: false)
         peekBar.addSubview(peekProviderIcon)
         peekBar.addSubview(peekSourceLabel)
+        peekBar.addSubview(checkerActivityIndicator)
         peekBar.addSubview(peekTicker)
         // Keep interactive controls above every text/image layer. AppKit's cached
         // rendering can otherwise omit them after a provider/source transition.
@@ -444,10 +451,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             peekProviderIcon.heightAnchor.constraint(equalToConstant: 20),
             peekSourceLabel.leadingAnchor.constraint(equalTo: peekProviderIcon.trailingAnchor,
                                                       constant: 6),
-            peekSourceLabel.trailingAnchor.constraint(equalTo: peekToolbar.leadingAnchor,
-                                                       constant: -8),
+            peekSourceLabel.trailingAnchor.constraint(
+                lessThanOrEqualTo: checkerActivityIndicator.leadingAnchor,
+                constant: -4),
             peekSourceLabel.topAnchor.constraint(equalTo: peekBar.topAnchor, constant: 10),
             peekSourceLabel.heightAnchor.constraint(equalToConstant: 16),
+            checkerActivityIndicator.trailingAnchor.constraint(
+                equalTo: peekToolbar.leadingAnchor, constant: -6),
+            checkerActivityIndicator.topAnchor.constraint(
+                equalTo: peekBar.topAnchor, constant: 9),
+            checkerActivityIndicator.widthAnchor.constraint(equalToConstant: 16),
+            checkerActivityIndicator.heightAnchor.constraint(equalToConstant: 16),
             peekTicker.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor, constant: 14),
             peekTicker.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor, constant: -14),
             peekTicker.bottomAnchor.constraint(equalTo: peekBar.bottomAnchor, constant: -7),
@@ -570,6 +584,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "tickerBackgroundRGBA": TickerBackgroundPreference.components(
                 of: tickerActiveBackgroundColor)?.map(Double.init) ?? NSNull(),
             "tickerAlarmActive": tickerAlarmActive,
+            "checkerRequestInFlight": !checkerRequestTokens.isEmpty,
+            "checkerActivityIndicatorVisible": checkerActivityIndicator.isChecking,
+            "checkerActivityDestination": checkerActivityDestination ?? NSNull(),
             "tickerAlarmColorMode": tickerAlarmColor == nil ? "default" : "custom",
             "tickerAlarmColorRGBA": tickerAlarmColor.flatMap(
                 TickerBackgroundPreference.components(of:))?.map(Double.init) ?? NSNull(),
@@ -1387,6 +1404,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func evaluate(_ block: Block, source: String,
                           card existingCard: EventCard?,
                           preview existingPreview: MessagePreview?) {
+        let requestToken = UUID()
         let destination = checkLabel()
         existingCard?.setFooter("Sending evidence to \(destination)…")
         apiEvents.append([
@@ -1395,8 +1413,19 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "evidenceType": block.evaluationRecord.eventType,
         ])
         publishAPI()
-        checkDrift(block.evaluationRecord, source: source) { [weak self] outcome, ms in
+        checkDrift(block.evaluationRecord, source: source,
+                   requestStarted: { [weak self] destination in
+            self?.checkerRequestTokens.insert(requestToken)
+            self?.checkerActivityDestination = destination
+            self?.checkerActivityIndicator.begin(destination: destination)
+            self?.publishAPI()
+        }) { [weak self] outcome, ms in
             guard let self else { return }
+            self.checkerRequestTokens.remove(requestToken)
+            if self.checkerRequestTokens.isEmpty {
+                self.checkerActivityDestination = nil
+                self.checkerActivityIndicator.finish()
+            }
             var card = existingCard
             var preview = existingPreview
             switch outcome {
