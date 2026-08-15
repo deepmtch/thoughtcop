@@ -4,6 +4,8 @@
 import AppKit
 
 final class FullMessageView: NSVisualEffectView {
+    private let toneWash = NSView()
+    private let toneStripe = NSView()
     private let sourceLabel = NSTextField(labelWithString: "")
     private let textView = NSTextView()
     private let scrollView = NSScrollView()
@@ -14,6 +16,7 @@ final class FullMessageView: NSVisualEffectView {
 
     var source: String { sourceLabel.stringValue }
     var text: String { textView.string }
+    private(set) var tone: MessageReaderTone = .normal
     var lifecycleButtonTitles: [String] { ["Done", quitButton.title] }
     var requiresScroll: Bool {
         textView.bounds.height > scrollView.contentView.bounds.height + 0.5
@@ -25,6 +28,14 @@ final class FullMessageView: NSVisualEffectView {
         blendingMode = .withinWindow
         state = .active
         translatesAutoresizingMaskIntoConstraints = false
+
+        toneWash.wantsLayer = true
+        toneWash.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(toneWash)
+
+        toneStripe.wantsLayer = true
+        toneStripe.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(toneStripe)
 
         sourceLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         sourceLabel.textColor = .secondaryLabelColor
@@ -79,6 +90,14 @@ final class FullMessageView: NSVisualEffectView {
         addSubview(scrollView)
 
         NSLayoutConstraint.activate([
+            toneWash.topAnchor.constraint(equalTo: topAnchor),
+            toneWash.leadingAnchor.constraint(equalTo: leadingAnchor),
+            toneWash.trailingAnchor.constraint(equalTo: trailingAnchor),
+            toneWash.bottomAnchor.constraint(equalTo: bottomAnchor),
+            toneStripe.topAnchor.constraint(equalTo: topAnchor),
+            toneStripe.leadingAnchor.constraint(equalTo: leadingAnchor),
+            toneStripe.bottomAnchor.constraint(equalTo: bottomAnchor),
+            toneStripe.widthAnchor.constraint(equalToConstant: 6),
             sourceLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             sourceLabel.centerYAnchor.constraint(equalTo: doneButton.centerYAnchor),
             sourceLabel.trailingAnchor.constraint(lessThanOrEqualTo: controlsButton.leadingAnchor,
@@ -96,15 +115,38 @@ final class FullMessageView: NSVisualEffectView {
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        applyTone(.normal)
     }
 
     required init?(coder: NSCoder) { nil }
 
-    func show(source: String, text: String, kind: String) {
+    func show(source: String, text: String, kind: String,
+              tone: MessageReaderTone = .normal) {
         sourceLabel.stringValue = source
         sourceLabel.toolTip = source
         textView.textStorage?.setAttributedString(renderedBody(text, kind: kind))
         textView.scrollToBeginningOfDocument(nil)
+        applyTone(tone)
+    }
+
+    private func applyTone(_ tone: MessageReaderTone) {
+        self.tone = tone
+        switch tone {
+        case .normal:
+            toneWash.layer?.backgroundColor = NSColor.clear.cgColor
+            toneStripe.layer?.backgroundColor = NSColor.clear.cgColor
+            sourceLabel.textColor = .secondaryLabelColor
+        case .warning:
+            toneWash.layer?.backgroundColor = NSColor.systemOrange
+                .withAlphaComponent(0.10).cgColor
+            toneStripe.layer?.backgroundColor = NSColor.systemOrange.cgColor
+            sourceLabel.textColor = .systemOrange
+        case .error:
+            toneWash.layer?.backgroundColor = NSColor.systemRed
+                .withAlphaComponent(0.12).cgColor
+            toneStripe.layer?.backgroundColor = NSColor.systemRed.cgColor
+            sourceLabel.textColor = .systemRed
+        }
     }
 
     @objc private func close(_ sender: Any?) { closeRequested?() }

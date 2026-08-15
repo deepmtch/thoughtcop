@@ -32,9 +32,28 @@ final class MessagePreview {
         case .alert(let decision):
             return "⚠ \(decision.reason) — \(text)"
         case .failed:
-            return "⚠ Check failed — \(text)"
+            return "⛔ Thinkpeek check failed — \(text)"
         default:
             return text
+        }
+    }
+
+    var displaySource: String {
+        switch evaluation {
+        case .alert:
+            return "Thinkpeek · Warning"
+        case .failed:
+            return "Thinkpeek · Check error"
+        default:
+            return source
+        }
+    }
+
+    var readerTone: MessageReaderTone {
+        switch evaluation {
+        case .alert: return .warning
+        case .failed: return .error
+        default: return .normal
         }
     }
 
@@ -42,9 +61,11 @@ final class MessagePreview {
         switch evaluation {
         case .alert(let decision):
             let proof = decision.evidence.isEmpty ? "" : "\nEvidence: \(decision.evidence)"
-            return "⚠ ALERT\n\(decision.reason)\(proof)\n\n\(text)"
+            return "⚠ **WARNING**\n\(decision.reason)\(proof)\n\n" +
+                "Triggered by \(source):\n\(text)"
         case .failed(let message):
-            return "⚠ CHECK FAILED\n\(message)\n\n\(text)"
+            return "⛔ **THINKPEEK CHECK ERROR**\nThe checker could not evaluate this item.\n" +
+                "\(message)\n\nOriginal item from \(source):\n\(text)"
         default:
             return text
         }
@@ -869,12 +890,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showCurrentMessage() {
         guard compactIndex >= 0, compactIndex < eventPreviews.count else { return }
         let preview = eventPreviews[compactIndex]
-        let snapshot = MessageReaderSnapshot(source: preview.source,
+        let snapshot = MessageReaderSnapshot(source: preview.displaySource,
                                              text: preview.detailText,
-                                             kind: preview.kind)
+                                             kind: preview.kind,
+                                             tone: preview.readerTone)
         messageReaderSnapshot = snapshot
         fullMessageView.show(source: snapshot.source, text: snapshot.text,
-                             kind: snapshot.kind)
+                             kind: snapshot.kind, tone: snapshot.tone)
         peekMode = false
         messageMode = true
         (panel.contentView as? CompactInteractionView)?.dragOnly = false
@@ -944,7 +966,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if compactIndex >= 0 && compactIndex < eventPreviews.count {
                 let preview = eventPreviews[compactIndex]
                 peekTicker.text = normalizedTickerText(preview.tickerText)
-                updatePeekHeader(source: preview.source)
+                updatePeekHeader(source: preview.displaySource)
             }
             previousButton.isEnabled = compactIndex > 0
             nextButton.isEnabled = compactIndex >= 0 && compactIndex + 1 < eventCards.count
@@ -1214,6 +1236,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard compactIndex >= 0, compactIndex < eventPreviews.count,
               eventPreviews[compactIndex] === preview else { return }
         peekTicker.text = normalizedTickerText(preview.tickerText)
+        updatePeekHeader(source: preview.displaySource)
         // The reader displays an immutable snapshot. Async evaluator updates
         // remain on the underlying message and appear after the reader closes.
     }
@@ -1239,8 +1262,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showCheckFailure(_ message: String, _ ms: Double,
                                   card: EventCard, preview: MessagePreview) {
         preview.evaluation = .failed(message)
-        card.setFooter("AI check failed · \(message) · \(Int(ms)) ms",
-                       color: .systemRed)
+        card.setError("Thinkpeek check error · \(message) · \(Int(ms)) ms")
         apiEvents.append([
             "kind": "drift-error", "text": message, "source": preview.source,
             "latencyMs": Int(ms),

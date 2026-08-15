@@ -57,9 +57,21 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
                                  kind: "analysis")
     preview.evaluation = .alert(decision)
     guard preview.tickerText.contains("⚠ changed"),
-          preview.detailText.contains("Sources/Test.swift") else {
+          preview.detailText.contains("Sources/Test.swift"),
+          preview.displaySource == "Thinkpeek · Warning",
+          preview.readerTone == .warning else {
         FileHandle.standardError.write(
             "alert presentation self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    preview.evaluation = .failed("provider payload exceeded its limit")
+    guard preview.tickerText.contains("⛔ Thinkpeek check failed"),
+          preview.detailText.contains("THINKPEEK CHECK ERROR"),
+          preview.detailText.contains("Original item from Codex · Test"),
+          preview.displaySource == "Thinkpeek · Check error",
+          preview.readerTone == .error else {
+        FileHandle.standardError.write(
+            "check-error attribution self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
     print("evaluator: verbatim=true binary=true structuredEvidence=true " +
@@ -228,11 +240,23 @@ if CommandLine.arguments.contains("--message-view-selftest") {
     guard message.source == "Codex · Message test",
           message.text == "Complete rendered summary with inline code.",
           message.lifecycleButtonTitles == ["Done", "Quit"],
+          message.tone == .normal,
           !message.text.contains("**") else {
         FileHandle.standardError.write("message view self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("message view: dedicated=true markdownRendered=true close=true quit=true")
+    message.show(source: "Thinkpeek · Check error",
+                 text: "⛔ **THINKPEEK CHECK ERROR**\nProvider failed.",
+                 kind: "analysis", tone: .error)
+    guard message.source == "Thinkpeek · Check error",
+          message.text.contains("THINKPEEK CHECK ERROR"),
+          message.tone == .error else {
+        FileHandle.standardError.write(
+            "message error tone self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("message view: dedicated=true markdownRendered=true close=true quit=true " +
+          "errorTone=true")
     exit(0)
 }
 
@@ -240,7 +264,8 @@ if CommandLine.arguments.contains("--message-reader-freeze-selftest") {
     var selectedIndex = 2
     var eventCount = 3
     let snapshot = MessageReaderSnapshot(source: "Codex · frozen",
-                                         text: "Message being read", kind: "analysis")
+                                         text: "Message being read", kind: "analysis",
+                                         tone: .normal)
     eventCount += 1
     if MessageReaderSelection.shouldAdvanceForNewMessage(
         isReaderOpen: true, wasFollowingLatest: selectedIndex == eventCount - 2) {

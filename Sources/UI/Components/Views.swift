@@ -276,8 +276,15 @@ final class EventCard: NSView {
     }
 
     func setAlert(_ text: String) {
-        layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.08).cgColor
-        layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.38).cgColor
+        layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.10).cgColor
+        layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.45).cgColor
+        setFooter(text, color: .systemOrange)
+    }
+
+    func setError(_ text: String) {
+        layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.14).cgColor
+        layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.72).cgColor
+        layer?.borderWidth = 2
         setFooter(text, color: .systemRed)
     }
 }
