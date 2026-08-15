@@ -86,6 +86,41 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--provider-reasoning-selftest") {
+    let openAI = #"{"timestamp":"2026-08-15T10:00:00Z","type":"response_item","payload":{"type":"reasoning","content":[{"type":"reasoning_text","text":"Inspecting the complete OpenAI reasoning text.\n\nVerifying every paragraph reaches the reader."}],"summary":[{"type":"summary_text","text":"**Short checker summary**"}],"encrypted_content":"sealed"}}"#
+    let openAIWithoutSummary = #"{"timestamp":"2026-08-15T10:00:01Z","type":"response_item","payload":{"type":"reasoning","content":[{"type":"reasoning_text","text":"Local-only OpenAI reasoning text."}],"summary":[],"encrypted_content":"sealed"}}"#
+    let openAISummaryOnly = #"{"timestamp":"2026-08-15T10:00:02Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"**First readable summary**"},{"type":"summary_text","text":"**Second readable summary**"}],"encrypted_content":"sealed"}}"#
+    let claude = #"{"timestamp":"2026-08-15T10:00:03Z","type":"assistant","message":{"content":[{"type":"thinking","thinking":"Inspecting the complete Claude thinking text.\n\nVerifying every paragraph reaches the reader.","signature":"sealed"}]}}"#
+    let openAIBlocks = blocks(in: openAI)
+    let localOnlyBlocks = blocks(in: openAIWithoutSummary)
+    let summaryBlocks = blocks(in: openAISummaryOnly)
+    let claudeBlocks = blocks(in: claude)
+    guard openAIBlocks.count == 1,
+          openAIBlocks[0].text ==
+            "Inspecting the complete OpenAI reasoning text.\n\n" +
+            "Verifying every paragraph reaches the reader.",
+          openAIBlocks[0].evaluationRecord.content == "**Short checker summary**",
+          openAIBlocks[0].externallyEvaluable,
+          localOnlyBlocks.count == 1,
+          localOnlyBlocks[0].text == "Local-only OpenAI reasoning text.",
+          !localOnlyBlocks[0].externallyEvaluable,
+          summaryBlocks.count == 1,
+          summaryBlocks[0].text ==
+            "**First readable summary**\n\n**Second readable summary**",
+          claudeBlocks.count == 1,
+          claudeBlocks[0].text ==
+            "Inspecting the complete Claude thinking text.\n\n" +
+            "Verifying every paragraph reaches the reader." else {
+        FileHandle.standardError.write(
+            "provider reasoning self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("provider reasoning: openAITextComplete=true " +
+          "openAISummaryFallback=true claudeThinkingComplete=true " +
+          "fullTextNotSentExternally=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--layout-selftest") {
     let sample = "Since the combined start.sh has debug mode always enabled rather than selecting the requested runtime configuration."
     let event = UIEvent(timestamp: "2026-08-12T00:00:00.000Z", kind: "analysis",

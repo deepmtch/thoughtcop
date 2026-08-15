@@ -5,7 +5,12 @@ import Foundation
 /// The only record eligible for automatic external evaluation: readable reasoning.
 struct EvaluationRecord {
     let content: String
-    let eventType = "reasoning_summary"
+    let eventType: String
+
+    init(content: String, eventType: String = "reasoning_summary") {
+        self.content = content
+        self.eventType = eventType
+    }
 
     var json: [String: Any] {
         ["event_type": eventType, "content": content, "record_complete": true]
@@ -19,20 +24,28 @@ struct Block {
     let sealed: Bool
     let signatureChars: Int
     let kind: Kind
+    let evaluationText: String
+    let evaluationEventType: String
+    let externallyEvaluable: Bool
     var backfilled: Bool
 
     init(ts: String, text: String, sealed: Bool, signatureChars: Int,
-         kind: Kind, backfilled: Bool = false) {
+         kind: Kind, evaluationText: String? = nil,
+         evaluationEventType: String = "reasoning_summary",
+         externallyEvaluable: Bool = true, backfilled: Bool = false) {
         self.ts = ts
         self.text = text
         self.sealed = sealed
         self.signatureChars = signatureChars
         self.kind = kind
+        self.evaluationText = evaluationText ?? text
+        self.evaluationEventType = evaluationEventType
+        self.externallyEvaluable = externallyEvaluable
         self.backfilled = backfilled
     }
 
     var evaluationRecord: EvaluationRecord {
-        EvaluationRecord(content: text)
+        EvaluationRecord(content: evaluationText, eventType: evaluationEventType)
     }
 }
 
@@ -128,10 +141,23 @@ func blocks(in line: String) -> [Block] {
     if obj["type"] as? String == "response_item",
        let payload = obj["payload"] as? [String: Any],
        payload["type"] as? String == "reasoning" {
+        let reasoningTexts: [String] =
+            (payload["content"] as? [[String: Any]] ?? []).compactMap { item -> String? in
+            guard item["type"] as? String == "reasoning_text" else { return nil }
+            return (item["text"] as? String)?.trimmingCharacters(
+                in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
         let summaries = (payload["summary"] as? [[String: Any]] ?? []).compactMap {
             ($0["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         }.filter { !$0.isEmpty }
         let encryptedChars = (payload["encrypted_content"] as? String)?.count ?? 0
+        if !reasoningTexts.isEmpty {
+            let summary = summaries.joined(separator: "\n\n")
+            return [Block(ts: ts, text: reasoningTexts.joined(separator: "\n\n"),
+                          sealed: false, signatureChars: encryptedChars,
+                          kind: .thinking, evaluationText: summary,
+                          externallyEvaluable: !summary.isEmpty)]
+        }
         if !summaries.isEmpty {
             return [Block(ts: ts, text: summaries.joined(separator: "\n\n"),
                           sealed: false, signatureChars: encryptedChars,
@@ -191,7 +217,11 @@ final class Tailer {
         let all = backfillBlocks(limit: backfill)
         pending = Array(all.suffix(backfill)).map {
             Block(ts: $0.ts, text: $0.text, sealed: $0.sealed,
-                  signatureChars: $0.signatureChars, kind: $0.kind, backfilled: true)
+                  signatureChars: $0.signatureChars, kind: $0.kind,
+                  evaluationText: $0.evaluationText,
+                  evaluationEventType: $0.evaluationEventType,
+                  externallyEvaluable: $0.externallyEvaluable,
+                  backfilled: true)
         }
     }
 

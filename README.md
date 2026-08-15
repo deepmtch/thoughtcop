@@ -57,9 +57,13 @@ Codex tasks write rollout events to:
 ~/.codex/sessions/<year>/<month>/<day>/rollout-<timestamp>-<task-uuid>.jsonl
 ```
 
-Codex readable summaries arrive as `event_msg/agent_reasoning`; task starts are
-also represented internally as progress only: they never replace a readable
-summary or enter card history. Encrypted-only records are hidden by default. Task names come from
+Codex reasoning items use plaintext `content[].reasoning_text` when the provider
+supplies it. Otherwise Thinkpeek displays the complete ordered `summary[]` array;
+the duplicate `event_msg/agent_reasoning` entries are ignored. Full plaintext is
+local display data only: the external checker receives the provider summary, and
+no external check is made when a full-text item has no summary. Task starts are
+progress only and never replace readable content or enter card history.
+Encrypted-only records are hidden by default. Task names come from
 `~/.codex/session_index.jsonl`. Auto mode follows both Claude and Codex, and the
 picker labels every source explicitly.
 
@@ -73,7 +77,9 @@ Assistant records carry a `message.content` array; reasoning appears as:
 {"type": "thinking", "thinking": "…", "signature": "CAISuwYKhwEIEBgC…"}
 ```
 
-**The stored text is Claude's *summarized* reasoning, not raw chain-of-thought.**
+Claude `message.content[].thinking` text is displayed completely when present.
+**That stored text may itself be a provider-generated reasoning summary rather
+than raw chain-of-thought.**
 A 250-character `thinking` string can represent a much longer reasoning pass, and
 some blocks arrive with `thinking: ""` and only an opaque `signature`. Opus 5
 does this by default unless Claude Code is configured to request summaries:

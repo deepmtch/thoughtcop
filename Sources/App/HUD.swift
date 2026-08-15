@@ -1476,6 +1476,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 card.setFooter("History · already seen")
                 continue
             }
+            guard block.externallyEvaluable else {
+                card.setFooter("Local display only · no provider summary for checker")
+                continue
+            }
 
             let state = driftStatus()
             guard state.ready else {
