@@ -363,15 +363,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         latestButton.isHidden = true
 
         checkRulesButton = NSButton(
-            image: NSImage(systemSymbolName: "checklist",
-                           accessibilityDescription: "Edit what to check") ?? NSImage(),
+            image: NSImage(systemSymbolName: "text.bubble",
+                           accessibilityDescription: "Edit check prompt") ?? NSImage(),
             target: self, action: #selector(requestCheckRules(_:)))
         checkRulesButton.bezelStyle = .accessoryBarAction
         checkRulesButton.isBordered = false
         checkRulesButton.imagePosition = .imageOnly
         checkRulesButton.controlSize = .small
-        checkRulesButton.toolTip = "Edit what Thinkpeek checks"
-        checkRulesButton.setAccessibilityLabel("Edit what Thinkpeek checks")
+        checkRulesButton.toolTip = "Edit check prompt"
+        checkRulesButton.setAccessibilityLabel("Edit check prompt")
         checkRulesButton.translatesAutoresizingMaskIntoConstraints = false
         checkRulesButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
         checkRulesButton.heightAnchor.constraint(equalToConstant: 26).isActive = true

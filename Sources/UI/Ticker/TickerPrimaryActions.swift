@@ -24,8 +24,8 @@ final class TickerPrimaryActions: NSStackView {
 
     override init(frame frameRect: NSRect) {
         checkRulesButton = NSButton(
-            image: NSImage(systemSymbolName: "checklist",
-                           accessibilityDescription: "Edit what to check") ?? NSImage(),
+            image: NSImage(systemSymbolName: "text.bubble",
+                           accessibilityDescription: "Edit check prompt") ?? NSImage(),
             target: nil, action: nil)
         displaySettingsButton = NSButton(frame: .zero)
         controlsButton = NSButton(
@@ -47,8 +47,8 @@ final class TickerPrimaryActions: NSStackView {
         }
         checkRulesButton.target = self
         checkRulesButton.action = #selector(openCheckRules(_:))
-        checkRulesButton.toolTip = "Edit what Thinkpeek checks"
-        checkRulesButton.setAccessibilityLabel("Edit what to check")
+        checkRulesButton.toolTip = "Edit check prompt"
+        checkRulesButton.setAccessibilityLabel("Edit check prompt")
         displaySettingsButton.toolTip = "Display settings"
         displaySettingsButton.setAccessibilityLabel("Display settings")
         controlsButton.target = self

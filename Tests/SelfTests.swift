@@ -438,7 +438,7 @@ if CommandLine.arguments.contains("--ticker-actions-selftest") {
     actions.controlsRequested = { controls = true }
     actions.requestCheckRulesForTest()
     actions.requestControlsForTest()
-    guard actions.accessibilityNames == ["Edit what to check", "Display settings",
+    guard actions.accessibilityNames == ["Edit check prompt", "Display settings",
                                          "Open message navigation"],
           actions.displaySettingsButton.target != nil,
           actions.displaySettingsButton.action != nil,
