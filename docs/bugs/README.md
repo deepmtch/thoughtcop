@@ -48,3 +48,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-041](BUG-041-controls-were-empty-and-command-paths-diverged.md) | Controls hid the message and UI/API command paths diverged | Fixed |
 | [BUG-042](BUG-042-codex-summary-markdown-made-every-line-bold.md) | Codex summary Markdown made every reasoning line bold | Fixed |
 | [BUG-043](BUG-043-plaintext-provider-reasoning-was-not-preferred.md) | Plaintext provider reasoning was not preferred over summaries | Fixed |
+| [BUG-044](BUG-044-summary-only-history-stalled-startup.md) | Summary-only history stalled startup and left the interface empty | Fixed |

@@ -6,14 +6,18 @@ import Foundation
 func runRequestedSelfTest() {
 
 if CommandLine.arguments.contains("--selftest") {
-    guard let path = newestTranscript() else {
-        FileHandle.standardError.write("no Claude or Codex transcripts found\n".data(using: .utf8)!)
+    let path = FileManager.default.temporaryDirectory
+        .appendingPathComponent("thinkpeek-selftest-\(UUID().uuidString).jsonl").path
+    let fixture = #"{"timestamp":"2026-08-15T10:00:00Z","type":"assistant","message":{"content":[{"type":"thinking","thinking":"Complete deterministic reasoning fixture.","signature":"sealed"}]}}"# + "\n"
+    try? fixture.write(toFile: path, atomically: true, encoding: .utf8)
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    let drained = Tailer(path: path, backfill: 5).drain()
+    guard drained.count == 1,
+          drained[0].text == "Complete deterministic reasoning fixture." else {
+        FileHandle.standardError.write("transcript tailer self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("active: \(path)")
-    for b in Tailer(path: path, backfill: 5).drain() {
-        print("  [\(b.ts)] \(b.sealed ? "<sealed>" : String(b.text.prefix(110)))")
-    }
+    print("transcript tailer: deterministic=true completeText=true")
     exit(0)
 }
 
@@ -43,17 +47,17 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
     let codexLine = #"{"timestamp":"2026-08-13T10:00:00.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","status":"completed","call_id":"call_1","input":"tools.apply_patch(...)"}}"#
     let claudeLine = #"{"timestamp":"2026-08-13T10:00:01.000Z","type":"assistant","message":{"content":[{"type":"tool_use","id":"tool_1","name":"Edit","input":{"file_path":"Sources/Test.swift"}}]}}"#
     let duplicateEventLine = #"{"timestamp":"2026-08-13T10:00:01.900Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"**Assessing safe change**"}}"#
-    let reasoningLine = #"{"timestamp":"2026-08-13T10:00:02.000Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"**Assessing safe change**"},{"type":"summary_text","text":"**Planning a safe change**"}],"encrypted_content":"sealed"}}"#
+    let reasoningLine = #"{"timestamp":"2026-08-13T10:00:02.000Z","type":"response_item","payload":{"type":"reasoning","content":[{"type":"reasoning_text","text":"Assessing and planning a safe change."}],"summary":[{"type":"summary_text","text":"**Short summary**"}],"encrypted_content":"sealed"}}"#
     let toolRecords = blocks(in: codexLine) + blocks(in: claudeLine)
     let reasoningRecords = blocks(in: reasoningLine)
     guard toolRecords.isEmpty,
           blocks(in: duplicateEventLine).isEmpty,
           reasoningRecords.count == 1,
           reasoningRecords[0].kind == .thinking,
-          reasoningRecords[0].text ==
-            "**Assessing safe change**\n\n**Planning a safe change**",
+          reasoningRecords[0].text == "Assessing and planning a safe change.",
           reasoningRecords[0].evaluationRecord.json["event_type"] as? String ==
-            "reasoning_summary" else {
+            "reasoning_text",
+          !reasoningRecords[0].externallyEvaluable else {
         FileHandle.standardError.write(
             "reasoning-only boundary self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -95,18 +99,24 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
     let localOnlyBlocks = blocks(in: openAIWithoutSummary)
     let summaryBlocks = blocks(in: openAISummaryOnly)
     let claudeBlocks = blocks(in: claude)
+    let summaryEvent = summaryBlocks.first.map(uiEvent(for:))
     guard openAIBlocks.count == 1,
           openAIBlocks[0].text ==
             "Inspecting the complete OpenAI reasoning text.\n\n" +
             "Verifying every paragraph reaches the reader.",
-          openAIBlocks[0].evaluationRecord.content == "**Short checker summary**",
-          openAIBlocks[0].externallyEvaluable,
+          openAIBlocks[0].evaluationRecord.content.isEmpty,
+          openAIBlocks[0].evaluationRecord.eventType == "reasoning_text",
+          !openAIBlocks[0].externallyEvaluable,
           localOnlyBlocks.count == 1,
           localOnlyBlocks[0].text == "Local-only OpenAI reasoning text.",
           !localOnlyBlocks[0].externallyEvaluable,
           summaryBlocks.count == 1,
-          summaryBlocks[0].text ==
-            "**First readable summary**\n\n**Second readable summary**",
+          summaryBlocks[0].sealed,
+          summaryBlocks[0].text.isEmpty,
+          !summaryBlocks[0].externallyEvaluable,
+          summaryEvent?.kind == "omitted-analysis",
+          summaryEvent?.text.contains("Original reasoning unavailable") == true,
+          summaryEvent?.text.contains("First readable summary") == false,
           claudeBlocks.count == 1,
           claudeBlocks[0].text ==
             "Inspecting the complete Claude thinking text.\n\n" +
@@ -116,8 +126,8 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
         exit(1)
     }
     print("provider reasoning: openAITextComplete=true " +
-          "openAISummaryFallback=true claudeThinkingComplete=true " +
-          "fullTextNotSentExternally=true")
+          "summaryNeverPresentedAsOriginal=true claudeThinkingComplete=true " +
+          "fullTextLocalOnly=true")
     exit(0)
 }
 

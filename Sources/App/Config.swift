@@ -74,8 +74,3 @@ let BACKFILL: Int = {
     if ["all", "unlimited", "infinite"].contains(raw) { return Int.max }
     return max(0, Int(raw) ?? 3)
 }()
-
-let SHOW_ENCRYPTED: Bool = {
-    guard let raw = dotenv("THINKPEEK_SHOW_ENCRYPTED")?.lowercased() else { return false }
-    return ["1", "true", "yes", "on"].contains(raw)
-}()

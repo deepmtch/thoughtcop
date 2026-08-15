@@ -70,11 +70,9 @@ func uiEvent(for block: Block) -> UIEvent {
                        readableAnalysis: false)
     }
     if block.sealed {
-        let received = block.signatureChars > 0
-            ? "\(block.signatureChars)-character encrypted signature received"
-            : "no readable text received"
         return UIEvent(timestamp: block.ts, kind: "omitted-analysis",
-                       text: "⟨No readable analysis summary — \(received)⟩",
+                       text: "⟨Original reasoning unavailable — the provider record " +
+                             "contains no plaintext reasoning⟩",
                        readableAnalysis: false)
     }
     return UIEvent(timestamp: block.ts, kind: "analysis", text: block.text,
@@ -125,9 +123,7 @@ func blocks(in line: String) -> [Block] {
                           signatureChars: 0, kind: .activity)]
         }
         if payload["type"] as? String == "agent_reasoning" {
-            // Codex repeats these individual entries in the following
-            // response_item.reasoning.summary array. That array is the complete,
-            // ordered reasoning item and is the sole readable source below.
+            // This is provider-generated summary text, not original reasoning.
             return []
         }
     }
@@ -144,28 +140,23 @@ func blocks(in line: String) -> [Block] {
         let reasoningTexts: [String] =
             (payload["content"] as? [[String: Any]] ?? []).compactMap { item -> String? in
             guard item["type"] as? String == "reasoning_text" else { return nil }
-            return (item["text"] as? String)?.trimmingCharacters(
-                in: .whitespacesAndNewlines)
-        }.filter { !$0.isEmpty }
-        let summaries = (payload["summary"] as? [[String: Any]] ?? []).compactMap {
-            ($0["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        }.filter { !$0.isEmpty }
+            guard let text = item["text"] as? String,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return nil }
+            return text
+        }
         let encryptedChars = (payload["encrypted_content"] as? String)?.count ?? 0
         if !reasoningTexts.isEmpty {
-            let summary = summaries.joined(separator: "\n\n")
             return [Block(ts: ts, text: reasoningTexts.joined(separator: "\n\n"),
                           sealed: false, signatureChars: encryptedChars,
-                          kind: .thinking, evaluationText: summary,
-                          externallyEvaluable: !summary.isEmpty)]
+                          kind: .thinking, evaluationText: "",
+                          evaluationEventType: "reasoning_text",
+                          externallyEvaluable: false)]
         }
-        if !summaries.isEmpty {
-            return [Block(ts: ts, text: summaries.joined(separator: "\n\n"),
-                          sealed: false, signatureChars: encryptedChars,
-                          kind: .thinking)]
-        }
-        if encryptedChars > 0 {
+        if encryptedChars > 0 || payload["summary"] != nil {
             return [Block(ts: ts, text: "", sealed: true,
-                          signatureChars: encryptedChars, kind: .thinking)]
+                          signatureChars: encryptedChars, kind: .thinking,
+                          evaluationText: "", externallyEvaluable: false)]
         }
         return []
     }
@@ -174,11 +165,13 @@ func blocks(in line: String) -> [Block] {
     return content.compactMap { block in
         switch block["type"] as? String {
         case "thinking":
-            let text = ((block["thinking"] as? String) ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = (block["thinking"] as? String) ?? ""
             let signatureChars = (block["signature"] as? String)?.count ?? 0
-            return Block(ts: ts, text: text, sealed: text.isEmpty,
-                         signatureChars: signatureChars, kind: .thinking)
+            let readable = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return Block(ts: ts, text: text, sealed: !readable,
+                         signatureChars: signatureChars, kind: .thinking,
+                         evaluationText: "", evaluationEventType: "thinking",
+                         externallyEvaluable: false)
         case "tool_use", "tool_result":
             return nil
         default:
@@ -247,7 +240,7 @@ final class Tailer {
                 text = String(text[text.index(after: newline)...])
             }
             found = text.components(separatedBy: "\n").flatMap { blocks(in: $0) }
-                .filter { $0.kind == .thinking && (SHOW_ENCRYPTED || !$0.sealed) }
+                .filter { $0.kind == .thinking }
         } while start > 0 && found.count < limit
         return found
     }

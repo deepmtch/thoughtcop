@@ -137,10 +137,11 @@ hard-capped at 560 and 700 points, so
 long reasoning wraps and scrolls vertically instead of stretching the window.
 
 Auto mode follows every active session and nested agent. Use the session picker
-to pin one session. Cards show the local time, source session, and readable summary.
-Set `THINKPEEK_HISTORY_COUNT` in `.env` to an integer, `0`, or `all`. Encrypted
-signature-only cards are hidden unless `THINKPEEK_SHOW_ENCRYPTED=true`.
-Repeated identical summaries from the same source are presented once even when
+to pin one session. Cards show the local time, source session, and original
+readable reasoning. Set `THINKPEEK_HISTORY_COUNT` in `.env` to an integer, `0`,
+or `all`. When a provider record has no plaintext reasoning, Thinkpeek presents
+an explicit unavailable state instead of substituting its summary text.
+Repeated identical records from the same source are presented once even when
 the transcript records them at multiple timestamps.
 
 ### Evidence the writes are live

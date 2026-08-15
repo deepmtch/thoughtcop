@@ -521,7 +521,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "externalAnalysisEnabled": driftStatus().ready,
             "analysisDestination": driftStatus().ready ? checkLabel() : NSNull(),
             "historyCount": BACKFILL == Int.max ? "all" : String(BACKFILL),
-            "showEncrypted": SHOW_ENCRYPTED,
             "alwaysOnTop": panel.level == .floating,
             "windowWidth": Int(panel.frame.width),
             "windowHeight": Int(panel.frame.height),
@@ -1420,9 +1419,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         var arrived: [(path: String, block: Block)] = []
         for (path, tailer) in tailers {
             arrived += tailer.drain().map { (path, $0) }
-        }
-        if !SHOW_ENCRYPTED {
-            arrived.removeAll { $0.block.sealed }
         }
         arrived.sort { $0.block.ts < $1.block.ts }
         arrived.removeAll { event in
