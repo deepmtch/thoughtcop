@@ -145,10 +145,10 @@ was sent. Per-record `timestamp` fields advance monotonically within the turn.
 
 ## The drift alarm
 
-The native Thinkpeek app sends each new factual transcript record, plus your
-locally saved evaluation instruction, to a fast model. Reasoning summaries,
-structured tool calls, and structured tool results are evidence; Thinkpeek does
-not infer actions from keywords.
+The native Thinkpeek app sends each new readable reasoning summary, plus your
+locally saved evaluation instruction, to a fast model. Tool calls and tool
+results are discarded by the transcript parser and never enter the automatic
+evaluation path. Thinkpeek does not infer actions from keywords.
 
 The **What to Check…** editor has two explicit modes:
 
@@ -157,7 +157,7 @@ The **What to Check…** editor has two explicit modes:
   evaluation and alerts when any evaluation returns `true`.
 
 No comments, categories, keywords, or trigger meanings are inferred. Edits take
-effect on the next transcript record without restarting Thinkpeek.
+effect on the next readable reasoning summary without restarting Thinkpeek.
 
 The settings menu's **What to Check…** action edits that local value and mode directly.
 There is no file-backed configuration. The next reasoning block uses the saved

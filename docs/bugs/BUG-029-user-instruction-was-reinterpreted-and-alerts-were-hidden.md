@@ -1,5 +1,8 @@
 # BUG-029: User instruction was reinterpreted and alerts were hidden
 
+> Scope correction: the structured tool-record expansion described below was
+> removed by BUG-038. Automatic evaluation is reasoning-only.
+
 ## Symptom
 
 The saved text included `WARN. WHEN CODE IS BEING CHANGED`, but the ticker showed
@@ -37,9 +40,8 @@ There were three independent boundaries:
   non-empty line is independently evaluated. Existing text retains the old
   editor's explicit independent-line contract; no content is inspected to pick
   the mode.
-- Claude `tool_use`/`tool_result` and Codex
-  `custom_tool_call`/`custom_tool_call_output` records are parsed as factual
-  evidence without assigning semantic categories.
+- Historical implementation only: Claude and Codex tool records were briefly
+  parsed as evaluation evidence. BUG-038 removed this expansion completely.
 - Clean tool evidence remains out of the feed. Alerted or failed evidence creates
   a navigable origin card.
 - Each message owns `pending`, `clear`, `alert`, or `failed` evaluator state.

@@ -51,18 +51,9 @@ runRequestedSelfTest()
 
 // Headless check of the alarm path: no window or transcript tailing.
 var requestedEvidence: EvaluationRecord?
-if let index = CommandLine.arguments.firstIndex(of: "--check-record"),
-   index + 1 < CommandLine.arguments.count,
-   let data = FileManager.default.contents(atPath: CommandLine.arguments[index + 1]),
-   var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-   let eventType = object.removeValue(forKey: "event_type") as? String {
-    object.removeValue(forKey: "record_complete")
-    requestedEvidence = EvaluationRecord(eventType: eventType, fields: object)
-} else if let index = CommandLine.arguments.firstIndex(of: "--check"),
+if let index = CommandLine.arguments.firstIndex(of: "--check"),
           index + 1 < CommandLine.arguments.count {
-    requestedEvidence = EvaluationRecord(
-        eventType: "reasoning_summary",
-        fields: ["content": CommandLine.arguments[index + 1]])
+    requestedEvidence = EvaluationRecord(content: CommandLine.arguments[index + 1])
 }
 
 if let requestedEvidence {

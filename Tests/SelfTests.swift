@@ -19,19 +19,15 @@ if CommandLine.arguments.contains("--selftest") {
 
 if CommandLine.arguments.contains("--evaluator-selftest") {
     let instruction = "First line is not a category.\n# This remains user text.\nBANANA only.\n"
-    let evidence = EvaluationRecord(
-        eventType: "tool_call",
-        fields: ["tool_name": "apply_patch", "status": "completed",
-                 "input": ["path": "Sources/Test.swift"]])
+    let evidence = EvaluationRecord(content: "Planning the next source edit")
     let envelope = evaluationEnvelope(instruction: instruction, evidence: evidence)
-    let oversizedEvidence = EvaluationRecord(
-        eventType: "tool_result",
-        fields: ["output": String(repeating: "x", count: 41_245)])
+    let oversizedEvidence = EvaluationRecord(content: String(repeating: "x", count: 41_245))
     let oversizedEnvelope = serializedEvaluationEnvelope(
         instruction: instruction, evidence: oversizedEvidence)
     guard envelope["EVALUATION_INSTRUCTION"] as? String == instruction,
           let record = envelope["EVIDENCE_RECORD"] as? [String: Any],
-          record["event_type"] as? String == "tool_call",
+          record["event_type"] as? String == "reasoning_summary",
+          record["content"] as? String == "Planning the next source edit",
           record["record_complete"] as? Bool == true,
           let decision = parseEvaluationDecision(Data(
             #"{"alert":true,"reason":"changed","evidence":"Sources/Test.swift"}"#.utf8)),
@@ -46,19 +42,18 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
 
     let codexLine = #"{"timestamp":"2026-08-13T10:00:00.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","status":"completed","call_id":"call_1","input":"tools.apply_patch(...)"}}"#
     let claudeLine = #"{"timestamp":"2026-08-13T10:00:01.000Z","type":"assistant","message":{"content":[{"type":"tool_use","id":"tool_1","name":"Edit","input":{"file_path":"Sources/Test.swift"}}]}}"#
-    let parsed = blocks(in: codexLine) + blocks(in: claudeLine)
-    guard parsed.count == 2,
-          parsed.allSatisfy({ $0.kind == .evidence }),
-          parsed[0].evaluationRecord.json["tool_name"] as? String == "exec",
-          parsed[1].evaluationRecord.json["tool_name"] as? String == "Edit" else {
+    let reasoningLine = #"{"timestamp":"2026-08-13T10:00:02.000Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"Planning a safe change"}}"#
+    let toolRecords = blocks(in: codexLine) + blocks(in: claudeLine)
+    let reasoningRecords = blocks(in: reasoningLine)
+    guard toolRecords.isEmpty,
+          reasoningRecords.count == 1,
+          reasoningRecords[0].kind == .thinking,
+          reasoningRecords[0].evaluationRecord.json["event_type"] as? String ==
+            "reasoning_summary" else {
         FileHandle.standardError.write(
-            "structured evidence self-test failed\n".data(using: .utf8)!)
+            "reasoning-only boundary self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    let evidenceKeys = parsed.map {
-        $0.text + ($0.kind == .thinking ? "" : "\u{1f}" + $0.ts)
-    }
-    guard Set(evidenceKeys).count == 2 else { exit(1) }
 
     let preview = MessagePreview(source: "Codex · Test", text: "Tool call: exec",
                                  kind: "analysis")
@@ -81,7 +76,7 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
             "check-error attribution self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("evaluator: verbatim=true binary=true structuredEvidence=true " +
+    print("evaluator: verbatim=true binary=true reasoningOnly=true toolRecordsExcluded=true " +
           "oversizeMeasured=true invalidVisible=true alertAttached=true")
     exit(0)
 }

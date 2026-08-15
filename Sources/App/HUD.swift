@@ -1377,15 +1377,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for event in arrived {
             let block = event.block
             let source = sourceName(for: event.path)
-            if block.kind == .evidence {
-                guard !block.backfilled else { continue }
-                let state = driftStatus()
-                guard state.ready else { continue }
-                // Factual tool records remain out of the feed when clean. An
-                // alert or failed check creates its own navigable origin card.
-                evaluate(block, source: source, card: nil, preview: nil)
-                continue
-            }
             let ui = uiEvent(for: block)
             if ui.kind == "activity" {
                 operationStarted(source: source)
