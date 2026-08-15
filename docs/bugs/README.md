@@ -54,3 +54,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-047](BUG-047-settings-and-exit-actions-were-hidden.md) | Display settings required opening controls and Quit was hidden in overflow | Fixed |
 | [BUG-048](BUG-048-check-prompt-used-checklist-icon.md) | Check-prompt editing used an ambiguous checklist icon | Fixed |
 | [BUG-049](BUG-049-launchctl-created-relaunch-loop.md) | Post-commit launch jobs made app instances continuously replace each other | Fixed |
+| [BUG-050](BUG-050-plaintext-reasoning-bypassed-checker.md) | Plaintext Claude and Codex reasoning displayed but silently bypassed the checker | Fixed |

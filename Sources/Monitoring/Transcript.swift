@@ -147,11 +147,12 @@ func blocks(in line: String) -> [Block] {
         }
         let encryptedChars = (payload["encrypted_content"] as? String)?.count ?? 0
         if !reasoningTexts.isEmpty {
-            return [Block(ts: ts, text: reasoningTexts.joined(separator: "\n\n"),
+            let reasoningText = reasoningTexts.joined(separator: "\n\n")
+            return [Block(ts: ts, text: reasoningText,
                           sealed: false, signatureChars: encryptedChars,
-                          kind: .thinking, evaluationText: "",
+                          kind: .thinking, evaluationText: reasoningText,
                           evaluationEventType: "reasoning_text",
-                          externallyEvaluable: false)]
+                          externallyEvaluable: true)]
         }
         if encryptedChars > 0 || payload["summary"] != nil {
             return [Block(ts: ts, text: "", sealed: true,
@@ -170,8 +171,9 @@ func blocks(in line: String) -> [Block] {
             let readable = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             return Block(ts: ts, text: text, sealed: !readable,
                          signatureChars: signatureChars, kind: .thinking,
-                         evaluationText: "", evaluationEventType: "thinking",
-                         externallyEvaluable: false)
+                         evaluationText: readable ? text : "",
+                         evaluationEventType: "thinking",
+                         externallyEvaluable: readable)
         case "tool_use", "tool_result":
             return nil
         default:

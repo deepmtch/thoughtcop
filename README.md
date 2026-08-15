@@ -70,11 +70,12 @@ Codex tasks write rollout events to:
 ```
 
 Codex reasoning items use plaintext `content[].reasoning_text` when the provider
-supplies it. Otherwise Thinkpeek displays the complete ordered `summary[]` array;
-the duplicate `event_msg/agent_reasoning` entries are ignored. Full plaintext is
-local display data only: the external checker receives the provider summary, and
-no external check is made when a full-text item has no summary. Task starts are
-progress only and never replace readable content or enter card history.
+supplies it. Otherwise Thinkpeek shows that original reasoning is unavailable;
+provider `summary[]` and duplicate `event_msg/agent_reasoning` entries are ignored. Full plaintext is
+both displayed locally and sent verbatim to the configured external checker.
+Provider summaries, tool calls/results, messages, and encrypted-only records are
+not sent. Task starts are progress only and never replace readable content or
+enter card history.
 Encrypted-only records are hidden by default. Task names come from
 `~/.codex/session_index.jsonl`. Auto mode follows both Claude and Codex, and the
 picker labels every source explicitly.

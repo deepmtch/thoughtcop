@@ -46,18 +46,28 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
 
     let codexLine = #"{"timestamp":"2026-08-13T10:00:00.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","status":"completed","call_id":"call_1","input":"tools.apply_patch(...)"}}"#
     let claudeLine = #"{"timestamp":"2026-08-13T10:00:01.000Z","type":"assistant","message":{"content":[{"type":"tool_use","id":"tool_1","name":"Edit","input":{"file_path":"Sources/Test.swift"}}]}}"#
+    let messageLine = #"{"timestamp":"2026-08-13T10:00:01.100Z","type":"assistant","message":{"content":[{"type":"text","text":"ordinary assistant message"}]}}"#
+    let encryptedLine = #"{"timestamp":"2026-08-13T10:00:01.200Z","type":"assistant","message":{"content":[{"type":"thinking","thinking":"","signature":"sealed"}]}}"#
     let duplicateEventLine = #"{"timestamp":"2026-08-13T10:00:01.900Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"**Assessing safe change**"}}"#
     let reasoningLine = #"{"timestamp":"2026-08-13T10:00:02.000Z","type":"response_item","payload":{"type":"reasoning","content":[{"type":"reasoning_text","text":"Assessing and planning a safe change."}],"summary":[{"type":"summary_text","text":"**Short summary**"}],"encrypted_content":"sealed"}}"#
-    let toolRecords = blocks(in: codexLine) + blocks(in: claudeLine)
+    let excludedRecords = blocks(in: codexLine) + blocks(in: claudeLine) +
+        blocks(in: messageLine)
+    let encryptedRecords = blocks(in: encryptedLine)
     let reasoningRecords = blocks(in: reasoningLine)
-    guard toolRecords.isEmpty,
+    guard excludedRecords.isEmpty,
+          encryptedRecords.count == 1,
+          encryptedRecords[0].sealed,
+          !encryptedRecords[0].externallyEvaluable,
+          encryptedRecords[0].evaluationRecord.content.isEmpty,
           blocks(in: duplicateEventLine).isEmpty,
           reasoningRecords.count == 1,
           reasoningRecords[0].kind == .thinking,
           reasoningRecords[0].text == "Assessing and planning a safe change.",
+          reasoningRecords[0].evaluationRecord.content ==
+            "Assessing and planning a safe change.",
           reasoningRecords[0].evaluationRecord.json["event_type"] as? String ==
             "reasoning_text",
-          !reasoningRecords[0].externallyEvaluable else {
+          reasoningRecords[0].externallyEvaluable else {
         FileHandle.standardError.write(
             "reasoning-only boundary self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -84,7 +94,8 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
             "check-error attribution self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("evaluator: verbatim=true binary=true reasoningOnly=true toolRecordsExcluded=true " +
+    print("evaluator: verbatim=true binary=true reasoningOnly=true " +
+          "messagesToolsEncryptedExcluded=true " +
           "completeSummaryArrays=true " +
           "oversizeMeasured=true invalidVisible=true alertAttached=true")
     exit(0)
@@ -104,12 +115,13 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
           openAIBlocks[0].text ==
             "Inspecting the complete OpenAI reasoning text.\n\n" +
             "Verifying every paragraph reaches the reader.",
-          openAIBlocks[0].evaluationRecord.content.isEmpty,
+          openAIBlocks[0].evaluationRecord.content == openAIBlocks[0].text,
           openAIBlocks[0].evaluationRecord.eventType == "reasoning_text",
-          !openAIBlocks[0].externallyEvaluable,
+          openAIBlocks[0].externallyEvaluable,
           localOnlyBlocks.count == 1,
           localOnlyBlocks[0].text == "Local-only OpenAI reasoning text.",
-          !localOnlyBlocks[0].externallyEvaluable,
+          localOnlyBlocks[0].evaluationRecord.content == localOnlyBlocks[0].text,
+          localOnlyBlocks[0].externallyEvaluable,
           summaryBlocks.count == 1,
           summaryBlocks[0].sealed,
           summaryBlocks[0].text.isEmpty,
@@ -120,14 +132,17 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
           claudeBlocks.count == 1,
           claudeBlocks[0].text ==
             "Inspecting the complete Claude thinking text.\n\n" +
-            "Verifying every paragraph reaches the reader." else {
+            "Verifying every paragraph reaches the reader.",
+          claudeBlocks[0].evaluationRecord.content == claudeBlocks[0].text,
+          claudeBlocks[0].evaluationRecord.eventType == "thinking",
+          claudeBlocks[0].externallyEvaluable else {
         FileHandle.standardError.write(
             "provider reasoning self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
     print("provider reasoning: openAITextComplete=true " +
           "summaryNeverPresentedAsOriginal=true claudeThinkingComplete=true " +
-          "fullTextLocalOnly=true")
+          "plaintextReasoningExternallyEvaluable=true")
     exit(0)
 }
 
