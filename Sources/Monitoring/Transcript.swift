@@ -183,6 +183,14 @@ func blocks(in line: String) -> [Block] {
 }
 
 /// Follows one JSONL file by byte offset, tolerating partial writes and truncation.
+let MAX_BOUNDED_BACKFILL_BYTES: UInt64 = 2_097_152
+
+func backfillFloor(fileSize: UInt64, limit: Int) -> UInt64 {
+    guard limit != Int.max else { return 0 }
+    return fileSize > MAX_BOUNDED_BACKFILL_BYTES
+        ? fileSize - MAX_BOUNDED_BACKFILL_BYTES : 0
+}
+
 final class Tailer {
     let path: String
     let session: String
@@ -227,11 +235,12 @@ final class Tailer {
         defer { try? fh.close() }
         let size = (try? fh.seekToEnd()) ?? 0
         let chunkSize: UInt64 = 262_144
+        let floor = backfillFloor(fileSize: size, limit: limit)
         var start = size
         var accumulated = Data()
         var found: [Block] = []
         repeat {
-            let next = limit == Int.max ? 0 : (start > chunkSize ? start - chunkSize : 0)
+            let next = max(floor, start > chunkSize ? start - chunkSize : 0)
             try? fh.seek(toOffset: next)
             var chunk = fh.readData(ofLength: Int(start - next))
             chunk.append(accumulated)
@@ -243,7 +252,7 @@ final class Tailer {
             }
             found = text.components(separatedBy: "\n").flatMap { blocks(in: $0) }
                 .filter { $0.kind == .thinking }
-        } while start > 0 && found.count < limit
+        } while start > floor && found.count < limit
         return found
     }
 

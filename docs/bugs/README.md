@@ -60,3 +60,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-053](BUG-053-checker-outcome-not-persisted.md) | Checker requests had no durable paired outcome record | Fixed |
 | [BUG-054](BUG-054-encrypted-records-replaced-useful-ticker.md) | Encrypted records repeatedly replaced useful ticker content with a placeholder | Fixed |
 | [BUG-055](BUG-055-multi-session-flow-lacked-black-box-test.md) | Concurrent Claude/Codex checker and ticker behavior lacked a black-box test | Fixed |
+| [BUG-056](BUG-056-hidden-encrypted-history-stalled-startup.md) | Hiding encrypted history caused finite backfill to scan entire large rollouts | Fixed |

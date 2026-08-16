@@ -28,11 +28,15 @@ if CommandLine.arguments.contains("--selftest") {
     defer { try? FileManager.default.removeItem(atPath: path) }
     let drained = Tailer(path: path, backfill: 5).drain()
     guard drained.count == 1,
-          drained[0].text == "Complete deterministic reasoning fixture." else {
+          drained[0].text == "Complete deterministic reasoning fixture.",
+          backfillFloor(fileSize: 20_000_000, limit: 3) ==
+            20_000_000 - MAX_BOUNDED_BACKFILL_BYTES,
+          backfillFloor(fileSize: 20_000_000, limit: Int.max) == 0 else {
         FileHandle.standardError.write("transcript tailer self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("transcript tailer: deterministic=true completeText=true")
+    print("transcript tailer: deterministic=true completeText=true " +
+          "boundedBackfill=true")
     exit(0)
 }
 
