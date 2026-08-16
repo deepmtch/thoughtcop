@@ -281,3 +281,112 @@ final class Tailer {
         return out
     }
 }
+
+/// Owns every Tailer on one utility queue. AppKit submits desired paths and
+/// receives parsed blocks; it never opens, stats, seeks, or parses transcript
+/// files itself.
+final class TranscriptMonitorWorker {
+    typealias TailerFactory = (String, Int, UInt64?) -> Tailer
+
+    private let queue: DispatchQueue
+    private let tailerFactory: TailerFactory
+    private let stateLock = NSLock()
+    private var updateInFlight = false
+    private var pollInFlight = false
+    private var tailers: [String: Tailer] = [:]
+    private var knownOffsets: [String: UInt64] = [:]
+    private var launchOffsetsCaptured = false
+    private var monitorsReady = false
+
+    init(queue: DispatchQueue = DispatchQueue(
+            label: "thinkpeek.transcript-monitor", qos: .utility),
+         tailerFactory: @escaping TailerFactory = {
+            Tailer(path: $0, backfill: $1, startOffset: $2)
+         }) {
+        self.queue = queue
+        self.tailerFactory = tailerFactory
+    }
+
+    @discardableResult
+    func update(discoveredPaths: [String], launchSizes: [String: UInt64],
+                pinned: String?, completion: @escaping () -> Void) -> Bool {
+        stateLock.lock()
+        guard !updateInFlight else {
+            stateLock.unlock()
+            return false
+        }
+        updateInFlight = true
+        stateLock.unlock()
+
+        queue.async { [self] in
+            if !launchOffsetsCaptured {
+                knownOffsets = launchSizes
+                launchOffsetsCaptured = true
+            }
+            var wanted = discoveredPaths
+            if let pinned {
+                wanted = wanted.filter {
+                    sameTranscript(rootSessionPath(for: $0), pinned)
+                }
+                if !wanted.contains(where: { sameTranscript($0, pinned) }) {
+                    wanted.append(pinned)
+                }
+            }
+            let wantedSet = Set(wanted)
+            for path in tailers.keys.filter({ !wantedSet.contains($0) }) {
+                knownOffsets[path] = tailers[path]?.resumeOffset
+                tailers.removeValue(forKey: path)
+            }
+            for path in wanted where tailers[path] == nil {
+                if !monitorsReady {
+                    let scanLimit = BACKFILL == Int.max ? Int.max
+                        : (BACKFILL >= 13 ? 100 : BACKFILL * 8)
+                    tailers[path] = tailerFactory(path, scanLimit, nil)
+                } else {
+                    tailers[path] = tailerFactory(path, 0, knownOffsets[path] ?? 0)
+                }
+            }
+            monitorsReady = true
+            stateLock.lock()
+            updateInFlight = false
+            stateLock.unlock()
+            DispatchQueue.main.async(execute: completion)
+        }
+        return true
+    }
+
+    func reset(pinned: String?, completion: @escaping () -> Void) {
+        queue.async { [self] in
+            for (path, tailer) in tailers { knownOffsets[path] = tailer.resumeOffset }
+            tailers.removeAll()
+            monitorsReady = pinned != nil
+            if let pinned {
+                tailers[pinned] = tailerFactory(pinned, BACKFILL, nil)
+            }
+            DispatchQueue.main.async(execute: completion)
+        }
+    }
+
+    @discardableResult
+    func poll(completion: @escaping ([(path: String, block: Block)]) -> Void) -> Bool {
+        stateLock.lock()
+        guard !pollInFlight else {
+            stateLock.unlock()
+            return false
+        }
+        pollInFlight = true
+        stateLock.unlock()
+
+        queue.async { [self] in
+            var arrived: [(path: String, block: Block)] = []
+            for (path, tailer) in tailers {
+                arrived += tailer.drain().map { (path: path, block: $0) }
+            }
+            stateLock.lock()
+            pollInFlight = false
+            stateLock.unlock()
+            DispatchQueue.main.async { completion(arrived) }
+        }
+        return true
+    }
+}

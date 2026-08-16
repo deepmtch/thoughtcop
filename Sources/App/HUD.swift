@@ -124,17 +124,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let expandedWidth: CGFloat = 700
     private var presentationKeys = Set<String>()
     private var unseenCount = 0
-    private var tailers: [String: Tailer] = [:]
+    private let transcriptMonitor = TranscriptMonitorWorker()
     private var picker: NSPopUpButton!
     private var status: NSTextField!
     private var sessions: [SessionInfo] = []
     private var pinned: String? = INITIAL_TRANSCRIPT // nil = watch all active
     private var lastScan = Date.distantPast
     private var lastPickerRefresh = Date.distantPast
+    private let transcriptDiscovery = TranscriptDiscovery()
     private var monitorsReady = false
     private var initialScanComplete = false
     private var names: [String: String] = [:]
-    private var knownOffsets: [String: UInt64] = [:]
     private var alertCount = 0
     private var checkerRequestTokens = Set<UUID>()
     private var checkerActivityDestination: String?
@@ -494,7 +494,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.orderFrontRegardless()
         applyPeekMode(true, animated: false)
 
-        knownOffsets = transcriptSizes()
         api.captureHandler = { [weak self] in self?.captureWindowPNG() }
         api.actionHandler = { [weak self] command in self?.handleCommand(command) }
         api.start()
@@ -509,7 +508,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.api.perform(.close, origin: .appKit)
             }
         }
-        refreshPicker()
+        requestTranscriptDiscovery(includeSessions: true)
         refreshStatus()
         addSystemCard("Watching active Claude and Codex sessions",
                       detail: "New reasoning summaries appear here automatically.")
@@ -1274,24 +1273,23 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func applySessionSelection(path: String?) {
         pinned = path
-        for (path, tailer) in tailers { knownOffsets[path] = tailer.resumeOffset }
-        tailers.removeAll()
         clearFeed()
         if let pinned {
-            tailers[pinned] = Tailer(path: pinned)
             let name = sourceName(for: pinned)
             addSystemCard(name, detail: "Pinned session · sub-agents included")
             panel.title = name
-            monitorsReady = true
         } else {
             addSystemCard("Auto mode", detail: "Watching all active sessions and sub-agents")
-            monitorsReady = false
+        }
+        monitorsReady = false
+        transcriptMonitor.reset(pinned: pinned) { [weak self] in
+            self?.monitorsReady = true
         }
         lastScan = .distantPast
     }
 
-    private func refreshPicker() {
-        sessions = recentSessions()
+    private func refreshPicker(with discoveredSessions: [SessionInfo]) {
+        sessions = discoveredSessions
         let keep = pinned
         picker.removeAllItems()
         picker.addItem(withTitle: "Auto — all active sessions")
@@ -1328,37 +1326,20 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return "\(title) · agent \(agent)"
     }
 
-    /// Keep a tailer for every recently active transcript. On the first scan we
-    /// start old files at EOF (apart from three blocks of useful context). Files
-    /// discovered later resume from the launch snapshot, so complete or partial
-    /// reasoning written between discovery scans cannot be missed.
-    private func refreshMonitors() {
-        var wanted = activeTranscriptPaths()
-        if let pinned {
-            wanted = wanted.filter { sameTranscript(rootSessionPath(for: $0), pinned) }
-            if !wanted.contains(where: { sameTranscript($0, pinned) }) { wanted.append(pinned) }
-        }
-        let wantedSet = Set(wanted)
-        for path in tailers.keys.filter({ !wantedSet.contains($0) }) {
-            knownOffsets[path] = tailers[path]?.resumeOffset
-            tailers.removeValue(forKey: path)
-        }
-
-        for path in wanted where tailers[path] == nil {
-            if !monitorsReady {
-                // Read a few extra summaries so presentation deduplication can
-                // still deliver the configured number of unique history cards.
-                let scanLimit = BACKFILL == Int.max ? Int.max
-                    : (BACKFILL >= 13 ? 100 : BACKFILL * 8)
-                tailers[path] = Tailer(path: path, backfill: scanLimit)
-            } else {
-                // Existing files resume from the launch/removal snapshot. Brand
-                // new files start at byte zero. Both paths preserve partial lines.
-                tailers[path] = Tailer(path: path, backfill: 0,
-                    startOffset: knownOffsets[path] ?? 0)
+    private func requestTranscriptDiscovery(includeSessions: Bool) {
+        transcriptDiscovery.request(includeSessions: includeSessions) { [weak self] snapshot in
+            guard let self else { return }
+            if let sessions = snapshot.sessions {
+                self.refreshPicker(with: sessions)
             }
+            self.transcriptMonitor.update(
+                discoveredPaths: snapshot.activePaths,
+                launchSizes: snapshot.sizes,
+                pinned: self.pinned) { [weak self] in
+                    self?.monitorsReady = true
+                }
+            self.publishAPI()
         }
-        monitorsReady = true
     }
 
     private func refreshPreview(_ preview: MessagePreview) {
@@ -1466,18 +1447,21 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let now = Date()
         if now.timeIntervalSince(lastPickerRefresh) > 5 {
             lastPickerRefresh = now
-            refreshPicker()
             refreshStatus()
         }
         if now.timeIntervalSince(lastScan) > RESCAN {
             lastScan = now
-            refreshMonitors()
+            requestTranscriptDiscovery(
+                includeSessions: now.timeIntervalSince(lastPickerRefresh) < POLL)
         }
 
-        var arrived: [(path: String, block: Block)] = []
-        for (path, tailer) in tailers {
-            arrived += tailer.drain().map { (path, $0) }
+        transcriptMonitor.poll { [weak self] arrived in
+            self?.processArrived(arrived)
         }
+    }
+
+    private func processArrived(_ incoming: [(path: String, block: Block)]) {
+        var arrived = incoming
         arrived.sort { $0.block.ts < $1.block.ts }
         arrived.removeAll { event in
             let normalized = event.block.text
@@ -1546,7 +1530,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             feedView.layoutSubtreeIfNeeded()
             scrollToLatest()
         }
-        initialScanComplete = true
+        if monitorsReady { initialScanComplete = true }
         publishAPI()
     }
 }

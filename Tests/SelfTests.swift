@@ -40,6 +40,60 @@ if CommandLine.arguments.contains("--selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--session-discovery-selftest") {
+    let discovery = TranscriptDiscovery(fileProvider: {
+        Thread.sleep(forTimeInterval: 0.25)
+        return []
+    })
+    var completed = false
+    let started = Date()
+    let accepted = discovery.request(includeSessions: false) { snapshot in
+        completed = snapshot.activePaths.isEmpty && snapshot.sizes.isEmpty
+    }
+    let returnedIn = Date().timeIntervalSince(started)
+    let overlapRejected = !discovery.request(includeSessions: false) { _ in }
+    let deadline = Date().addingTimeInterval(2)
+    while !completed, Date() < deadline {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    guard accepted, returnedIn < 0.05, overlapRejected, completed else {
+        FileHandle.standardError.write(
+            "session discovery self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("session discovery: mainThreadNonblocking=true overlappingScans=false")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--transcript-monitor-selftest") {
+    let worker = TranscriptMonitorWorker(tailerFactory: { path, backfill, offset in
+        Thread.sleep(forTimeInterval: 0.25)
+        return Tailer(path: path, backfill: backfill, startOffset: offset)
+    })
+    let path = FileManager.default.temporaryDirectory
+        .appendingPathComponent("thinkpeek-monitor-\(UUID().uuidString).jsonl").path
+    try? "".write(toFile: path, atomically: true, encoding: .utf8)
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    var completed = false
+    let started = Date()
+    let accepted = worker.update(discoveredPaths: [path], launchSizes: [path: 0],
+                                 pinned: nil) { completed = true }
+    let returnedIn = Date().timeIntervalSince(started)
+    let overlapRejected = !worker.update(
+        discoveredPaths: [path], launchSizes: [path: 0], pinned: nil) {}
+    let deadline = Date().addingTimeInterval(2)
+    while !completed, Date() < deadline {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    guard accepted, returnedIn < 0.05, overlapRejected, completed else {
+        FileHandle.standardError.write(
+            "transcript monitor self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("transcript monitor: mainThreadNonblocking=true overlappingUpdates=false")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--evaluator-selftest") {
     let instruction = "First line is not a category.\n# This remains user text.\nBANANA only.\n"
     let evidence = EvaluationRecord(content: "Planning the next source edit")

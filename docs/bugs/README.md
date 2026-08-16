@@ -62,3 +62,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-055](BUG-055-multi-session-flow-lacked-black-box-test.md) | Concurrent Claude/Codex checker and ticker behavior lacked a black-box test | Fixed |
 | [BUG-056](BUG-056-hidden-encrypted-history-stalled-startup.md) | Hiding encrypted history caused finite backfill to scan entire large rollouts | Fixed |
 | [BUG-057](BUG-057-ui-api-bind-race-after-restart.md) | Replacement restart could silently lose the local UI API listener | Fixed |
+| [BUG-058](BUG-058-transcript-discovery-blocked-main-thread.md) | Startup and periodic transcript discovery froze the UI thread | Fixed |

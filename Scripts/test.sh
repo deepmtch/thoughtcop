@@ -7,6 +7,8 @@ cd "$(dirname "$0")/.."
 for test in \
     --config-path-selftest \
     --selftest \
+    --session-discovery-selftest \
+    --transcript-monitor-selftest \
     --evaluator-selftest \
     --provider-reasoning-selftest \
     --layout-selftest \

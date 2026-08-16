@@ -21,8 +21,11 @@ func codexSessionID(from path: String) -> String {
 
 private var codexTitleCache: [String: String] = [:]
 private var codexTitleCacheTime = Date.distantPast
+private let codexTitleCacheLock = NSLock()
 
 func codexTitles() -> [String: String] {
+    codexTitleCacheLock.lock()
+    defer { codexTitleCacheLock.unlock() }
     if Date().timeIntervalSince(codexTitleCacheTime) < 3 { return codexTitleCache }
     codexTitleCacheTime = Date()
     guard let text = try? String(contentsOfFile: CODEX_INDEX, encoding: .utf8) else { return [:] }
@@ -37,6 +40,96 @@ func codexTitles() -> [String: String] {
     }
     codexTitleCache = result
     return result
+}
+
+struct TranscriptDiscoverySnapshot {
+    let activePaths: [String]
+    let sizes: [String: UInt64]
+    let sessions: [SessionInfo]?
+}
+
+/// Recursively discovering transcripts can take long enough to freeze AppKit.
+/// This coordinator guarantees that discovery runs off the main thread and that
+/// a slow scan never overlaps with the next periodic request.
+final class TranscriptDiscovery {
+    private let queue: DispatchQueue
+    private let fileProvider: () -> [String]
+    private let stateLock = NSLock()
+    private var scanInFlight = false
+
+    init(fileProvider: @escaping () -> [String] = allTranscriptFiles,
+         queue: DispatchQueue = DispatchQueue(
+            label: "thinkpeek.transcript-discovery", qos: .utility)) {
+        self.fileProvider = fileProvider
+        self.queue = queue
+    }
+
+    @discardableResult
+    func request(activeHours: Double = ACTIVE_HOURS,
+                 includeSessions: Bool,
+                 sessionHours: Double = 12,
+                 sessionLimit: Int = 25,
+                 completion: @escaping (TranscriptDiscoverySnapshot) -> Void) -> Bool {
+        stateLock.lock()
+        guard !scanInFlight else {
+            stateLock.unlock()
+            return false
+        }
+        scanInFlight = true
+        stateLock.unlock()
+
+        queue.async { [self] in
+            let snapshot = makeTranscriptDiscoverySnapshot(
+                paths: fileProvider(), activeHours: activeHours,
+                includeSessions: includeSessions, sessionHours: sessionHours,
+                sessionLimit: sessionLimit)
+            DispatchQueue.main.async { [self] in
+                stateLock.lock()
+                scanInFlight = false
+                stateLock.unlock()
+                completion(snapshot)
+            }
+        }
+        return true
+    }
+}
+
+private func makeTranscriptDiscoverySnapshot(
+    paths: [String], activeHours: Double, includeSessions: Bool,
+    sessionHours: Double, sessionLimit: Int
+) -> TranscriptDiscoverySnapshot {
+    let fm = FileManager.default
+    let now = Date()
+    let activeCutoff = now.addingTimeInterval(-activeHours * 3600)
+    let sessionCutoff = now.addingTimeInterval(-sessionHours * 3600)
+    var sizes: [String: UInt64] = [:]
+    var active: [(path: String, modified: Date)] = []
+    var newestByRoot: [String: Date] = [:]
+
+    for path in paths {
+        guard let attrs = try? fm.attributesOfItem(atPath: path) else { continue }
+        if let size = attrs[.size] as? NSNumber { sizes[path] = size.uint64Value }
+        guard let modified = attrs[.modificationDate] as? Date else { continue }
+        if modified > activeCutoff { active.append((path, modified)) }
+        if includeSessions, modified > sessionCutoff {
+            let root = rootSessionPath(for: path)
+            if newestByRoot[root] == nil || modified > newestByRoot[root]! {
+                newestByRoot[root] = modified
+            }
+        }
+    }
+
+    let sessions: [SessionInfo]? = includeSessions ? newestByRoot
+        .sorted { $0.value > $1.value }
+        .prefix(sessionLimit)
+        .map { path, modified in
+            SessionInfo(path: path, id: sessionID(for: path),
+                        title: sessionTitle(of: path) ?? "untitled",
+                        project: platformName(for: path), modified: modified)
+        } : nil
+    return TranscriptDiscoverySnapshot(
+        activePaths: active.sorted { $0.modified > $1.modified }.map(\.path),
+        sizes: sizes, sessions: sessions)
 }
 
 /// Match the title shown by the owning app. Claude titles live in its transcript;
