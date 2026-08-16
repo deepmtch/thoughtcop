@@ -10,7 +10,6 @@ import subprocess
 import tempfile
 import threading
 import time
-import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -33,14 +32,14 @@ class DummyChecker(BaseHTTPRequestHandler):
         with self.lock:
             self.requests.append(content)
 
-        if "CLAUDE_ALERT" in content:
+        if "ALERT" in content:
             time.sleep(0.9)  # finish after Codex to exercise out-of-order results
             decision = {
                 "alert": True,
                 "reason": "Dummy detected explicit Claude uncertainty",
-                "evidence": "CLAUDE_ALERT",
+                "evidence": "ALERT",
             }
-        elif "CODEX_CLEAN" in content:
+        elif "CLEAN" in content:
             time.sleep(0.25)
             decision = {"alert": False, "reason": "No match", "evidence": ""}
         else:
@@ -62,22 +61,66 @@ class DummyChecker(BaseHTTPRequestHandler):
 
 
 def get_json(base: str, path: str = "/ui") -> dict:
-    with urllib.request.urlopen(base + path, timeout=3) as response:
-        return json.loads(response.read())
+    host_port = base.removeprefix("http://")
+    host, port_text = host_port.rsplit(":", 1)
+    with socket.create_connection((host, int(port_text)), timeout=3) as connection:
+        connection.sendall(
+            f"GET {path} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\n\r\n"
+            .encode("ascii")
+        )
+        chunks: list[bytes] = []
+        while True:
+            chunk = connection.recv(65_536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    response = b"".join(chunks)
+    header, separator, body = response.partition(b"\r\n\r\n")
+    if not separator or b" 200 " not in header.split(b"\r\n", 1)[0]:
+        raise RuntimeError(f"invalid API response: {response[:200]!r}")
+    return json.loads(body)
 
 
-def wait_for(predicate, timeout: float = 12.0) -> dict:
+def wait_for(predicate, timeout: float = 12.0,
+             process: subprocess.Popen | None = None,
+             diagnostic_log: Path | None = None) -> dict:
     deadline = time.monotonic() + timeout
     latest: dict = {}
+    last_error = ""
     while time.monotonic() < deadline:
+        if process is not None and process.poll() is not None:
+            error = process.stderr.read() if process.stderr else ""
+            raise AssertionError(
+                f"Thinkpeek exited {process.returncode} before API readiness: {error}")
         try:
             latest = get_json(API_BASE)
             if predicate(latest):
                 return latest
-        except Exception:
-            pass
+        except Exception as error:
+            last_error = repr(error)
         time.sleep(0.05)
-    raise AssertionError(f"condition timed out; last state={latest}")
+    diagnostic = ""
+    if process is not None and process.poll() is None:
+        sample = subprocess.run(
+            ["/usr/bin/sample", str(process.pid), "1", "1"],
+            capture_output=True, text=True, timeout=5, check=False)
+        diagnostic = "\nprocess sample:\n" + sample.stdout[:4000]
+        sockets = subprocess.run(
+            ["/usr/sbin/lsof", "-nP", "-a", "-p", str(process.pid), "-iTCP"],
+            capture_output=True, text=True, timeout=5, check=False)
+        diagnostic += "\nprocess sockets:\n" + sockets.stdout
+        for host in ["127.0.0.1", "[::1]"]:
+            probe = subprocess.run(
+                ["/usr/bin/curl", "--noproxy", "*", "-sv", "--max-time", "2",
+                 f"http://{host}:{ui_port}/ui"],
+                capture_output=True, text=True, timeout=4, check=False)
+            diagnostic += (f"\ncurl probe {host}:\n" + probe.stderr +
+                           "\n" + probe.stdout)
+    if diagnostic_log is not None and diagnostic_log.exists():
+        diagnostic += "\nUI API log:\n" + diagnostic_log.read_text()
+    raise AssertionError(
+        f"condition timed out; pid={process.pid if process else 'n/a'} "
+        f"api={API_BASE} last state={latest} last error={last_error}{diagnostic}")
 
 
 def append(path: Path, record: dict) -> None:
@@ -100,14 +143,37 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
     claude_root = root / "claude"
     codex_root = root / "codex"
     claude_path = claude_root / "project" / "11111111-1111-4111-8111-111111111111.jsonl"
+    claude_second = claude_root / "project" / "33333333-3333-4333-8333-333333333333.jsonl"
     codex_path = (
         codex_root / "2026" / "08" / "16" /
         "rollout-2026-08-16T00-00-00-22222222-2222-4222-8222-222222222222.jsonl"
     )
+    codex_second = (
+        codex_root / "2026" / "08" / "16" /
+        "rollout-2026-08-16T00-00-01-44444444-4444-4444-8444-444444444444.jsonl"
+    )
     claude_path.parent.mkdir(parents=True)
     codex_path.parent.mkdir(parents=True)
-    claude_path.touch()
-    codex_path.touch()
+    for transcript in [claude_path, claude_second, codex_path, codex_second]:
+        transcript.touch()
+
+    desktop_sessions = root / "claude-desktop-sessions" / "account" / "workspace"
+    desktop_sessions.mkdir(parents=True)
+    (desktop_sessions / "local_alpha.json").write_text(json.dumps({
+        "cliSessionId": "11111111-1111-4111-8111-111111111111",
+        "title": "Claude Alpha",
+    }))
+    (desktop_sessions / "local_beta.json").write_text(json.dumps({
+        "cliSessionId": "33333333-3333-4333-8333-333333333333",
+        "title": "Claude Beta",
+    }))
+    codex_index = root / "codex-index.jsonl"
+    codex_index.write_text("\n".join([
+        json.dumps({"id": "22222222-2222-4222-8222-222222222222",
+                    "thread_name": "Codex Alpha"}),
+        json.dumps({"id": "44444444-4444-4444-8444-444444444444",
+                    "thread_name": "Codex Beta"}),
+    ]) + "\n")
 
     audit_path = root / "privacy-audit.jsonl"
     ui_log_path = root / "ui-api.jsonl"
@@ -116,8 +182,9 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         "THINKPEEK_API_PORT": str(ui_port),
         "THINKPEEK_CLAUDE_PROJECTS": str(claude_root),
         "THINKPEEK_CODEX_SESSIONS": str(codex_root),
-        "THINKPEEK_CODEX_INDEX": str(root / "codex-index.jsonl"),
-        "THINKPEEK_CLAUDE_DESKTOP_SESSIONS": str(root / "claude-desktop-sessions"),
+        "THINKPEEK_CODEX_INDEX": str(codex_index),
+        "THINKPEEK_CLAUDE_DESKTOP_SESSIONS": str(
+            root / "claude-desktop-sessions"),
         "THINKPEEK_PRIVACY_AUDIT_PATH": str(audit_path),
         "THINKPEEK_UI_API_LOG": str(ui_log_path),
         "THINKPEEK_HISTORY_COUNT": "0",
@@ -131,7 +198,9 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         text=True,
     )
     try:
-        initial = wait_for(lambda state: state.get("initialScanComplete") is True)
+        initial = wait_for(lambda state: state.get("initialScanComplete") is True,
+                           timeout=20, process=process,
+                           diagnostic_log=ui_log_path)
         assert initial["externalAnalysisEnabled"] is True, initial
         assert initial["analysisDestination"] == "Dummy · deterministic-checker", initial
 
@@ -198,23 +267,98 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         get_json(API_BASE, "/next")
         latest = wait_for(lambda state: state.get("currentIndex") == 1)
         assert "CODEX_CLEAN" in latest["peekText"], latest
+        assert latest["peekSource"] == "Codex · Codex Alpha", latest
         assert latest["tickerAlarmActive"] is False, latest
+
+        # Leave the carousel on an older record, then start a second Claude
+        # conversation. The passive ticker must still switch to the new record.
+        get_json(API_BASE, "/previous")
+        wait_for(lambda state: state.get("currentIndex") == 0)
+        append(claude_second, {
+            "timestamp": "2026-08-16T10:00:01.000Z",
+            "type": "assistant",
+            "message": {"content": [{
+                "type": "thinking",
+                "thinking": "CLAUDE_SECOND_CLEAN: fresh beta reasoning.",
+                "signature": "sealed",
+            }]},
+        })
+        claude_beta = wait_for(lambda state:
+            "CLAUDE_SECOND_CLEAN" in state.get("peekText", "") and
+            state.get("checkerRequestInFlight") is False)
+        assert claude_beta["currentIndex"] == 2, claude_beta
+        assert claude_beta["peekSource"] == "Claude · Claude Beta", claude_beta
+
+        # Opening a message is the one explicit freeze state. A concurrent
+        # Codex conversation may arrive and be checked, but must not replace
+        # the record under the reader until Close resumes the latest ticker.
+        get_json(API_BASE, "/message")
+        reader = wait_for(lambda state: state.get("messageReaderFrozen") is True)
+        frozen_index = reader["currentIndex"]
+        append(codex_second, {
+            "timestamp": "2026-08-16T10:00:01.100Z",
+            "type": "response_item",
+            "payload": {"type": "reasoning", "content": [{
+                "type": "reasoning_text",
+                "text": "CODEX_SECOND_CLEAN: fresh beta reasoning."
+            }], "encrypted_content": "sealed"},
+        })
+        frozen = wait_for(lambda state:
+            state.get("navigableCount") == 4 and
+            state.get("checkerRequestInFlight") is False)
+        assert frozen["messageReaderFrozen"] is True, frozen
+        assert frozen["currentIndex"] == frozen_index, frozen
+
+        get_json(API_BASE, "/close")
+        resumed = wait_for(lambda state:
+            state.get("uiStyle") == "single-line-ticker" and
+            "CODEX_SECOND_CLEAN" in state.get("peekText", ""))
+        assert resumed["currentIndex"] == 3, resumed
+        assert resumed["peekSource"] == "Codex · Codex Beta", resumed
+
+        # Revisit the first Claude session to prove interleaving is keyed by
+        # transcript, not permanently stuck on whichever session appeared first.
+        append(claude_path, {
+            "timestamp": "2026-08-16T10:00:01.200Z",
+            "type": "assistant",
+            "message": {"content": [{
+                "type": "thinking",
+                "thinking": "CLAUDE_ALPHA_RETURN_CLEAN: alpha resumed.",
+                "signature": "sealed",
+            }]},
+        })
+        alpha_return = wait_for(lambda state:
+            "CLAUDE_ALPHA_RETURN_CLEAN" in state.get("peekText", "") and
+            state.get("checkerRequestInFlight") is False)
+        assert alpha_return["currentIndex"] == 4, alpha_return
+        assert alpha_return["peekSource"] == "Claude · Claude Alpha", alpha_return
 
         audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
         requests = [item for item in audit
                     if item.get("action") == "external_reasoning_request"]
         results = [item for item in audit
                    if item.get("action") == "external_reasoning_result"]
-        assert len(requests) == 2, requests
-        assert sorted(item["status"] for item in results) == ["alert", "clean"], results
+        assert len(requests) == 5, requests
+        assert len(results) == 5, results
+        assert [item["status"] for item in results].count("alert") == 1, results
+        assert [item["status"] for item in results].count("clean") == 4, results
         assert {item["request_id"] for item in requests} == \
             {item["request_id"] for item in results}, (requests, results)
 
+        with DummyChecker.lock:
+            all_sent = list(DummyChecker.requests)
+        assert len(all_sent) == 5, all_sent
+
         print(json.dumps({
             "concurrentProviders": ["Claude", "Codex"],
-            "dummyRequests": len(sent),
+            "simulatedConversations": 4,
+            "dummyRequests": len(all_sent),
             "outOfOrderResults": True,
             "alertAndClean": True,
+            "autoFollowedAcrossSessions": True,
+            "readerFrozeThenResumed": True,
+            "providerTitles": ["Claude Alpha", "Claude Beta",
+                               "Codex Alpha", "Codex Beta"],
             "encryptedAndToolsExcluded": True,
             "placeholderNeverRendered": True,
             "tickerNavigation": "alert-to-clean",

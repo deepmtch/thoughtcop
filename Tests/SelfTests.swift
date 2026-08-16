@@ -494,7 +494,9 @@ if CommandLine.arguments.contains("--message-reader-freeze-selftest") {
           MessageReaderSelection.latestIndex(eventCount: eventCount) == 4,
           MessageReaderSelection.latestIndex(eventCount: 0) == -1,
           MessageReaderSelection.shouldAdvanceForNewMessage(
-            isReaderOpen: false, wasFollowingLatest: true) else {
+            isReaderOpen: false, wasFollowingLatest: true),
+          MessageReaderSelection.shouldAdvanceForNewMessage(
+            isReaderOpen: false, wasFollowingLatest: false) else {
         FileHandle.standardError.write("message reader freeze self-test failed\n"
             .data(using: .utf8)!)
         exit(1)

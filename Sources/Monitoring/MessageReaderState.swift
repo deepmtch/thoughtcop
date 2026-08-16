@@ -16,7 +16,10 @@ struct MessageReaderSnapshot {
 enum MessageReaderSelection {
     static func shouldAdvanceForNewMessage(isReaderOpen: Bool,
                                            wasFollowingLatest: Bool) -> Bool {
-        !isReaderOpen && wasFollowingLatest
+        // The passive ticker represents current activity, so a stale carousel
+        // index must never pin it to an old session. Only an explicitly opened
+        // reader freezes while the user is reading a specific record.
+        !isReaderOpen
     }
 
     static func latestIndex(eventCount: Int) -> Int {
