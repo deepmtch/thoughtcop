@@ -106,7 +106,13 @@ final class ClaudeCloudActivityMonitor {
             let header = readableASCII(prefix)
             guard let source = cloudSource(fromCacheHeader: header) else { continue }
             streamSources[path] = source
-            offsets[path] = 0
+            // Cache files survive Claude and Thinkpeek restarts. Replaying an
+            // existing stream from byte zero resurrects completed or waiting
+            // sessions from days ago as if they were live. Begin at the exact
+            // discovered EOF; only subsequently appended lifecycle bytes are
+            // current activity.
+            offsets[path] = size
+            buffers[path] = ""
         }
     }
 
