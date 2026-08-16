@@ -11,7 +11,8 @@ from an idle monitor.
 - Show a small filled-lightbulb indicator in the ticker header only after an
   external provider request actually starts.
 - Give the indicator a tooltip and accessibility label naming the destination.
-- Hide it when all concurrent checks finish.
+- Hide it when all concurrent checks finish, after an 800 ms minimum visible
+  duration so a fast provider response does not make the signal imperceptible.
 - Publish the same in-flight state through the local UI API.
 - Record the actual reasoning event type in the content-free privacy audit
   instead of the obsolete `reasoning_summary` label.

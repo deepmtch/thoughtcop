@@ -481,7 +481,7 @@ if CommandLine.arguments.contains("--ticker-actions-selftest") {
         FileHandle.standardError.write("ticker actions self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    activity.finish()
+    activity.finish(minimumVisibleDuration: 0)
     guard !activity.isChecking, activity.isHidden else {
         FileHandle.standardError.write("checker activity reset self-test failed\n"
             .data(using: .utf8)!)
