@@ -127,17 +127,20 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
         blocks(in: messageLine)
     let encryptedRecords = blocks(in: encryptedLine)
     let reasoningRecords = blocks(in: reasoningLine)
-    guard excludedRecords.isEmpty,
-          encryptedRecords.isEmpty,
-          blocks(in: duplicateEventLine).isEmpty,
-          reasoningRecords.count == 1,
-          reasoningRecords[0].kind == .thinking,
-          reasoningRecords[0].text == "Assessing and planning a safe change.",
-          reasoningRecords[0].evaluationRecord.content ==
+    let reasoning = reasoningRecords.filter { $0.kind == .thinking }
+    guard excludedRecords.allSatisfy({ $0.kind == .activity &&
+                                      !$0.externallyEvaluable }),
+          encryptedRecords.allSatisfy({ $0.kind == .activity &&
+                                        !$0.externallyEvaluable }),
+          blocks(in: duplicateEventLine).allSatisfy({ $0.kind == .activity &&
+                                                       !$0.externallyEvaluable }),
+          reasoning.count == 1,
+          reasoning[0].text == "Assessing and planning a safe change.",
+          reasoning[0].evaluationRecord.content ==
             "Assessing and planning a safe change.",
-          reasoningRecords[0].evaluationRecord.json["event_type"] as? String ==
+          reasoning[0].evaluationRecord.json["event_type"] as? String ==
             "reasoning_text",
-          reasoningRecords[0].externallyEvaluable else {
+          reasoning[0].externallyEvaluable else {
         FileHandle.standardError.write(
             "reasoning-only boundary self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -180,25 +183,29 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
     let localOnlyBlocks = blocks(in: openAIWithoutSummary)
     let summaryBlocks = blocks(in: openAISummaryOnly)
     let claudeBlocks = blocks(in: claude)
-    guard openAIBlocks.count == 1,
-          openAIBlocks[0].text ==
+    let openAIReasoning = openAIBlocks.filter { $0.kind == .thinking }
+    let localOnlyReasoning = localOnlyBlocks.filter { $0.kind == .thinking }
+    let claudeReasoning = claudeBlocks.filter { $0.kind == .thinking }
+    guard openAIReasoning.count == 1,
+          openAIReasoning[0].text ==
             "Inspecting the complete OpenAI reasoning text.\n\n" +
             "Verifying every paragraph reaches the reader.",
-          openAIBlocks[0].evaluationRecord.content == openAIBlocks[0].text,
-          openAIBlocks[0].evaluationRecord.eventType == "reasoning_text",
-          openAIBlocks[0].externallyEvaluable,
-          localOnlyBlocks.count == 1,
-          localOnlyBlocks[0].text == "Local-only OpenAI reasoning text.",
-          localOnlyBlocks[0].evaluationRecord.content == localOnlyBlocks[0].text,
-          localOnlyBlocks[0].externallyEvaluable,
-          summaryBlocks.isEmpty,
-          claudeBlocks.count == 1,
-          claudeBlocks[0].text ==
+          openAIReasoning[0].evaluationRecord.content == openAIReasoning[0].text,
+          openAIReasoning[0].evaluationRecord.eventType == "reasoning_text",
+          openAIReasoning[0].externallyEvaluable,
+          localOnlyReasoning.count == 1,
+          localOnlyReasoning[0].text == "Local-only OpenAI reasoning text.",
+          localOnlyReasoning[0].evaluationRecord.content == localOnlyReasoning[0].text,
+          localOnlyReasoning[0].externallyEvaluable,
+          summaryBlocks.allSatisfy({ $0.kind == .activity &&
+                                     !$0.externallyEvaluable }),
+          claudeReasoning.count == 1,
+          claudeReasoning[0].text ==
             "Inspecting the complete Claude thinking text.\n\n" +
             "Verifying every paragraph reaches the reader.",
-          claudeBlocks[0].evaluationRecord.content == claudeBlocks[0].text,
-          claudeBlocks[0].evaluationRecord.eventType == "thinking",
-          claudeBlocks[0].externallyEvaluable else {
+          claudeReasoning[0].evaluationRecord.content == claudeReasoning[0].text,
+          claudeReasoning[0].evaluationRecord.eventType == "thinking",
+          claudeReasoning[0].externallyEvaluable else {
         FileHandle.standardError.write(
             "provider reasoning self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -262,7 +269,56 @@ if CommandLine.arguments.contains("--presentation-selftest") {
             .data(using: .utf8)!)
         exit(1)
     }
+    state.operationStarted(source: "Claude · cloud chat")
+    state.operationUpdated(source: "Codex · local task")
+    guard state.activeSources.count == 2,
+          state.windowTitle == "● Claude + Codex · working…" else {
+        FileHandle.standardError.write("presentation self-test failed concurrent providers\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    state.operationFinished(source: "Claude · cloud chat")
+    guard state.operationPending,
+          state.windowTitle == "● Codex · local task · working…" else {
+        FileHandle.standardError.write("presentation self-test failed partial completion\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    state.operationFinished(source: "Codex · local task")
+    guard !state.operationPending else {
+        FileHandle.standardError.write("presentation self-test failed final completion\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
     print("presentation: useful summary preserved until readable content arrives")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--claude-cloud-activity-selftest") {
+    let fixture = """
+    data: {"event_type":"system","payload":{"subtype":"status","status":"requesting"}}
+    data: {"event_type":"stream_event","payload":{"event":{"type":"message_start"}}}
+    data: {"event_type":"assistant","payload":{"message":{"content":[{"text":"secret","type":"text"}]}}}
+    data: {"event_type":"result","payload":{"is_error":false}}
+    """
+    let events = claudeCloudActivityEvents(in: fixture)
+    guard events.count == 3,
+          events[0].phase == .started,
+          events[1].phase == .updated,
+          events[2].phase == .finished,
+          events.allSatisfy({ $0.source == "Claude · cloud chat" }) else {
+        FileHandle.standardError.write("Claude cloud activity parser self-test failed\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    let source = cloudSource(fromCacheHeader:
+        "1/0/https://claude.ai/v1/code/sessions/cse_0123456789/events/stream?from=1")
+    guard source == "Claude · cloud chat 456789" else {
+        FileHandle.standardError.write("Claude cloud source parser self-test failed\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    print("Claude cloud activity: exact start, update, and finish states")
     exit(0)
 }
 

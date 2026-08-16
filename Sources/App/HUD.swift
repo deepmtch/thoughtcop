@@ -125,6 +125,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var presentationKeys = Set<String>()
     private var unseenCount = 0
     private let transcriptMonitor = TranscriptMonitorWorker()
+    private let claudeCloudActivityMonitor = ClaudeCloudActivityMonitor()
     private var picker: NSPopUpButton!
     private var status: NSTextField!
     private var sessions: [SessionInfo] = []
@@ -595,6 +596,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "tickerTextWeight": "regular",
             "operationPending": operationState.operationPending,
             "pendingSource": operationState.latestPendingSource ?? NSNull(),
+            "activeSources": operationState.activeSources,
             "hoverDisclosure": false,
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": true,
@@ -1254,6 +1256,18 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         publishAPI()
     }
 
+    private func operationUpdated(source: String) {
+        operationState.operationUpdated(source: source)
+        updateWindowTitle()
+        publishAPI()
+    }
+
+    private func operationFinished(source: String) {
+        operationState.operationFinished(source: source)
+        updateWindowTitle()
+        publishAPI()
+    }
+
     private func readableContentArrived(source: String) {
         operationState.readableContentArrived(source: source)
         updateWindowTitle()
@@ -1261,6 +1275,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func updateWindowTitle() {
         panel.title = operationState.windowTitle
+        if let source = operationState.latestPendingSource {
+            peekProviderIcon.update(source: source)
+            peekSourceLabel.stringValue = operationState.windowTitle
+            peekSourceLabel.toolTip = peekSourceLabel.stringValue
+        } else if compactIndex >= 0 && compactIndex < eventPreviews.count {
+            updatePeekHeader(source: eventPreviews[compactIndex].displaySource)
+        } else {
+            updatePeekHeader(source: "Thinkpeek")
+        }
     }
 
     // MARK: session picker
@@ -1458,6 +1481,20 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         transcriptMonitor.poll { [weak self] arrived in
             self?.processArrived(arrived)
         }
+        claudeCloudActivityMonitor.poll { [weak self] events in
+            guard let self else { return }
+            for event in events {
+                self.processActivity(source: event.source, phase: event.phase)
+            }
+        }
+    }
+
+    private func processActivity(source: String, phase: Block.ActivityPhase) {
+        switch phase {
+        case .started: operationStarted(source: source)
+        case .updated: operationUpdated(source: source)
+        case .finished: operationFinished(source: source)
+        }
     }
 
     private func processArrived(_ incoming: [(path: String, block: Block)]) {
@@ -1490,7 +1527,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let source = sourceName(for: event.path)
             let ui = uiEvent(for: block)
             if ui.kind == "activity" {
-                operationStarted(source: source)
+                processActivity(source: source,
+                                phase: block.activityPhase ?? .updated)
                 continue
             }
             if ui.readableAnalysis, presentableTickerText(ui.text) == nil {

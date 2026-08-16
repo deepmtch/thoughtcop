@@ -64,3 +64,5 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-057](BUG-057-ui-api-bind-race-after-restart.md) | Replacement restart could silently lose the local UI API listener | Fixed |
 | [BUG-058](BUG-058-transcript-discovery-blocked-main-thread.md) | Startup and periodic transcript discovery froze the UI thread | Fixed |
 | [BUG-059](BUG-059-claude-title-did-not-match-desktop.md) | Claude ticker title could differ from Claude Desktop's conversation title | Fixed |
+| [BUG-060](BUG-060-touched-transcript-looked-active.md) | A touched old transcript looked like the active conversation | Fixed |
+| [BUG-061](BUG-061-provider-activity-was-invisible.md) | Provider activity was invisible when no plaintext reasoning arrived | Fixed |

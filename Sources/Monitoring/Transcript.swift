@@ -19,6 +19,7 @@ struct EvaluationRecord {
 
 struct Block {
     enum Kind { case activity, thinking }
+    enum ActivityPhase: Equatable { case started, updated, finished }
     let ts: String
     let text: String
     let sealed: Bool
@@ -27,12 +28,14 @@ struct Block {
     let evaluationText: String
     let evaluationEventType: String
     let externallyEvaluable: Bool
+    let activityPhase: ActivityPhase?
     var backfilled: Bool
 
     init(ts: String, text: String, sealed: Bool, signatureChars: Int,
          kind: Kind, evaluationText: String? = nil,
          evaluationEventType: String = "reasoning_summary",
-         externallyEvaluable: Bool = true, backfilled: Bool = false) {
+         externallyEvaluable: Bool = true,
+         activityPhase: ActivityPhase? = nil, backfilled: Bool = false) {
         self.ts = ts
         self.text = text
         self.sealed = sealed
@@ -41,12 +44,19 @@ struct Block {
         self.evaluationText = evaluationText ?? text
         self.evaluationEventType = evaluationEventType
         self.externallyEvaluable = externallyEvaluable
+        self.activityPhase = activityPhase
         self.backfilled = backfilled
     }
 
     var evaluationRecord: EvaluationRecord {
         EvaluationRecord(content: evaluationText, eventType: evaluationEventType)
     }
+}
+
+private func activityBlock(ts: String, phase: Block.ActivityPhase) -> Block {
+    Block(ts: ts, text: "Provider activity", sealed: false,
+          signatureChars: 0, kind: .activity, externallyEvaluable: false,
+          activityPhase: phase)
 }
 
 /// Stable presentation API shared by the AppKit window and headless tests.
@@ -111,27 +121,29 @@ func blocks(in line: String) -> [Block] {
           let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     else { return [] }
     let ts = obj["timestamp"] as? String ?? ""
-    if obj["type"] as? String == "queue-operation",
-       obj["operation"] as? String == "dequeue" {
-        return [Block(ts: ts, text: "Claude operation started", sealed: false,
-                      signatureChars: 0, kind: .activity)]
+    if obj["type"] as? String == "queue-operation" {
+        let operation = obj["operation"] as? String
+        let phase: Block.ActivityPhase = operation == "dequeue" ? .started : .updated
+        return [activityBlock(ts: ts, phase: phase)]
     }
     if obj["type"] as? String == "event_msg",
        let payload = obj["payload"] as? [String: Any] {
         if payload["type"] as? String == "task_started" {
-            return [Block(ts: ts, text: "Codex operation started", sealed: false,
-                          signatureChars: 0, kind: .activity)]
+            return [activityBlock(ts: ts, phase: .started)]
+        }
+        if payload["type"] as? String == "task_complete" {
+            return [activityBlock(ts: ts, phase: .finished)]
         }
         if payload["type"] as? String == "agent_reasoning" {
             // This is provider-generated summary text, not original reasoning.
-            return []
+            return [activityBlock(ts: ts, phase: .updated)]
         }
     }
     if obj["type"] as? String == "response_item",
        let payload = obj["payload"] as? [String: Any] {
         if payload["type"] as? String == "custom_tool_call" ||
            payload["type"] as? String == "custom_tool_call_output" {
-            return []
+            return [activityBlock(ts: ts, phase: .updated)]
         }
     }
     if obj["type"] as? String == "response_item",
@@ -148,7 +160,8 @@ func blocks(in line: String) -> [Block] {
         let encryptedChars = (payload["encrypted_content"] as? String)?.count ?? 0
         if !reasoningTexts.isEmpty {
             let reasoningText = reasoningTexts.joined(separator: "\n\n")
-            return [Block(ts: ts, text: reasoningText,
+            return [activityBlock(ts: ts, phase: .updated),
+                    Block(ts: ts, text: reasoningText,
                           sealed: false, signatureChars: encryptedChars,
                           kind: .thinking, evaluationText: reasoningText,
                           evaluationEventType: "reasoning_text",
@@ -157,12 +170,20 @@ func blocks(in line: String) -> [Block] {
         // Encrypted reasoning and provider summaries are audit metadata only.
         // They contain no original plaintext reasoning and must never displace
         // a useful ticker item or become navigable UI history.
-        if encryptedChars > 0 || payload["summary"] != nil { return [] }
-        return []
+        if encryptedChars > 0 || payload["summary"] != nil {
+            return [activityBlock(ts: ts, phase: .updated)]
+        }
+        return [activityBlock(ts: ts, phase: .updated)]
     }
     guard let message = obj["message"] as? [String: Any],
-          let content = message["content"] as? [[String: Any]] else { return [] }
-    return content.compactMap { block in
+          let content = message["content"] as? [[String: Any]] else {
+        if obj["type"] != nil { return [activityBlock(ts: ts, phase: .updated)] }
+        return []
+    }
+    let hasToolUse = content.contains { ($0["type"] as? String) == "tool_use" }
+    let hasText = content.contains { ($0["type"] as? String) == "text" }
+    let phase: Block.ActivityPhase = hasText && !hasToolUse ? .finished : .updated
+    let thinking = content.compactMap { block -> Block? in
         switch block["type"] as? String {
         case "thinking":
             let text = (block["thinking"] as? String) ?? ""
@@ -180,6 +201,7 @@ func blocks(in line: String) -> [Block] {
             return nil
         }
     }
+    return [activityBlock(ts: ts, phase: phase)] + thinking
 }
 
 /// Follows one JSONL file by byte offset, tolerating partial writes and truncation.
@@ -224,6 +246,7 @@ final class Tailer {
                   evaluationText: $0.evaluationText,
                   evaluationEventType: $0.evaluationEventType,
                   externallyEvaluable: $0.externallyEvaluable,
+                  activityPhase: $0.activityPhase,
                   backfilled: true)
         }
     }

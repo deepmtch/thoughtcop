@@ -177,6 +177,12 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
 
     audit_path = root / "privacy-audit.jsonl"
     ui_log_path = root / "ui-api.jsonl"
+    claude_cache = root / "claude-cache"
+    claude_cache.mkdir()
+    cloud_stream = claude_cache / "cloud-stream_0"
+    cloud_stream.write_text(
+        "1/0/https://claude.ai/v1/code/sessions/"
+        "cse_0123456789/events/stream?from_sequence_num=1\n")
     environment = os.environ.copy()
     environment.update({
         "THINKPEEK_API_PORT": str(ui_port),
@@ -185,6 +191,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         "THINKPEEK_CODEX_INDEX": str(codex_index),
         "THINKPEEK_CLAUDE_DESKTOP_SESSIONS": str(
             root / "claude-desktop-sessions"),
+        "THINKPEEK_CLAUDE_CACHE": str(claude_cache),
         "THINKPEEK_PRIVACY_AUDIT_PATH": str(audit_path),
         "THINKPEEK_UI_API_LOG": str(ui_log_path),
         "THINKPEEK_HISTORY_COUNT": "0",
@@ -203,6 +210,40 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
                            diagnostic_log=ui_log_path)
         assert initial["externalAnalysisEnabled"] is True, initial
         assert initial["analysisDestination"] == "Dummy · deterministic-checker", initial
+
+        with cloud_stream.open("a", encoding="utf-8") as stream:
+            stream.write('data: {"event_type":"system","payload":'
+                         '{"subtype":"status","status":"requesting"}}\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        cloud_active = wait_for(lambda state:
+            state.get("activeSources") == ["Claude · cloud chat 456789"])
+        assert "Claude" in cloud_active["peekSource"], cloud_active
+        assert "working" in cloud_active["peekSource"], cloud_active
+
+        with cloud_stream.open("a", encoding="utf-8") as stream:
+            stream.write('data: {"event_type":"stream_event","payload":'
+                         '{"event":{"type":"content_block_delta"}}}\n')
+            stream.write('data: {"event_type":"result","payload":'
+                         '{"is_error":false}}\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        cloud_done = wait_for(lambda state:
+            state.get("operationPending") is False)
+        assert cloud_done["activeSources"] == [], cloud_done
+
+        append(claude_path, {
+            "timestamp": "2026-08-16T09:59:59.900Z",
+            "type": "queue-operation", "operation": "dequeue",
+        })
+        append(codex_path, {
+            "timestamp": "2026-08-16T09:59:59.950Z",
+            "type": "event_msg", "payload": {"type": "task_started"},
+        })
+        both_active = wait_for(lambda state:
+            len(state.get("activeSources", [])) == 2)
+        assert both_active["operationPending"] is True, both_active
+        assert "Claude + Codex" in both_active["peekSource"], both_active
 
         append(claude_path, {
             "timestamp": "2026-08-16T10:00:00.000Z",
@@ -257,6 +298,19 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert "CODEX_CLEAN" in finished["peekText"], finished
         assert "unavailable" not in finished["peekText"].lower(), finished
         assert finished["tickerAlarmActive"] is False, finished
+
+        append(claude_path, {
+            "timestamp": "2026-08-16T10:00:00.300Z",
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": "done"}]},
+        })
+        append(codex_path, {
+            "timestamp": "2026-08-16T10:00:00.350Z",
+            "type": "event_msg", "payload": {"type": "task_complete"},
+        })
+        inactive = wait_for(lambda state:
+            state.get("operationPending") is False)
+        assert inactive["activeSources"] == [], inactive
 
         get_json(API_BASE, "/previous")
         previous = wait_for(lambda state: state.get("currentIndex") == 0)
@@ -363,6 +417,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "placeholderNeverRendered": True,
             "tickerNavigation": "alert-to-clean",
             "checkerLightObserved": True,
+            "claudeCloudLifecycleObserved": True,
             "auditPairs": len(results),
         }, sort_keys=True))
     finally:

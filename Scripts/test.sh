@@ -13,6 +13,7 @@ for test in \
     --provider-reasoning-selftest \
     --layout-selftest \
     --presentation-selftest \
+    --claude-cloud-activity-selftest \
     --two-summary-card-selftest \
     --source-context-selftest \
     --ticker-selftest \

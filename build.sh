@@ -11,6 +11,7 @@ swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
     Sources/App/Config.swift \
     Sources/Checker/CheckRulesStore.swift \
     Sources/Monitoring/Transcript.swift \
+    Sources/Monitoring/ClaudeCloudActivity.swift \
     Sources/Monitoring/PrivacyAudit.swift \
     Sources/Monitoring/Sessions.swift \
     Sources/Monitoring/MessageReaderState.swift \
