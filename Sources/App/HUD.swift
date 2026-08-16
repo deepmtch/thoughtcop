@@ -595,8 +595,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     on: tickerActiveBackgroundColor),
             "tickerTextWeight": "regular",
             "operationPending": operationState.operationPending,
+            "operationWaiting": operationState.operationWaiting,
             "pendingSource": operationState.latestPendingSource ?? NSNull(),
             "activeSources": operationState.activeSources,
+            "waitingSources": operationState.waitingSources,
             "hoverDisclosure": false,
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": true,
@@ -1268,6 +1270,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         publishAPI()
     }
 
+    private func operationWaitingForUser(source: String) {
+        operationState.operationWaitingForUser(source: source)
+        updateWindowTitle()
+        publishAPI()
+    }
+
     private func readableContentArrived(source: String) {
         operationState.readableContentArrived(source: source)
         updateWindowTitle()
@@ -1275,7 +1283,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func updateWindowTitle() {
         panel.title = operationState.windowTitle
-        if let source = operationState.latestPendingSource {
+        if let source = operationState.latestActivitySource {
             peekProviderIcon.update(source: source)
             peekSourceLabel.stringValue = operationState.windowTitle
             peekSourceLabel.toolTip = peekSourceLabel.stringValue
@@ -1493,6 +1501,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         switch phase {
         case .started: operationStarted(source: source)
         case .updated: operationUpdated(source: source)
+        case .waiting: operationWaitingForUser(source: source)
         case .finished: operationFinished(source: source)
         }
     }

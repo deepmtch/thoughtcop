@@ -224,6 +224,23 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         with cloud_stream.open("a", encoding="utf-8") as stream:
             stream.write('data: {"event_type":"stream_event","payload":'
                          '{"event":{"type":"content_block_delta"}}}\n')
+            stream.write('data: {"event_type":"control_request","payload":'
+                         '{"request_id":"ask-1"}}\n')
+            # Claude writes final stream frames after AskUserQuestion. They
+            # belong to the waiting turn and must not reactivate the session.
+            stream.write('data: {"event_type":"stream_event","payload":'
+                         '{"event":{"type":"message_stop"}}}\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        cloud_waiting = wait_for(lambda state:
+            state.get("waitingSources") == ["Claude · cloud chat 456789"])
+        assert cloud_waiting["operationPending"] is False, cloud_waiting
+        assert cloud_waiting["operationWaiting"] is True, cloud_waiting
+        assert "waiting for you" in cloud_waiting["peekSource"], cloud_waiting
+
+        with cloud_stream.open("a", encoding="utf-8") as stream:
+            stream.write('data: {"event_type":"system","payload":'
+                         '{"subtype":"status","status":"requesting"}}\n')
             stream.write('data: {"event_type":"result","payload":'
                          '{"is_error":false}}\n')
             stream.flush()
@@ -418,6 +435,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "tickerNavigation": "alert-to-clean",
             "checkerLightObserved": True,
             "claudeCloudLifecycleObserved": True,
+            "claudeWaitingLifecycleObserved": True,
             "auditPairs": len(results),
         }, sort_keys=True))
     finally:

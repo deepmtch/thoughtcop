@@ -277,15 +277,27 @@ if CommandLine.arguments.contains("--presentation-selftest") {
             .data(using: .utf8)!)
         exit(1)
     }
-    state.operationFinished(source: "Claude · cloud chat")
+    state.operationWaitingForUser(source: "Claude · cloud chat")
+    state.operationUpdated(source: "Claude · cloud chat")
     guard state.operationPending,
+          state.operationWaiting,
+          state.activeSources == ["Codex · local task"],
+          state.waitingSources == ["Claude · cloud chat"],
           state.windowTitle == "● Codex · local task · working…" else {
-        FileHandle.standardError.write("presentation self-test failed partial completion\n"
+        FileHandle.standardError.write("presentation self-test failed waiting isolation\n"
             .data(using: .utf8)!)
         exit(1)
     }
     state.operationFinished(source: "Codex · local task")
-    guard !state.operationPending else {
+    guard !state.operationPending,
+          state.operationWaiting,
+          state.windowTitle == "◐ Claude · cloud chat · waiting for you" else {
+        FileHandle.standardError.write("presentation self-test failed waiting title\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
+    state.operationFinished(source: "Claude · cloud chat")
+    guard !state.operationPending, !state.operationWaiting else {
         FileHandle.standardError.write("presentation self-test failed final completion\n"
             .data(using: .utf8)!)
         exit(1)
@@ -298,14 +310,18 @@ if CommandLine.arguments.contains("--claude-cloud-activity-selftest") {
     let fixture = """
     data: {"event_type":"system","payload":{"subtype":"status","status":"requesting"}}
     data: {"event_type":"stream_event","payload":{"event":{"type":"message_start"}}}
+    data: {"event_type":"control_request","payload":{"request_id":"req_1"}}
+    data: {"event_type":"stream_event","payload":{"event":{"type":"message_stop"}}}
     data: {"event_type":"assistant","payload":{"message":{"content":[{"text":"secret","type":"text"}]}}}
     data: {"event_type":"result","payload":{"is_error":false}}
     """
     let events = claudeCloudActivityEvents(in: fixture)
-    guard events.count == 3,
+    guard events.count == 5,
           events[0].phase == .started,
           events[1].phase == .updated,
-          events[2].phase == .finished,
+          events[2].phase == .waiting,
+          events[3].phase == .updated,
+          events[4].phase == .finished,
           events.allSatisfy({ $0.source == "Claude · cloud chat" }) else {
         FileHandle.standardError.write("Claude cloud activity parser self-test failed\n"
             .data(using: .utf8)!)

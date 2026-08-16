@@ -20,6 +20,9 @@ func claudeCloudActivityEvents(in text: String,
         if object["event_type"] as? String == "result" {
             return ProviderActivityEvent(source: source, phase: .finished)
         }
+        if object["event_type"] as? String == "control_request" {
+            return ProviderActivityEvent(source: source, phase: .waiting)
+        }
         if object["event_type"] as? String == "stream_event" {
             return ProviderActivityEvent(source: source, phase: .updated)
         }

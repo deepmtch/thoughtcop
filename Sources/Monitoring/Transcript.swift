@@ -19,7 +19,7 @@ struct EvaluationRecord {
 
 struct Block {
     enum Kind { case activity, thinking }
-    enum ActivityPhase: Equatable { case started, updated, finished }
+    enum ActivityPhase: Equatable { case started, updated, waiting, finished }
     let ts: String
     let text: String
     let sealed: Bool
@@ -181,8 +181,13 @@ func blocks(in line: String) -> [Block] {
         return []
     }
     let hasToolUse = content.contains { ($0["type"] as? String) == "tool_use" }
+    let isWaitingForUser = content.contains {
+        ($0["type"] as? String) == "tool_use" &&
+        ($0["name"] as? String) == "AskUserQuestion"
+    }
     let hasText = content.contains { ($0["type"] as? String) == "text" }
-    let phase: Block.ActivityPhase = hasText && !hasToolUse ? .finished : .updated
+    let phase: Block.ActivityPhase = isWaitingForUser
+        ? .waiting : (hasText && !hasToolUse ? .finished : .updated)
     let thinking = content.compactMap { block -> Block? in
         switch block["type"] as? String {
         case "thinking":

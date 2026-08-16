@@ -66,3 +66,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-059](BUG-059-claude-title-did-not-match-desktop.md) | Claude ticker title could differ from Claude Desktop's conversation title | Fixed |
 | [BUG-060](BUG-060-touched-transcript-looked-active.md) | A touched old transcript looked like the active conversation | Fixed |
 | [BUG-061](BUG-061-provider-activity-was-invisible.md) | Provider activity was invisible when no plaintext reasoning arrived | Fixed |
+| [BUG-062](BUG-062-claude-question-remained-working.md) | Claude question remained stuck in working state | Fixed |
