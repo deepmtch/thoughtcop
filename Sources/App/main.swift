@@ -59,7 +59,8 @@ if let index = CommandLine.arguments.firstIndex(of: "--check"),
 if let requestedEvidence {
     print("evaluation instruction: verbatim from local app storage")
     var finished = false
-    PrivacyAudit.shared.start()
+    // A one-shot diagnostic must not erase the live app's audit history.
+    PrivacyAudit.shared.start(reset: false)
     checkDrift(requestedEvidence, source: "explicit command") { outcome, milliseconds in
         print("latency : \(Int(milliseconds)) ms")
         switch outcome {

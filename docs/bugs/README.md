@@ -68,3 +68,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-061](BUG-061-provider-activity-was-invisible.md) | Provider activity was invisible when no plaintext reasoning arrived | Fixed |
 | [BUG-062](BUG-062-claude-question-remained-working.md) | Claude question remained stuck in working state | Fixed |
 | [BUG-063](BUG-063-old-cloud-cache-replayed-as-live.md) | Old Claude cloud cache replayed as live activity | Fixed |
+| [BUG-064](BUG-064-headless-check-truncated-audit.md) | Headless check truncated the live privacy audit | Fixed |

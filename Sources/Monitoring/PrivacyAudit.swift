@@ -88,7 +88,7 @@ final class PrivacyAudit {
         let directory = (path as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: directory,
                                                   withIntermediateDirectories: true)
-        if reset {
+        if reset || !FileManager.default.fileExists(atPath: path) {
             FileManager.default.createFile(atPath: path, contents: Data(),
                 attributes: [.posixPermissions: 0o600])
         }

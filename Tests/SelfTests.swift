@@ -903,6 +903,7 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
     let path = NSTemporaryDirectory() + "/thinkpeek-audit-\(UUID().uuidString).jsonl"
     let audit = PrivacyAudit(path: path)
     audit.start()
+    audit.start(reset: false)
     let toolLine = #"{"timestamp":"2026-08-15T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call_1","output":"TOP_SECRET_TOOL_CONTENT"}}"#
     let summaryLine = #"{"timestamp":"2026-08-15T00:00:01Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"PRIVATE_PROVIDER_SUMMARY"}],"encrypted_content":"sealed"}}"#
     let reasoningLine = #"{"timestamp":"2026-08-15T00:00:02Z","type":"response_item","payload":{"type":"reasoning","content":[{"type":"reasoning_text","text":"PRIVATE_REASONING_CONTENT"}],"encrypted_content":"sealed"}}"#
@@ -917,7 +918,7 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
                                status: "alert", alert: true, latencyMs: 87)
     let log = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
     try? FileManager.default.removeItem(atPath: path)
-    guard log.contains("app_started"),
+    guard log.components(separatedBy: "\"action\":\"app_started\"").count - 1 == 2,
           log.contains("tool_record_discarded"),
           log.contains("provider_summary_not_sent"),
           log.contains("reasoning_selected"),
