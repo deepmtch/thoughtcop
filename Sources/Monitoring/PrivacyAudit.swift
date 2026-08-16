@@ -94,10 +94,30 @@ final class PrivacyAudit {
     }
 
     func recordExternalRequest(source: String, destination: String,
-                               recordType: String, envelopeBytes: Int) {
+                               recordType: String, envelopeBytes: Int,
+                               requestID: String) {
         append(["action": "external_reasoning_request",
                 "record_type": recordType, "source": source,
-                "destination": destination, "envelope_bytes": envelopeBytes])
+                "destination": destination, "envelope_bytes": envelopeBytes,
+                "request_id": requestID])
+    }
+
+    /// Content-free completion record paired to `recordExternalRequest`.
+    func recordExternalResult(source: String, destination: String,
+                              recordType: String, requestID: String,
+                              status: String, alert: Bool? = nil,
+                              latencyMs: Int) {
+        var event: [String: Any] = [
+            "action": "external_reasoning_result",
+            "record_type": recordType,
+            "source": source,
+            "destination": destination,
+            "request_id": requestID,
+            "status": status,
+            "latency_ms": latencyMs,
+        ]
+        if let alert { event["alert"] = alert }
+        append(event)
     }
 
     private func append(_ event: [String: Any]) {

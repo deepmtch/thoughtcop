@@ -121,14 +121,24 @@ private func checkOneInstruction(_ instruction: String,
         request.setValue("Bearer " + backend.key, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        let requestID = UUID().uuidString
+        let requestStartedAt = Date()
         DispatchQueue.main.async { requestStarted(backend.label) }
         PrivacyAudit.shared.recordExternalRequest(
             source: source, destination: backend.label,
             recordType: evidence.eventType,
-            envelopeBytes: envelopeData.count)
+            envelopeBytes: envelopeData.count, requestID: requestID)
 
         URLSession.shared.dataTask(with: request) { data, response, error in
+            func auditResult(status: String, alert: Bool? = nil) {
+                PrivacyAudit.shared.recordExternalResult(
+                    source: source, destination: backend.label,
+                    recordType: evidence.eventType, requestID: requestID,
+                    status: status, alert: alert,
+                    latencyMs: Int(Date().timeIntervalSince(requestStartedAt) * 1000))
+            }
             func fail(_ message: String) {
+                auditResult(status: "error")
                 failures.append("\(backend.name): \(message)")
                 attempt(index + 1)
             }
@@ -147,6 +157,8 @@ private func checkOneInstruction(_ instruction: String,
             guard let decision = parseEvaluationDecision(Data(text.utf8)) else {
                 fail("checker returned invalid decision JSON"); return
             }
+            auditResult(status: decision.alert ? "alert" : "clean",
+                        alert: decision.alert)
             DispatchQueue.main.async { done(.scored(decision, backend.label)) }
         }.resume()
     }

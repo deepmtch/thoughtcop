@@ -758,13 +758,21 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
     audit.recordTranscriptLine(reasoningLine, sourcePath: "/tmp/session.jsonl")
     audit.recordExternalRequest(source: "Codex · Test", destination: "Provider · Model",
                                 recordType: "reasoning_text",
-                                envelopeBytes: 321)
+                                envelopeBytes: 321, requestID: "request-1")
+    audit.recordExternalResult(source: "Codex · Test", destination: "Provider · Model",
+                               recordType: "reasoning_text", requestID: "request-1",
+                               status: "alert", alert: true, latencyMs: 87)
     let log = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
     try? FileManager.default.removeItem(atPath: path)
     guard log.contains("app_started"),
           log.contains("tool_record_discarded"),
           log.contains("reasoning_selected"),
           log.contains("external_reasoning_request"),
+          log.contains("external_reasoning_result"),
+          log.contains("\"request_id\":\"request-1\""),
+          log.contains("\"status\":\"alert\""),
+          log.contains("\"alert\":true"),
+          log.contains("\"latency_ms\":87"),
           log.contains("\"record_type\":\"reasoning_text\""),
           log.contains("\"envelope_bytes\":321"),
           !log.contains("TOP_SECRET_TOOL_CONTENT"),
@@ -773,7 +781,8 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
             "privacy audit self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("privacy audit: reasoning=true toolsDiscarded=true outbound=true contentLogged=false")
+    print("privacy audit: reasoning=true toolsDiscarded=true outbound=true " +
+          "outcome=true contentLogged=false")
     exit(0)
 }
 

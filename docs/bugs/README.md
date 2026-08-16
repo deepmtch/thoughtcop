@@ -57,3 +57,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-050](BUG-050-plaintext-reasoning-bypassed-checker.md) | Plaintext Claude and Codex reasoning displayed but silently bypassed the checker | Fixed |
 | [BUG-051](BUG-051-app-bundle-lost-env-configuration.md) | App-bundle restart looked for `.env` inside the bundle and disabled checking | Fixed |
 | [BUG-052](BUG-052-checker-request-had-no-visible-activity.md) | External checks had no explicit in-flight indicator in the ticker | Fixed |
+| [BUG-053](BUG-053-checker-outcome-not-persisted.md) | Checker requests had no durable paired outcome record | Fixed |
