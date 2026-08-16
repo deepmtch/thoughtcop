@@ -83,10 +83,30 @@ final class UIStateServer {
 
     func start() {
         resetLog()
-        log(event: "api_started", fields: ["port": Int(API_PORT)])
+        startListening(retriesRemaining: 25)
+    }
+
+    private func startListening(retriesRemaining: Int) {
+        guard listener == nil else { return }
         guard let port = NWEndpoint.Port(rawValue: API_PORT),
-              let listener = try? NWListener(using: .tcp, on: port) else { return }
+              let listener = try? NWListener(using: .tcp, on: port) else {
+            retryListening(retriesRemaining: retriesRemaining)
+            return
+        }
         self.listener = listener
+        listener.stateUpdateHandler = { [weak self, weak listener] state in
+            guard let self, let listener else { return }
+            switch state {
+            case .ready:
+                self.log(event: "api_started", fields: ["port": Int(API_PORT)])
+            case .failed:
+                listener.cancel()
+                if self.listener === listener { self.listener = nil }
+                self.retryListening(retriesRemaining: retriesRemaining)
+            default:
+                break
+            }
+        }
         listener.newConnectionHandler = { [weak self] connection in
             connection.start(queue: DispatchQueue.global(qos: .utility))
             connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) {
@@ -117,6 +137,14 @@ final class UIStateServer {
             }
         }
         listener.start(queue: DispatchQueue(label: "thinkpeek.ui-api"))
+    }
+
+    private func retryListening(retriesRemaining: Int) {
+        guard retriesRemaining > 0 else { return }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.2) {
+            [weak self] in
+            self?.startListening(retriesRemaining: retriesRemaining - 1)
+        }
     }
 
     private func command(for path: String) -> UICommand? {
