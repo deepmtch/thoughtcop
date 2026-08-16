@@ -70,10 +70,7 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
     let encryptedRecords = blocks(in: encryptedLine)
     let reasoningRecords = blocks(in: reasoningLine)
     guard excludedRecords.isEmpty,
-          encryptedRecords.count == 1,
-          encryptedRecords[0].sealed,
-          !encryptedRecords[0].externallyEvaluable,
-          encryptedRecords[0].evaluationRecord.content.isEmpty,
+          encryptedRecords.isEmpty,
           blocks(in: duplicateEventLine).isEmpty,
           reasoningRecords.count == 1,
           reasoningRecords[0].kind == .thinking,
@@ -125,7 +122,6 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
     let localOnlyBlocks = blocks(in: openAIWithoutSummary)
     let summaryBlocks = blocks(in: openAISummaryOnly)
     let claudeBlocks = blocks(in: claude)
-    let summaryEvent = summaryBlocks.first.map(uiEvent(for:))
     guard openAIBlocks.count == 1,
           openAIBlocks[0].text ==
             "Inspecting the complete OpenAI reasoning text.\n\n" +
@@ -137,13 +133,7 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
           localOnlyBlocks[0].text == "Local-only OpenAI reasoning text.",
           localOnlyBlocks[0].evaluationRecord.content == localOnlyBlocks[0].text,
           localOnlyBlocks[0].externallyEvaluable,
-          summaryBlocks.count == 1,
-          summaryBlocks[0].sealed,
-          summaryBlocks[0].text.isEmpty,
-          !summaryBlocks[0].externallyEvaluable,
-          summaryEvent?.kind == "omitted-analysis",
-          summaryEvent?.text.contains("Original reasoning unavailable") == true,
-          summaryEvent?.text.contains("First readable summary") == false,
+          summaryBlocks.isEmpty,
           claudeBlocks.count == 1,
           claudeBlocks[0].text ==
             "Inspecting the complete Claude thinking text.\n\n" +
@@ -156,7 +146,7 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
         exit(1)
     }
     print("provider reasoning: openAITextComplete=true " +
-          "summaryNeverPresentedAsOriginal=true claudeThinkingComplete=true " +
+          "encryptedAndSummaryOnlyHidden=true claudeThinkingComplete=true " +
           "plaintextReasoningExternallyEvaluable=true")
     exit(0)
 }

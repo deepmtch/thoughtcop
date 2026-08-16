@@ -154,11 +154,10 @@ func blocks(in line: String) -> [Block] {
                           evaluationEventType: "reasoning_text",
                           externallyEvaluable: true)]
         }
-        if encryptedChars > 0 || payload["summary"] != nil {
-            return [Block(ts: ts, text: "", sealed: true,
-                          signatureChars: encryptedChars, kind: .thinking,
-                          evaluationText: "", externallyEvaluable: false)]
-        }
+        // Encrypted reasoning and provider summaries are audit metadata only.
+        // They contain no original plaintext reasoning and must never displace
+        // a useful ticker item or become navigable UI history.
+        if encryptedChars > 0 || payload["summary"] != nil { return [] }
         return []
     }
     guard let message = obj["message"] as? [String: Any],
@@ -169,11 +168,12 @@ func blocks(in line: String) -> [Block] {
             let text = (block["thinking"] as? String) ?? ""
             let signatureChars = (block["signature"] as? String)?.count ?? 0
             let readable = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            guard readable else { return nil }
             return Block(ts: ts, text: text, sealed: !readable,
                          signatureChars: signatureChars, kind: .thinking,
-                         evaluationText: readable ? text : "",
+                         evaluationText: text,
                          evaluationEventType: "thinking",
-                         externallyEvaluable: readable)
+                         externallyEvaluable: true)
         case "tool_use", "tool_result":
             return nil
         default:
