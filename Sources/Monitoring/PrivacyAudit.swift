@@ -18,13 +18,26 @@ func auditMetadata(in line: String) -> [[String: Any]] {
             return [["record_type": "codex.agent_reasoning",
                      "action": "duplicate_reasoning_discarded"]]
         case ("response_item", "reasoning"):
-            let count = (payload["summary"] as? [[String: Any]] ?? []).compactMap {
+            let summaryCount = (payload["summary"] as? [[String: Any]] ?? []).compactMap {
                 ($0["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
             }.filter { !$0.isEmpty }.count
+            let plaintextCount = (payload["content"] as? [[String: Any]] ?? []).filter {
+                $0["type"] as? String == "reasoning_text" &&
+                !(($0["text"] as? String) ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }.count
+            let action: String
+            if plaintextCount > 0 {
+                action = "reasoning_selected"
+            } else if summaryCount > 0 {
+                action = "provider_summary_not_sent"
+            } else {
+                action = "encrypted_reasoning_not_sent"
+            }
             return [["record_type": "codex.reasoning",
-                     "action": count > 0 ? "reasoning_selected" :
-                        "encrypted_reasoning_not_sent",
-                     "readable_summary_count": count]]
+                     "action": action,
+                     "plaintext_reasoning_count": plaintextCount,
+                     "provider_summary_count": summaryCount]]
         case ("response_item", "custom_tool_call"):
             return [["record_type": "codex.tool_call",
                      "action": "tool_record_discarded"]]

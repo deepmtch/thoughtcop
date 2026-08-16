@@ -8,14 +8,19 @@ The ticker could label Claude reasoning with a transcript `custom-title` or
 ## Cause
 
 Thinkpeek read only title records embedded in `~/.claude/projects` transcripts.
-Claude Desktop owns separate session metadata that maps each `cliSessionId` to
-the current user-facing `title`, but Thinkpeek did not consult it.
+Claude Desktop owns separate local Claude Code session metadata that maps each
+`cliSessionId` to its local task `title`, but Thinkpeek did not consult it.
 
 ## Fix
 
-Claude source names now prefer the title from Claude Desktop's local
+Local Claude Code source names now prefer the title from Claude Desktop's local
 `claude-code-sessions` metadata for the matching full transcript UUID. Embedded
 transcript titles remain a fallback when Desktop metadata is unavailable.
+
+Claude cloud sessions use `cse_...` identifiers and are not equivalent to these
+local `cliSessionId` records. They must not be joined by title, text, or timestamp
+heuristics. BUG-060 covers the stale-local-transcript case that made an unrelated
+local title remain visible while other sessions ran.
 
 ## Verification
 

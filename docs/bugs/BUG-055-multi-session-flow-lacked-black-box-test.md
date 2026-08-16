@@ -12,7 +12,8 @@ Codex sessions flow through the running AppKit application correctly.
 against temporary Claude/Codex transcript roots and a deterministic local HTTP
 checker. It never uses production keys or logs.
 
-The test writes concurrent fixtures containing:
+The test writes four interleaved conversation fixtures (two Claude and two
+Codex) containing:
 
 - plaintext Claude thinking that must alert;
 - plaintext Codex `reasoning_text` that must remain clean;
@@ -21,9 +22,10 @@ The test writes concurrent fixtures containing:
   the ticker.
 
 The dummy checker deliberately completes Codex before Claude. The test observes
-the lightbulb through the real UI API, waits for both outcomes, verifies paired
-audit records, confirms the latest clean Codex text remains selected, navigates
-back to the Claude warning, and navigates forward to Codex again.
+the lightbulb through the real UI API, waits for all outcomes, verifies paired
+audit records, confirms automatic switching after manual navigation, freezes a
+message reader while another session arrives, closes back to the latest ticker,
+and returns to the first Claude transcript after both second sessions ran.
 
 ## Isolation
 

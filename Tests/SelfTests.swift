@@ -309,6 +309,15 @@ if CommandLine.arguments.contains("--source-context-selftest") {
         #"{"type":"custom-title","customTitle":"Internal transcript title"}"# + "\n"
     try? embeddedTitle.write(toFile: claudePath, atomically: true, encoding: .utf8)
     defer { try? FileManager.default.removeItem(atPath: claudePath) }
+    let touchedOldTranscript = FileManager.default.temporaryDirectory
+        .appendingPathComponent("touched-old-\(UUID().uuidString).jsonl")
+    let oldRecord =
+        #"{"timestamp":"2020-01-02T03:04:05.000Z","type":"assistant"}"# + "\n" +
+        #"{"timestamp":null,"type":"custom-title","customTitle":"Touched today"}"# + "\n"
+    try? oldRecord.write(to: touchedOldTranscript, atomically: true, encoding: .utf8)
+    defer { try? FileManager.default.removeItem(at: touchedOldTranscript) }
+    let expectedOldDate = ISO8601DateFormatter().date(
+        from: "2020-01-02T03:04:05Z")
     guard preview.source == source,
           preview.text == event.text,
           !preview.source.isEmpty,
@@ -322,13 +331,15 @@ if CommandLine.arguments.contains("--source-context-selftest") {
             titleRecord.sessionID: titleRecord.title
           ]) == "Visible Claude conversation",
           preferredClaudeTitle(of: claudePath, desktopTitles: [:]) ==
-            "Internal transcript title" else {
+            "Internal transcript title",
+          latestTranscriptEventDate(of: touchedOldTranscript.path) == expectedOldDate else {
         FileHandle.standardError.write("source-context self-test failed\n"
             .data(using: .utf8)!)
         exit(1)
     }
     print("source context: \(preview.source) → \(preview.text) " +
-          "claudeDesktopTitlePreferred=true transcriptFallback=true")
+          "claudeDesktopTitlePreferred=true transcriptFallback=true " +
+          "activityUsesRecordTimestamp=true")
     exit(0)
 }
 
@@ -821,8 +832,10 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
     let audit = PrivacyAudit(path: path)
     audit.start()
     let toolLine = #"{"timestamp":"2026-08-15T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call_1","output":"TOP_SECRET_TOOL_CONTENT"}}"#
-    let reasoningLine = #"{"timestamp":"2026-08-15T00:00:01Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"PRIVATE_REASONING_CONTENT"}],"encrypted_content":"sealed"}}"#
+    let summaryLine = #"{"timestamp":"2026-08-15T00:00:01Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"PRIVATE_PROVIDER_SUMMARY"}],"encrypted_content":"sealed"}}"#
+    let reasoningLine = #"{"timestamp":"2026-08-15T00:00:02Z","type":"response_item","payload":{"type":"reasoning","content":[{"type":"reasoning_text","text":"PRIVATE_REASONING_CONTENT"}],"encrypted_content":"sealed"}}"#
     audit.recordTranscriptLine(toolLine, sourcePath: "/tmp/session.jsonl")
+    audit.recordTranscriptLine(summaryLine, sourcePath: "/tmp/session.jsonl")
     audit.recordTranscriptLine(reasoningLine, sourcePath: "/tmp/session.jsonl")
     audit.recordExternalRequest(source: "Codex · Test", destination: "Provider · Model",
                                 recordType: "reasoning_text",
@@ -834,6 +847,7 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
     try? FileManager.default.removeItem(atPath: path)
     guard log.contains("app_started"),
           log.contains("tool_record_discarded"),
+          log.contains("provider_summary_not_sent"),
           log.contains("reasoning_selected"),
           log.contains("external_reasoning_request"),
           log.contains("external_reasoning_result"),
@@ -844,13 +858,14 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
           log.contains("\"record_type\":\"reasoning_text\""),
           log.contains("\"envelope_bytes\":321"),
           !log.contains("TOP_SECRET_TOOL_CONTENT"),
+          !log.contains("PRIVATE_PROVIDER_SUMMARY"),
           !log.contains("PRIVATE_REASONING_CONTENT") else {
         FileHandle.standardError.write(
             "privacy audit self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("privacy audit: reasoning=true toolsDiscarded=true outbound=true " +
-          "outcome=true contentLogged=false")
+    print("privacy audit: plaintextReasoning=true providerSummaryExcluded=true " +
+          "toolsDiscarded=true outbound=true outcome=true contentLogged=false")
     exit(0)
 }
 

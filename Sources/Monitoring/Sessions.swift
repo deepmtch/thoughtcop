@@ -145,15 +145,19 @@ private func makeTranscriptDiscoverySnapshot(
     var active: [(path: String, modified: Date)] = []
     var newestByRoot: [String: Date] = [:]
 
+    let oldestRelevantCutoff = includeSessions
+        ? min(activeCutoff, sessionCutoff) : activeCutoff
     for path in paths {
         guard let attrs = try? fm.attributesOfItem(atPath: path) else { continue }
         if let size = attrs[.size] as? NSNumber { sizes[path] = size.uint64Value }
         guard let modified = attrs[.modificationDate] as? Date else { continue }
-        if modified > activeCutoff { active.append((path, modified)) }
-        if includeSessions, modified > sessionCutoff {
+        guard modified > oldestRelevantCutoff else { continue }
+        let activity = latestTranscriptEventDate(of: path) ?? modified
+        if activity > activeCutoff { active.append((path, activity)) }
+        if includeSessions, activity > sessionCutoff {
             let root = rootSessionPath(for: path)
-            if newestByRoot[root] == nil || modified > newestByRoot[root]! {
-                newestByRoot[root] = modified
+            if newestByRoot[root] == nil || activity > newestByRoot[root]! {
+                newestByRoot[root] = activity
             }
         }
     }
@@ -169,6 +173,44 @@ private func makeTranscriptDiscoverySnapshot(
     return TranscriptDiscoverySnapshot(
         activePaths: active.sorted { $0.modified > $1.modified }.map(\.path),
         sizes: sizes, sessions: sessions)
+}
+
+/// Filesystem modification time is not a reliable activity signal: Claude can
+/// touch or rewrite session metadata without appending a new conversation event.
+/// Read backwards until the transcript's last timestamped record is found.
+func latestTranscriptEventDate(of path: String) -> Date? {
+    guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+    defer { try? handle.close() }
+    let size = (try? handle.seekToEnd()) ?? 0
+    let chunkSize: UInt64 = 262_144
+    var start = size
+    var suffix = Data()
+    let parser = ISO8601DateFormatter()
+    parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+    repeat {
+        let next = start > chunkSize ? start - chunkSize : 0
+        try? handle.seek(toOffset: next)
+        var chunk = handle.readData(ofLength: Int(start - next))
+        chunk.append(suffix)
+        suffix = chunk
+        start = next
+
+        var text = String(data: suffix, encoding: .utf8) ?? ""
+        if start > 0, let newline = text.firstIndex(of: "\n") {
+            text = String(text[text.index(after: newline)...])
+        }
+        for line in text.components(separatedBy: "\n").reversed() {
+            guard line.contains("\"timestamp\""),
+                  let data = line.data(using: .utf8),
+                  let object = (try? JSONSerialization.jsonObject(with: data))
+                    as? [String: Any],
+                  let timestamp = object["timestamp"] as? String,
+                  let date = parser.date(from: timestamp) else { continue }
+            return date
+        }
+    } while start > 0
+    return nil
 }
 
 /// Match the title shown by the owning app. Claude titles live in its transcript;
