@@ -58,6 +58,7 @@ final class UIStateServer {
     private let lock = NSLock()
     private var body = Data("{\"schemaVersion\":1,\"ready\":false}".utf8)
     private var listener: NWListener?
+    private let listenerQueue = DispatchQueue(label: "thinkpeek.ui-api")
     var captureHandler: (() -> Data?)?
     var actionHandler: ((UICommand) -> Void)?
     private let logURL: URL
@@ -88,8 +89,19 @@ final class UIStateServer {
 
     private func startListening(retriesRemaining: Int) {
         guard listener == nil else { return }
-        guard let port = NWEndpoint.Port(rawValue: API_PORT),
-              let listener = try? NWListener(using: .tcp, on: port) else {
+        guard let port = NWEndpoint.Port(rawValue: API_PORT) else {
+            log(event: "api_invalid_port", fields: ["port": Int(API_PORT)])
+            retryListening(retriesRemaining: retriesRemaining)
+            return
+        }
+        let listener: NWListener
+        do {
+            listener = try NWListener(using: .tcp, on: port)
+        } catch {
+            log(event: "api_create_failed", fields: [
+                "port": Int(API_PORT),
+                "error": String(describing: error),
+            ])
             retryListening(retriesRemaining: retriesRemaining)
             return
         }
@@ -99,7 +111,16 @@ final class UIStateServer {
             switch state {
             case .ready:
                 self.log(event: "api_started", fields: ["port": Int(API_PORT)])
-            case .failed:
+            case .waiting(let error):
+                self.log(event: "api_waiting", fields: [
+                    "port": Int(API_PORT),
+                    "error": String(describing: error),
+                ])
+            case .failed(let error):
+                self.log(event: "api_failed", fields: [
+                    "port": Int(API_PORT),
+                    "error": String(describing: error),
+                ])
                 listener.cancel()
                 if self.listener === listener { self.listener = nil }
                 self.retryListening(retriesRemaining: retriesRemaining)
@@ -136,7 +157,7 @@ final class UIStateServer {
                 self.send(connection, payload: payload, type: "application/json")
             }
         }
-        listener.start(queue: DispatchQueue(label: "thinkpeek.ui-api"))
+        listener.start(queue: listenerQueue)
     }
 
     private func retryListening(retriesRemaining: Int) {
