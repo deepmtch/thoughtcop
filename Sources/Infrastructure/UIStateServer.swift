@@ -62,9 +62,11 @@ final class UIStateServer {
     var actionHandler: ((UICommand) -> Void)?
     private let logURL: URL
 
-    init(logURL: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Logs/Thinkpeek/ui-api.jsonl")) {
-        self.logURL = logURL
+    init(logURL: URL? = nil) {
+        self.logURL = logURL ?? ProcessInfo.processInfo.environment["THINKPEEK_UI_API_LOG"]
+            .map { URL(fileURLWithPath: $0) }
+            ?? FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Logs/Thinkpeek/ui-api.jsonl")
     }
 
     func publish(_ object: [String: Any]) {

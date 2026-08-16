@@ -39,4 +39,6 @@ PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
     python3 -m py_compile Scripts/watch.py
 PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
     python3 -m py_compile Scripts/test_ui_api.py
+PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
+    python3 Scripts/test_multi_session_e2e.py
 echo "all Thinkpeek tests passed"

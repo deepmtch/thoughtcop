@@ -32,6 +32,10 @@ func loadEvaluationInstructions() -> [String] {
 /// Credentials remain in memory and are never rendered or logged.
 func driftBackends() -> [DriftBackend] {
     guard !LOCAL_ONLY else { return [] }
+    if let url = DUMMY_CHECKER_URL {
+        return [DriftBackend(name: "Dummy", url: url, key: "isolated-test-key",
+                             model: "deterministic-checker")]
+    }
     var result: [DriftBackend] = []
     if let key = dotenv("GROQ_API_KEY"),
        let url = URL(string: "https://api.groq.com/openai/v1/chat/completions") {

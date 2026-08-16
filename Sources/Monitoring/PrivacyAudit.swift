@@ -2,8 +2,8 @@
 
 import Foundation
 
-let PRIVACY_AUDIT_PATH = ("~/Library/Logs/Thinkpeek/privacy-audit.jsonl" as NSString)
-    .expandingTildeInPath
+let PRIVACY_AUDIT_PATH = ProcessInfo.processInfo.environment["THINKPEEK_PRIVACY_AUDIT_PATH"]
+    ?? ("~/Library/Logs/Thinkpeek/privacy-audit.jsonl" as NSString).expandingTildeInPath
 
 func auditMetadata(in line: String) -> [[String: Any]] {
     guard let data = line.data(using: .utf8),

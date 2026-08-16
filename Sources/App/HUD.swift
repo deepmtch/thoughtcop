@@ -585,7 +585,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 of: tickerActiveBackgroundColor)?.map(Double.init) ?? NSNull(),
             "tickerAlarmActive": tickerAlarmActive,
             "checkerRequestInFlight": !checkerRequestTokens.isEmpty,
-            "checkerActivityIndicatorVisible": checkerActivityIndicator.isChecking,
+            "checkerActivityIndicatorVisible": !checkerActivityIndicator.isHidden,
             "checkerActivityDestination": checkerActivityDestination ?? NSNull(),
             "tickerAlarmColorMode": tickerAlarmColor == nil ? "default" : "custom",
             "tickerAlarmColorRGBA": tickerAlarmColor.flatMap(

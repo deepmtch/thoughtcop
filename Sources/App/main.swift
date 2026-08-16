@@ -80,7 +80,7 @@ if let requestedEvidence {
     exit(finished ? 0 : 1)
 }
 
-killOtherInstances()
+if !ISOLATED_E2E { killOtherInstances() }
 
 let app = NSApplication.shared
 let hud = HUD()

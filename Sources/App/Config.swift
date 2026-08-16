@@ -3,14 +3,31 @@
 import AppKit
 import Foundation
 
-let CLAUDE_PROJECTS = ("~/.claude/projects" as NSString).expandingTildeInPath
-let CODEX_SESSIONS = ("~/.codex/sessions" as NSString).expandingTildeInPath
-let CODEX_INDEX = ("~/.codex/session_index.jsonl" as NSString).expandingTildeInPath
+private func configuredPath(_ environmentKey: String, fallback: String) -> String {
+    ProcessInfo.processInfo.environment[environmentKey]
+        ?? (fallback as NSString).expandingTildeInPath
+}
+
+let CLAUDE_PROJECTS = configuredPath(
+    "THINKPEEK_CLAUDE_PROJECTS", fallback: "~/.claude/projects")
+let CODEX_SESSIONS = configuredPath(
+    "THINKPEEK_CODEX_SESSIONS", fallback: "~/.codex/sessions")
+let CODEX_INDEX = configuredPath(
+    "THINKPEEK_CODEX_INDEX", fallback: "~/.codex/session_index.jsonl")
 let POLL = 0.2          // seconds between drains of active files
 let RESCAN = 0.5        // seconds between discovering newly active sessions
 let ACTIVE_HOURS = 12.0 // auto mode watches every transcript touched in this window
 let API_PORT = UInt16(ProcessInfo.processInfo.environment["THINKPEEK_API_PORT"] ?? "17321") ?? 17321
 let LOCAL_ONLY = CommandLine.arguments.contains("--local-only")
+let ISOLATED_E2E = CommandLine.arguments.contains("--isolated-e2e")
+let DUMMY_CHECKER_URL: URL? = {
+    guard ISOLATED_E2E,
+          let index = CommandLine.arguments.firstIndex(of: "--dummy-checker-url"),
+          index + 1 < CommandLine.arguments.count,
+          let url = URL(string: CommandLine.arguments[index + 1]),
+          ["127.0.0.1", "localhost"].contains(url.host ?? "") else { return nil }
+    return url
+}()
 let INITIAL_TRANSCRIPT: String? = {
     guard let i = CommandLine.arguments.firstIndex(of: "--transcript"),
           i + 1 < CommandLine.arguments.count else { return nil }
