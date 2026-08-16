@@ -22,6 +22,9 @@ func codexSessionID(from path: String) -> String {
 private var codexTitleCache: [String: String] = [:]
 private var codexTitleCacheTime = Date.distantPast
 private let codexTitleCacheLock = NSLock()
+private var claudeDesktopTitleCache: [String: String] = [:]
+private var claudeDesktopTitleCacheTime = Date.distantPast
+private let claudeDesktopTitleCacheLock = NSLock()
 
 func codexTitles() -> [String: String] {
     codexTitleCacheLock.lock()
@@ -39,6 +42,42 @@ func codexTitles() -> [String: String] {
         result[id.lowercased()] = title
     }
     codexTitleCache = result
+    return result
+}
+
+func claudeSessionID(from path: String) -> String {
+    ((path as NSString).lastPathComponent as NSString).deletingPathExtension.lowercased()
+}
+
+func claudeDesktopTitleRecord(from data: Data) -> (sessionID: String, title: String)? {
+    guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+          let sessionID = object["cliSessionId"] as? String,
+          let title = object["title"] as? String,
+          !sessionID.isEmpty, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else { return nil }
+    return (sessionID.lowercased(), title)
+}
+
+/// Claude Desktop owns the title its session UI displays. Its local metadata
+/// maps that user-facing title to the CLI transcript UUID Thinkpeek tails.
+func claudeDesktopTitles() -> [String: String] {
+    claudeDesktopTitleCacheLock.lock()
+    defer { claudeDesktopTitleCacheLock.unlock() }
+    if Date().timeIntervalSince(claudeDesktopTitleCacheTime) < 3 {
+        return claudeDesktopTitleCache
+    }
+    claudeDesktopTitleCacheTime = Date()
+    let fm = FileManager.default
+    guard let files = fm.enumerator(atPath: CLAUDE_DESKTOP_SESSIONS) else { return [:] }
+    var result: [String: String] = [:]
+    for case let relative as String in files
+        where relative.hasSuffix(".json") && relative.contains("local_") {
+        let path = CLAUDE_DESKTOP_SESSIONS + "/" + relative
+        guard let data = fm.contents(atPath: path),
+              let record = claudeDesktopTitleRecord(from: data) else { continue }
+        result[record.sessionID] = record.title
+    }
+    claudeDesktopTitleCache = result
     return result
 }
 
@@ -139,6 +178,18 @@ func sessionTitle(of path: String) -> String? {
         let id = codexSessionID(from: path)
         return codexTitles()[id] ?? "task \(id.prefix(8))"
     }
+    return preferredClaudeTitle(of: path, desktopTitles: claudeDesktopTitles())
+}
+
+func preferredClaudeTitle(of path: String,
+                          desktopTitles: [String: String]) -> String? {
+    if let desktopTitle = desktopTitles[claudeSessionID(from: path)] {
+        return desktopTitle
+    }
+    return transcriptEmbeddedTitle(of: path)
+}
+
+private func transcriptEmbeddedTitle(of path: String) -> String? {
     // Title records are appended near the end. Reading only the tail avoids
     // repeatedly loading multi-megabyte transcripts on the AppKit main thread.
     guard let fh = FileHandle(forReadingAtPath: path) else { return nil }

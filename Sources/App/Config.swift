@@ -14,6 +14,9 @@ let CODEX_SESSIONS = configuredPath(
     "THINKPEEK_CODEX_SESSIONS", fallback: "~/.codex/sessions")
 let CODEX_INDEX = configuredPath(
     "THINKPEEK_CODEX_INDEX", fallback: "~/.codex/session_index.jsonl")
+let CLAUDE_DESKTOP_SESSIONS = configuredPath(
+    "THINKPEEK_CLAUDE_DESKTOP_SESSIONS",
+    fallback: "~/Library/Application Support/Claude/claude-code-sessions")
 let POLL = 0.2          // seconds between drains of active files
 let RESCAN = 0.5        // seconds between discovering newly active sessions
 let ACTIVE_HOURS = 12.0 // auto mode watches every transcript touched in this window

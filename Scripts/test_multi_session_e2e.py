@@ -117,6 +117,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         "THINKPEEK_CLAUDE_PROJECTS": str(claude_root),
         "THINKPEEK_CODEX_SESSIONS": str(codex_root),
         "THINKPEEK_CODEX_INDEX": str(root / "codex-index.jsonl"),
+        "THINKPEEK_CLAUDE_DESKTOP_SESSIONS": str(root / "claude-desktop-sessions"),
         "THINKPEEK_PRIVACY_AUDIT_PATH": str(audit_path),
         "THINKPEEK_UI_API_LOG": str(ui_log_path),
         "THINKPEEK_HISTORY_COUNT": "0",

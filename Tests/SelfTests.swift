@@ -303,14 +303,32 @@ if CommandLine.arguments.contains("--source-context-selftest") {
     let event = UIEvent(timestamp: "2026-08-12T00:00:00.000Z", kind: "analysis",
                         text: "Planning secure tmp directory build", readableAnalysis: true)
     let preview = (source: source, text: normalizedTickerText(event.text))
+    let claudePath = FileManager.default.temporaryDirectory
+        .appendingPathComponent("c464168c-0842-46a7-b10f-2215fb1e6df5.jsonl").path
+    let embeddedTitle =
+        #"{"type":"custom-title","customTitle":"Internal transcript title"}"# + "\n"
+    try? embeddedTitle.write(toFile: claudePath, atomically: true, encoding: .utf8)
+    defer { try? FileManager.default.removeItem(atPath: claudePath) }
     guard preview.source == source,
           preview.text == event.text,
-          !preview.source.isEmpty else {
+          !preview.source.isEmpty,
+          let claudeMetadata =
+            #"{"cliSessionId":"C464168C-0842-46A7-B10F-2215FB1E6DF5","title":"Visible Claude conversation"}"#
+                .data(using: .utf8),
+          let titleRecord = claudeDesktopTitleRecord(from: claudeMetadata),
+          titleRecord.sessionID == "c464168c-0842-46a7-b10f-2215fb1e6df5",
+          titleRecord.title == "Visible Claude conversation",
+          preferredClaudeTitle(of: claudePath, desktopTitles: [
+            titleRecord.sessionID: titleRecord.title
+          ]) == "Visible Claude conversation",
+          preferredClaudeTitle(of: claudePath, desktopTitles: [:]) ==
+            "Internal transcript title" else {
         FileHandle.standardError.write("source-context self-test failed\n"
             .data(using: .utf8)!)
         exit(1)
     }
-    print("source context: \(preview.source) → \(preview.text)")
+    print("source context: \(preview.source) → \(preview.text) " +
+          "claudeDesktopTitlePreferred=true transcriptFallback=true")
     exit(0)
 }
 
