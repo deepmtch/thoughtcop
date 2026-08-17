@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -128,6 +129,14 @@ def append(path: Path, record: dict) -> None:
         stream.write(json.dumps(record, separators=(",", ":")) + "\n")
         stream.flush()
         os.fsync(stream.fileno())
+
+
+test_started_at = datetime.now(timezone.utc)
+
+
+def record_timestamp(milliseconds: int) -> str:
+    value = test_started_at + timedelta(milliseconds=milliseconds)
+    return value.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 ui_port = free_port()
@@ -250,11 +259,11 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert cloud_done["activeSources"] == [], cloud_done
 
         append(claude_path, {
-            "timestamp": "2026-08-16T09:59:59.900Z",
+            "timestamp": record_timestamp(0),
             "type": "queue-operation", "operation": "dequeue",
         })
         append(codex_path, {
-            "timestamp": "2026-08-16T09:59:59.950Z",
+            "timestamp": record_timestamp(50),
             "type": "event_msg", "payload": {"type": "task_started"},
         })
         both_active = wait_for(lambda state:
@@ -263,7 +272,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert "Claude + Codex" in both_active["peekSource"], both_active
 
         append(claude_path, {
-            "timestamp": "2026-08-16T10:00:00.000Z",
+            "timestamp": record_timestamp(100),
             "type": "assistant",
             "message": {"content": [{
                 "type": "thinking",
@@ -272,20 +281,20 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             }]},
         })
         append(codex_path, {
-            "timestamp": "2026-08-16T10:00:00.050Z",
+            "timestamp": record_timestamp(150),
             "type": "response_item",
             "payload": {"type": "custom_tool_call", "name": "exec",
                         "input": "TOOL_SECRET_MUST_NOT_REACH_CHECKER"},
         })
         append(codex_path, {
-            "timestamp": "2026-08-16T10:00:00.100Z",
+            "timestamp": record_timestamp(200),
             "type": "response_item",
             "payload": {"type": "reasoning", "summary": [{
                 "type": "summary_text", "text": "ENCRYPTED_PLACEHOLDER_MUST_NOT_RENDER"
             }], "encrypted_content": "sealed"},
         })
         append(codex_path, {
-            "timestamp": "2026-08-16T10:00:00.200Z",
+            "timestamp": record_timestamp(300),
             "type": "response_item",
             "payload": {"type": "reasoning", "content": [{
                 "type": "reasoning_text",
@@ -317,12 +326,12 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert finished["tickerAlarmActive"] is False, finished
 
         append(claude_path, {
-            "timestamp": "2026-08-16T10:00:00.300Z",
+            "timestamp": record_timestamp(400),
             "type": "assistant",
             "message": {"content": [{"type": "text", "text": "done"}]},
         })
         append(codex_path, {
-            "timestamp": "2026-08-16T10:00:00.350Z",
+            "timestamp": record_timestamp(450),
             "type": "event_msg", "payload": {"type": "task_complete"},
         })
         inactive = wait_for(lambda state:
@@ -346,7 +355,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         get_json(API_BASE, "/previous")
         wait_for(lambda state: state.get("currentIndex") == 0)
         append(claude_second, {
-            "timestamp": "2026-08-16T10:00:01.000Z",
+            "timestamp": record_timestamp(1_000),
             "type": "assistant",
             "message": {"content": [{
                 "type": "thinking",
@@ -367,7 +376,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         reader = wait_for(lambda state: state.get("messageReaderFrozen") is True)
         frozen_index = reader["currentIndex"]
         append(codex_second, {
-            "timestamp": "2026-08-16T10:00:01.100Z",
+            "timestamp": record_timestamp(1_100),
             "type": "response_item",
             "payload": {"type": "reasoning", "content": [{
                 "type": "reasoning_text",
@@ -390,7 +399,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         # Revisit the first Claude session to prove interleaving is keyed by
         # transcript, not permanently stuck on whichever session appeared first.
         append(claude_path, {
-            "timestamp": "2026-08-16T10:00:01.200Z",
+            "timestamp": record_timestamp(1_200),
             "type": "assistant",
             "message": {"content": [{
                 "type": "thinking",
