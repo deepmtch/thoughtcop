@@ -121,6 +121,12 @@ func blocks(in line: String) -> [Block] {
           let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     else { return [] }
     let ts = obj["timestamp"] as? String ?? ""
+    if obj["type"] as? String == "system",
+       obj["subtype"] as? String == "turn_duration" {
+        // Claude writes this explicit terminal record after a completed turn,
+        // including turns whose last assistant record was a tool invocation.
+        return [activityBlock(ts: ts, phase: .finished)]
+    }
     if obj["type"] as? String == "queue-operation" {
         let operation = obj["operation"] as? String
         let phase: Block.ActivityPhase = operation == "dequeue" ? .started : .updated
@@ -132,6 +138,9 @@ func blocks(in line: String) -> [Block] {
             return [activityBlock(ts: ts, phase: .started)]
         }
         if payload["type"] as? String == "task_complete" {
+            return [activityBlock(ts: ts, phase: .finished)]
+        }
+        if payload["type"] as? String == "turn_aborted" {
             return [activityBlock(ts: ts, phase: .finished)]
         }
         if payload["type"] as? String == "agent_reasoning" {
@@ -175,9 +184,12 @@ func blocks(in line: String) -> [Block] {
         }
         return [activityBlock(ts: ts, phase: .updated)]
     }
-    guard let message = obj["message"] as? [String: Any],
+    guard obj["type"] as? String == "assistant",
+          let message = obj["message"] as? [String: Any],
           let content = message["content"] as? [[String: Any]] else {
-        if obj["type"] != nil { return [activityBlock(ts: ts, phase: .updated)] }
+        // Unknown metadata, user messages, attachments and snapshots do not
+        // establish provider activity. Only explicit lifecycle/provider output
+        // records may mutate the working state.
         return []
     }
     let hasToolUse = content.contains { ($0["type"] as? String) == "tool_use" }

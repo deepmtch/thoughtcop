@@ -242,6 +242,9 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
     let messageLine = #"{"timestamp":"2026-08-13T10:00:01.100Z","type":"assistant","message":{"content":[{"type":"text","text":"ordinary assistant message"}]}}"#
     let encryptedLine = #"{"timestamp":"2026-08-13T10:00:01.200Z","type":"assistant","message":{"content":[{"type":"thinking","thinking":"","signature":"sealed"}]}}"#
     let duplicateEventLine = #"{"timestamp":"2026-08-13T10:00:01.900Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"**Assessing safe change**"}}"#
+    let claudeTurnFinishedLine = #"{"timestamp":"2026-08-13T10:00:03.000Z","type":"system","subtype":"turn_duration","durationMs":1200}"#
+    let codexTurnAbortedLine = #"{"timestamp":"2026-08-13T10:00:04.000Z","type":"event_msg","payload":{"type":"turn_aborted"}}"#
+    let unrelatedMetadataLine = #"{"timestamp":"2026-08-13T10:00:05.000Z","type":"file-history-snapshot","snapshot":{}}"#
     let reasoningLine = #"{"timestamp":"2026-08-13T10:00:02.000Z","type":"response_item","payload":{"type":"reasoning","content":[{"type":"reasoning_text","text":"Assessing and planning a safe change."}],"summary":[{"type":"summary_text","text":"**Short summary**"}],"encrypted_content":"sealed"}}"#
     let excludedRecords = blocks(in: codexLine) + blocks(in: claudeLine) +
         blocks(in: messageLine)
@@ -254,6 +257,9 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
                                         !$0.externallyEvaluable }),
           blocks(in: duplicateEventLine).allSatisfy({ $0.kind == .activity &&
                                                        !$0.externallyEvaluable }),
+          blocks(in: claudeTurnFinishedLine).first?.activityPhase == .finished,
+          blocks(in: codexTurnAbortedLine).first?.activityPhase == .finished,
+          blocks(in: unrelatedMetadataLine).isEmpty,
           reasoning.count == 1,
           reasoning[0].text == "Assessing and planning a safe change.",
           reasoning[0].evaluationRecord.content ==
