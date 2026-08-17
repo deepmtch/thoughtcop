@@ -71,3 +71,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-064](BUG-064-headless-check-truncated-audit.md) | Headless check truncated the live privacy audit | Fixed |
 | [BUG-065](BUG-065-claude-desktop-thinking-was-not-captured.md) | Claude Desktop plaintext thinking was not captured | Fixed |
 | [BUG-066](BUG-066-multi-session-test-expired-its-fixtures.md) | Multi-session test expired its fixed-date fixtures | Fixed |
+| [BUG-067](BUG-067-stale-working-state-and-blocking-restart.md) | Provider display-title changes left stale working state and manual restart blocked the shell | Fixed |

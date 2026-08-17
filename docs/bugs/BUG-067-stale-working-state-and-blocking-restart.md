@@ -1,4 +1,4 @@
-# BUG-058: stale working state and blocking manual restart
+# BUG-067: stale working state and blocking manual restart
 
 Status: fixed
 
