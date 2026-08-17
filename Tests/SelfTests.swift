@@ -3,7 +3,127 @@
 import AppKit
 import Foundation
 
+private func compressedZstdFixture(_ data: Data) -> Data? {
+    let candidates = ["/opt/homebrew/bin/zstd", "/usr/local/bin/zstd", "/usr/bin/zstd"]
+    guard let executable = candidates.first(where: {
+        FileManager.default.isExecutableFile(atPath: $0)
+    }) else { return nil }
+    let process = Process()
+    let input = Pipe()
+    let output = Pipe()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = ["--compress", "--stdout", "--quiet"]
+    process.standardInput = input
+    process.standardOutput = output
+    do {
+        try process.run()
+        input.fileHandleForWriting.write(data)
+        try input.fileHandleForWriting.close()
+        let compressed = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return process.terminationStatus == 0 ? compressed : nil
+    } catch {
+        return nil
+    }
+}
+
 func runRequestedSelfTest() {
+
+if let flagIndex = CommandLine.arguments.firstIndex(of: "--inspect-claude-desktop-cache"),
+   CommandLine.arguments.indices.contains(flagIndex + 1) {
+    let path = CommandLine.arguments[flagIndex + 1]
+    guard let data = FileManager.default.contents(atPath: path) else {
+        FileHandle.standardError.write("cache file unreadable\n".data(using: .utf8)!)
+        exit(1)
+    }
+    let events = claudeDesktopConversationEvents(inCacheData: data)
+    let report: [String: Any] = [
+        "eventCount": events.count,
+        "events": events.map { [
+            "source": $0.source,
+            "characterCount": $0.block.text.count,
+            "eventType": $0.block.evaluationRecord.eventType,
+            "externallyEvaluable": $0.block.externallyEvaluable,
+        ] as [String: Any] },
+    ]
+    let encoded = try! JSONSerialization.data(withJSONObject: report,
+                                               options: [.prettyPrinted, .sortedKeys])
+    print(String(decoding: encoded, as: UTF8.self))
+    exit(events.isEmpty ? 1 : 0)
+}
+
+if CommandLine.arguments.contains("--claude-desktop-conversation-selftest") {
+    let fixture = #"{"uuid":"conversation-1","name":"Exact Claude Desktop title","updated_at":"2026-08-16T19:31:20Z","chat_messages":[{"uuid":"user-1","sender":"human","content":[{"type":"text","text":"private user message"}]},{"uuid":"assistant-1","sender":"assistant","updated_at":"2026-08-16T19:31:20Z","content":[{"type":"text","text":"ordinary assistant message"},{"type":"thinking","thinking":"Exact first paragraph.\n\nExact second paragraph.","summaries":[{"summary":"must stay excluded"}],"signature":"sealed"},{"type":"tool_use","name":"Read","input":{"path":"secret"}},{"type":"tool_result","content":"secret result"}]},{"uuid":"assistant-2","sender":"assistant","content":[{"type":"thinking","thinking":"","signature":"encrypted-only"}]}]}"#
+    guard let json = fixture.data(using: .utf8),
+          let compressed = compressedZstdFixture(json) else {
+        FileHandle.standardError.write(
+            "Claude Desktop fixture compression failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    var cache = Data("HTTP/1.1 200 OK\r\n/api/organizations/org-1/chat_conversations/".utf8)
+    cache.append(Data("conversation-1?tree=True\r\n\r\n".utf8))
+    cache.append(compressed)
+    let events = claudeDesktopConversationEvents(inCacheData: cache)
+    guard events.count == 1,
+          events[0].identifier == "conversation-1|assistant-1|1",
+          events[0].source == "Claude · Exact Claude Desktop title",
+          events[0].block.text == "Exact first paragraph.\n\nExact second paragraph.",
+          events[0].block.evaluationRecord.content == events[0].block.text,
+          events[0].block.evaluationRecord.eventType == "thinking",
+          events[0].block.externallyEvaluable,
+          !events[0].block.text.contains("private user message"),
+          !events[0].block.text.contains("ordinary assistant message"),
+          !events[0].block.text.contains("must stay excluded"),
+          !events[0].block.text.contains("secret result") else {
+        FileHandle.standardError.write(
+            "Claude Desktop structured-thinking boundary failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("thinkpeek-claude-desktop-\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: directory,
+                                             withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let stale = directory.appendingPathComponent("stale-cache")
+    try? cache.write(to: stale)
+    let monitor = ClaudeDesktopConversationMonitor(directory: directory.path)
+    var first: [ClaudeDesktopConversationEvent]?
+    _ = monitor.poll { first = $0 }
+    var deadline = Date().addingTimeInterval(3)
+    while first == nil, Date() < deadline {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    let liveFixture = #"{"uuid":"conversation-1","name":"Exact Claude Desktop title","updated_at":"2026-08-16T19:32:20Z","chat_messages":[{"uuid":"assistant-1","sender":"assistant","content":[{"type":"text","text":"ordinary assistant message"},{"type":"thinking","thinking":"Exact first paragraph.\n\nExact second paragraph."}]},{"uuid":"assistant-live","sender":"assistant","updated_at":"2026-08-16T19:32:20Z","content":[{"type":"thinking","thinking":"Exact newly arrived Claude Desktop thinking."}]}]}"#
+    guard let liveJSON = liveFixture.data(using: .utf8),
+          let liveCompressed = compressedZstdFixture(liveJSON) else {
+        FileHandle.standardError.write(
+            "Claude Desktop live fixture compression failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    var liveCache = Data(
+        "HTTP/1.1 200 OK\r\n/api/organizations/org-1/chat_conversations/".utf8)
+    liveCache.append(Data("conversation-1?tree=True\r\n\r\n".utf8))
+    liveCache.append(liveCompressed)
+    let live = directory.appendingPathComponent("live-cache")
+    try? liveCache.write(to: live)
+    var second: [ClaudeDesktopConversationEvent]?
+    _ = monitor.poll { second = $0 }
+    deadline = Date().addingTimeInterval(3)
+    while second == nil, Date() < deadline {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    guard first?.isEmpty == true, second?.count == 1,
+          second?.first?.identifier == "conversation-1|assistant-live|0",
+          second?.first?.block.text == "Exact newly arrived Claude Desktop thinking." else {
+        FileHandle.standardError.write(
+            "Claude Desktop live-cache monitor failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("claude desktop: exactThinking=true exactTitle=true " +
+          "messagesToolsSummariesEncryptedExcluded=true staleReplay=false live=true")
+    exit(0)
+}
 
 if CommandLine.arguments.contains("--config-path-selftest") {
     let repo = "/Users/example/src/thinkpeek"

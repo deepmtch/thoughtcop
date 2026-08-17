@@ -126,6 +126,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var unseenCount = 0
     private let transcriptMonitor = TranscriptMonitorWorker()
     private let claudeCloudActivityMonitor = ClaudeCloudActivityMonitor()
+    private let claudeDesktopConversationMonitor = ClaudeDesktopConversationMonitor()
     private var picker: NSPopUpButton!
     private var status: NSTextField!
     private var sessions: [SessionInfo] = []
@@ -1495,6 +1496,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.processActivity(source: event.source, phase: event.phase)
             }
         }
+        claudeDesktopConversationMonitor.poll { [weak self] events in
+            self?.processResolvedArrived(events.map {
+                (source: $0.source, block: $0.block)
+            })
+        }
     }
 
     private func processActivity(source: String, phase: Block.ActivityPhase) {
@@ -1507,6 +1513,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func processArrived(_ incoming: [(path: String, block: Block)]) {
+        processResolvedArrived(incoming.map {
+            (source: sourceName(for: $0.path), block: $0.block)
+        })
+    }
+
+    private func processResolvedArrived(
+        _ incoming: [(source: String, block: Block)]) {
         var arrived = incoming
         arrived.sort { $0.block.ts < $1.block.ts }
         arrived.removeAll { event in
@@ -1514,7 +1527,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 .split(whereSeparator: { $0.isWhitespace })
                 .joined(separator: " ")
             let timestampPart = event.block.kind == .thinking ? "" : "\u{1f}" + event.block.ts
-            let key = sourceName(for: event.path) + "\u{1f}" + normalized + timestampPart
+            let key = event.source + "\u{1f}" + normalized + timestampPart
             if presentationKeys.contains(key) { return true }
             presentationKeys.insert(key)
             return false
@@ -1533,7 +1546,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let isInitialHistoryBatch = arrived.count > 20 && feedStack.arrangedSubviews.count <= 1
         for event in arrived {
             let block = event.block
-            let source = sourceName(for: event.path)
+            let source = event.source
             let ui = uiEvent(for: block)
             if ui.kind == "activity" {
                 processActivity(source: source,

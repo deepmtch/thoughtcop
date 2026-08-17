@@ -267,6 +267,7 @@ Scripts/test.sh
 
 ```bash
 ./.build/thinkpeek --selftest
+./.build/thinkpeek --claude-desktop-conversation-selftest
 ./.build/thinkpeek --layout-selftest
 ./.build/thinkpeek --presentation-selftest
 ./.build/thinkpeek --source-context-selftest
