@@ -11,6 +11,7 @@ for test in \
     --transcript-monitor-selftest \
     --evaluator-selftest \
     --provider-reasoning-selftest \
+    --claude-desktop-conversation-selftest \
     --layout-selftest \
     --presentation-selftest \
     --claude-cloud-activity-selftest \
