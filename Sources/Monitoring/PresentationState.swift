@@ -1,28 +1,34 @@
 // Presentation policy for transcript progress records versus useful content.
 
 struct OperationPresentationState {
-    private(set) var pendingSources = Set<String>()
-    private(set) var waitingSourceSet = Set<String>()
-    private(set) var latestPendingSource: String?
-    private(set) var latestWaitingSource: String?
+    private var pendingByIdentity: [String: String] = [:]
+    private var waitingByIdentity: [String: String] = [:]
+    private var latestPendingIdentity: String?
+    private var latestWaitingIdentity: String?
     private(set) var lastUsefulTitle = "Thinkpeek"
 
-    var operationPending: Bool { !pendingSources.isEmpty }
-    var operationWaiting: Bool { !waitingSourceSet.isEmpty }
-    var activeSources: [String] { pendingSources.sorted() }
-    var waitingSources: [String] { waitingSourceSet.sorted() }
+    var operationPending: Bool { !pendingByIdentity.isEmpty }
+    var operationWaiting: Bool { !waitingByIdentity.isEmpty }
+    var activeSources: [String] { pendingByIdentity.values.sorted() }
+    var waitingSources: [String] { waitingByIdentity.values.sorted() }
+    var latestPendingSource: String? {
+        latestPendingIdentity.flatMap { pendingByIdentity[$0] }
+    }
+    var latestWaitingSource: String? {
+        latestWaitingIdentity.flatMap { waitingByIdentity[$0] }
+    }
     var latestActivitySource: String? {
         latestPendingSource ?? latestWaitingSource
     }
     var windowTitle: String {
-        if !pendingSources.isEmpty {
-            return activityTitle(sources: pendingSources,
-                                 latestSource: latestPendingSource,
+        if !pendingByIdentity.isEmpty {
+            return activityTitle(sources: Set(pendingByIdentity.values),
+                                 latestSource: latestActivitySource,
                                  marker: "●", suffix: "working…")
         }
-        if !waitingSourceSet.isEmpty {
-            return activityTitle(sources: waitingSourceSet,
-                                 latestSource: latestWaitingSource,
+        if !waitingByIdentity.isEmpty {
+            return activityTitle(sources: Set(waitingByIdentity.values),
+                                 latestSource: latestActivitySource,
                                  marker: "◐", suffix: "waiting for you")
         }
         return lastUsefulTitle
@@ -43,59 +49,70 @@ struct OperationPresentationState {
         return "\(marker) \(source) · \(suffix)"
     }
 
-    mutating func operationStarted(source: String) {
-        waitingSourceSet.remove(source)
-        if latestWaitingSource == source {
-            latestWaitingSource = waitingSourceSet.sorted().first
-        }
-        pendingSources.insert(source)
-        latestPendingSource = source
+    private func identity(_ explicit: String?, source: String) -> String {
+        explicit ?? source
     }
 
-    mutating func operationUpdated(source: String) {
+    mutating func operationStarted(source: String, identity explicit: String? = nil) {
+        let key = identity(explicit, source: source)
+        waitingByIdentity.removeValue(forKey: key)
+        if latestWaitingIdentity == key {
+            latestWaitingIdentity = waitingByIdentity.keys.sorted().first
+        }
+        pendingByIdentity[key] = source
+        latestPendingIdentity = key
+    }
+
+    mutating func operationUpdated(source: String, identity explicit: String? = nil) {
+        let key = identity(explicit, source: source)
         // Claude emits trailing stream frames after AskUserQuestion. They are
         // part of the same turn and must not turn "waiting" back into work.
-        guard !waitingSourceSet.contains(source) else { return }
-        pendingSources.insert(source)
-        latestPendingSource = source
+        guard waitingByIdentity[key] == nil else { return }
+        pendingByIdentity[key] = source
+        latestPendingIdentity = key
     }
 
-    mutating func operationWaitingForUser(source: String) {
-        pendingSources.remove(source)
-        if latestPendingSource == source {
-            latestPendingSource = pendingSources.sorted().first
+    mutating func operationWaitingForUser(source: String,
+                                          identity explicit: String? = nil) {
+        let key = identity(explicit, source: source)
+        pendingByIdentity.removeValue(forKey: key)
+        if latestPendingIdentity == key {
+            latestPendingIdentity = pendingByIdentity.keys.sorted().first
         }
-        waitingSourceSet.insert(source)
-        latestWaitingSource = source
+        waitingByIdentity[key] = source
+        latestWaitingIdentity = key
     }
 
-    mutating func operationFinished(source: String) {
-        pendingSources.remove(source)
-        waitingSourceSet.remove(source)
-        if latestPendingSource == source {
-            latestPendingSource = pendingSources.sorted().first
+    mutating func operationFinished(source: String, identity explicit: String? = nil) {
+        let key = identity(explicit, source: source)
+        pendingByIdentity.removeValue(forKey: key)
+        waitingByIdentity.removeValue(forKey: key)
+        if latestPendingIdentity == key {
+            latestPendingIdentity = pendingByIdentity.keys.sorted().first
         }
-        if latestWaitingSource == source {
-            latestWaitingSource = waitingSourceSet.sorted().first
+        if latestWaitingIdentity == key {
+            latestWaitingIdentity = waitingByIdentity.keys.sorted().first
         }
     }
 
-    mutating func readableContentArrived(source: String) {
-        pendingSources.remove(source)
-        waitingSourceSet.remove(source)
-        if latestPendingSource == source {
-            latestPendingSource = pendingSources.sorted().first
+    mutating func readableContentArrived(source: String,
+                                         identity explicit: String? = nil) {
+        let key = identity(explicit, source: source)
+        pendingByIdentity.removeValue(forKey: key)
+        waitingByIdentity.removeValue(forKey: key)
+        if latestPendingIdentity == key {
+            latestPendingIdentity = pendingByIdentity.keys.sorted().first
         }
-        if latestWaitingSource == source {
-            latestWaitingSource = waitingSourceSet.sorted().first
+        if latestWaitingIdentity == key {
+            latestWaitingIdentity = waitingByIdentity.keys.sorted().first
         }
         lastUsefulTitle = source
     }
 
     mutating func resetPending() {
-        pendingSources.removeAll()
-        waitingSourceSet.removeAll()
-        latestPendingSource = nil
-        latestWaitingSource = nil
+        pendingByIdentity.removeAll()
+        waitingByIdentity.removeAll()
+        latestPendingIdentity = nil
+        latestWaitingIdentity = nil
     }
 }

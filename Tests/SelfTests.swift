@@ -428,6 +428,24 @@ if CommandLine.arguments.contains("--presentation-selftest") {
             .data(using: .utf8)!)
         exit(1)
     }
+    state.operationStarted(source: "Claude · 16f8fc8d",
+                           identity: "Claude:16f8fc8d")
+    state.operationUpdated(source: "Claude · Review hosts",
+                           identity: "Claude:16f8fc8d")
+    guard state.activeSources == ["Claude · Review hosts"] else {
+        FileHandle.standardError.write(
+            "presentation self-test failed to update renamed source\n"
+                .data(using: .utf8)!)
+        exit(1)
+    }
+    state.operationFinished(source: "Claude · Review hosts",
+                            identity: "Claude:16f8fc8d")
+    guard !state.operationPending else {
+        FileHandle.standardError.write(
+            "presentation self-test failed renamed source completion\n"
+                .data(using: .utf8)!)
+        exit(1)
+    }
     print("presentation: useful summary preserved until readable content arrives")
     exit(0)
 }

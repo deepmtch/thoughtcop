@@ -1253,32 +1253,32 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Operation-start records are progress signals, not useful content. Keep
     /// the last readable summary in the card/peek/history and signal work only
     /// through the window title and state API.
-    private func operationStarted(source: String) {
-        operationState.operationStarted(source: source)
+    private func operationStarted(source: String, identity: String? = nil) {
+        operationState.operationStarted(source: source, identity: identity)
         updateWindowTitle()
         publishAPI()
     }
 
-    private func operationUpdated(source: String) {
-        operationState.operationUpdated(source: source)
+    private func operationUpdated(source: String, identity: String? = nil) {
+        operationState.operationUpdated(source: source, identity: identity)
         updateWindowTitle()
         publishAPI()
     }
 
-    private func operationFinished(source: String) {
-        operationState.operationFinished(source: source)
+    private func operationFinished(source: String, identity: String? = nil) {
+        operationState.operationFinished(source: source, identity: identity)
         updateWindowTitle()
         publishAPI()
     }
 
-    private func operationWaitingForUser(source: String) {
-        operationState.operationWaitingForUser(source: source)
+    private func operationWaitingForUser(source: String, identity: String? = nil) {
+        operationState.operationWaitingForUser(source: source, identity: identity)
         updateWindowTitle()
         publishAPI()
     }
 
-    private func readableContentArrived(source: String) {
-        operationState.readableContentArrived(source: source)
+    private func readableContentArrived(source: String, identity: String? = nil) {
+        operationState.readableContentArrived(source: source, identity: identity)
         updateWindowTitle()
     }
 
@@ -1498,28 +1498,32 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         claudeDesktopConversationMonitor.poll { [weak self] events in
             self?.processResolvedArrived(events.map {
-                (source: $0.source, block: $0.block)
+                (source: $0.source, identity: $0.source, block: $0.block)
             })
         }
     }
 
-    private func processActivity(source: String, phase: Block.ActivityPhase) {
+    private func processActivity(source: String, identity: String? = nil,
+                                 phase: Block.ActivityPhase) {
         switch phase {
-        case .started: operationStarted(source: source)
-        case .updated: operationUpdated(source: source)
-        case .waiting: operationWaitingForUser(source: source)
-        case .finished: operationFinished(source: source)
+        case .started: operationStarted(source: source, identity: identity)
+        case .updated: operationUpdated(source: source, identity: identity)
+        case .waiting: operationWaitingForUser(source: source, identity: identity)
+        case .finished: operationFinished(source: source, identity: identity)
         }
     }
 
     private func processArrived(_ incoming: [(path: String, block: Block)]) {
         processResolvedArrived(incoming.map {
-            (source: sourceName(for: $0.path), block: $0.block)
+            let root = rootSessionPath(for: $0.path)
+            let identity = platformName(for: root) + ":" + sessionID(for: root)
+            return (source: sourceName(for: $0.path), identity: identity,
+                    block: $0.block)
         })
     }
 
     private func processResolvedArrived(
-        _ incoming: [(source: String, block: Block)]) {
+        _ incoming: [(source: String, identity: String, block: Block)]) {
         var arrived = incoming
         arrived.sort { $0.block.ts < $1.block.ts }
         arrived.removeAll { event in
@@ -1527,7 +1531,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 .split(whereSeparator: { $0.isWhitespace })
                 .joined(separator: " ")
             let timestampPart = event.block.kind == .thinking ? "" : "\u{1f}" + event.block.ts
-            let key = event.source + "\u{1f}" + normalized + timestampPart
+            let key = event.identity + "\u{1f}" + normalized + timestampPart
             if presentationKeys.contains(key) { return true }
             presentationKeys.insert(key)
             return false
@@ -1550,6 +1554,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let ui = uiEvent(for: block)
             if ui.kind == "activity" {
                 processActivity(source: source,
+                                identity: event.identity,
                                 phase: block.activityPhase ?? .updated)
                 continue
             }
@@ -1558,7 +1563,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 publishAPI()
                 continue
             }
-            readableContentArrived(source: source)
+            readableContentArrived(source: source, identity: event.identity)
             var apiItem = ui.json
             apiItem["source"] = source
             apiEvents.append(apiItem)
