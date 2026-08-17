@@ -221,6 +221,9 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
     let oversizedEvidence = EvaluationRecord(content: String(repeating: "x", count: 41_245))
     let oversizedEnvelope = serializedEvaluationEnvelope(
         instruction: instruction, evidence: oversizedEvidence)
+    let responseFormat = evaluationResponseFormat()
+    let responseSchema = responseFormat["json_schema"] as? [String: Any]
+    let decisionSchema = responseSchema?["schema"] as? [String: Any]
     guard envelope["EVALUATION_INSTRUCTION"] as? String == instruction,
           let record = envelope["EVIDENCE_RECORD"] as? [String: Any],
           record["event_type"] as? String == "reasoning_summary",
@@ -230,6 +233,9 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
             #"{"alert":true,"reason":"changed","evidence":"Sources/Test.swift"}"#.utf8)),
           decision.alert, decision.reason == "changed",
           parseEvaluationDecision(Data(#"{"alert":"yes"}"#.utf8)) == nil,
+          responseFormat["type"] as? String == "json_schema",
+          responseSchema?["strict"] as? Bool == true,
+          decisionSchema?["additionalProperties"] as? Bool == false,
           let oversizedEnvelope,
           oversizedEnvelope.count > MAX_EXTERNAL_ENVELOPE_BYTES else {
         FileHandle.standardError.write(

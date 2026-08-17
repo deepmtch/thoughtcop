@@ -86,6 +86,29 @@ func parseEvaluationDecision(_ data: Data) -> EvaluationDecision? {
     return EvaluationDecision(alert: alert, reason: reason, evidence: evidence)
 }
 
+/// Constrain providers to the exact decision object the app can consume.
+/// GPT-OSS reasoning tokens share the completion budget, so the budget must
+/// leave room for both its hidden reasoning and the three required fields.
+func evaluationResponseFormat() -> [String: Any] {
+    [
+        "type": "json_schema",
+        "json_schema": [
+            "name": "evaluation_decision",
+            "strict": true,
+            "schema": [
+                "type": "object",
+                "properties": [
+                    "alert": ["type": "boolean"],
+                    "reason": ["type": "string"],
+                    "evidence": ["type": "string"],
+                ],
+                "required": ["alert", "reason", "evidence"],
+                "additionalProperties": false,
+            ],
+        ],
+    ]
+}
+
 /// Evaluate one factual transcript record. Async — never blocks the UI.
 /// Groq direct is primary; a request failure falls back to Cerebras direct.
 private func checkOneInstruction(_ instruction: String,
@@ -112,8 +135,10 @@ private func checkOneInstruction(_ instruction: String,
         let payload: [String: Any] = [
             "model": backend.model,
             "temperature": 0,
-            "max_tokens": 180,
-            "response_format": ["type": "json_object"],
+            "max_completion_tokens": 512,
+            "reasoning_effort": "low",
+            "reasoning_format": "hidden",
+            "response_format": evaluationResponseFormat(),
             "messages": [
                 ["role": "system", "content": CHECK_SYSTEM],
                 ["role": "user", "content": envelopeText],
