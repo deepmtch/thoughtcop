@@ -53,3 +53,7 @@ the exact title, exclusions, no stale replay, and one-time live delivery.
 It recovered seven structured thinking records under the correct title,
 including the reported 3,811-character record.
 
+The black-box suite also writes a new compressed Claude Desktop response while
+Claude Code and Codex sessions are interleaved. It verifies the exact Desktop
+title/text reaches the ticker and dummy checker while adjacent message, summary,
+and tool fields do not.

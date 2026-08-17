@@ -131,6 +131,24 @@ def append(path: Path, record: dict) -> None:
         os.fsync(stream.fileno())
 
 
+def write_claude_desktop_cache(path: Path, conversation: dict) -> None:
+    zstd = next((candidate for candidate in [
+        "/opt/homebrew/bin/zstd", "/usr/local/bin/zstd", "/usr/bin/zstd"
+    ] if Path(candidate).is_file()), None)
+    if zstd is None:
+        raise AssertionError("zstd is required for Claude Desktop cache tests")
+    compressed = subprocess.run(
+        [zstd, "--compress", "--stdout", "--quiet"],
+        input=json.dumps(conversation, separators=(",", ":")).encode(),
+        capture_output=True, check=True,
+    ).stdout
+    header = (
+        "1/0/https://claude.ai/api/organizations/org-1/chat_conversations/"
+        f"{conversation['uuid']}?tree=True&rendering_mode=messages\n"
+    ).encode()
+    path.write_bytes(header + compressed)
+
+
 test_started_at = datetime.now(timezone.utc)
 
 
@@ -201,6 +219,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         "THINKPEEK_CLAUDE_DESKTOP_SESSIONS": str(
             root / "claude-desktop-sessions"),
         "THINKPEEK_CLAUDE_CACHE": str(claude_cache),
+        "THINKPEEK_CLAUDE_DESKTOP_CACHE": str(claude_cache),
         "THINKPEEK_PRIVACY_AUDIT_PATH": str(audit_path),
         "THINKPEEK_UI_API_LOG": str(ui_log_path),
         "THINKPEEK_HISTORY_COUNT": "0",
@@ -413,32 +432,66 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert alpha_return["currentIndex"] == 4, alpha_return
         assert alpha_return["peekSource"] == "Claude · Claude Alpha", alpha_return
 
+        # Claude Desktop stores normal chat thinking in a structured,
+        # zstd-compressed chat_conversations response rather than Claude Code
+        # JSONL. A new response must join the same ticker/checker flow with its
+        # exact conversation title and exact plaintext thinking.
+        write_claude_desktop_cache(claude_cache / "desktop-conversation_0", {
+            "uuid": "desktop-conversation-1",
+            "name": "Claude Desktop Exact Title",
+            "updated_at": record_timestamp(1_300),
+            "chat_messages": [{
+                "uuid": "desktop-assistant-1",
+                "sender": "assistant",
+                "updated_at": record_timestamp(1_300),
+                "content": [
+                    {"type": "text", "text": "MESSAGE_MUST_STAY_EXCLUDED"},
+                    {"type": "thinking",
+                     "thinking": "CLAUDE_DESKTOP_CLEAN: exact desktop thinking.",
+                     "summaries": [{"summary": "SUMMARY_MUST_STAY_EXCLUDED"}]},
+                    {"type": "tool_result",
+                     "content": "DESKTOP_TOOL_MUST_STAY_EXCLUDED"},
+                ],
+            }],
+        })
+        desktop = wait_for(lambda state:
+            "CLAUDE_DESKTOP_CLEAN" in state.get("peekText", "") and
+            state.get("checkerRequestInFlight") is False)
+        assert desktop["currentIndex"] == 5, desktop
+        assert desktop["peekSource"] == "Claude · Claude Desktop Exact Title", desktop
+
         audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
         requests = [item for item in audit
                     if item.get("action") == "external_reasoning_request"]
         results = [item for item in audit
                    if item.get("action") == "external_reasoning_result"]
-        assert len(requests) == 5, requests
-        assert len(results) == 5, results
+        assert len(requests) == 6, requests
+        assert len(results) == 6, results
         assert [item["status"] for item in results].count("alert") == 1, results
-        assert [item["status"] for item in results].count("clean") == 4, results
+        assert [item["status"] for item in results].count("clean") == 5, results
         assert {item["request_id"] for item in requests} == \
             {item["request_id"] for item in results}, (requests, results)
 
         with DummyChecker.lock:
             all_sent = list(DummyChecker.requests)
-        assert len(all_sent) == 5, all_sent
+        assert len(all_sent) == 6, all_sent
+        assert "CLAUDE_DESKTOP_CLEAN: exact desktop thinking." in all_sent, all_sent
+        assert all("MESSAGE_MUST_STAY_EXCLUDED" not in text for text in all_sent), all_sent
+        assert all("SUMMARY_MUST_STAY_EXCLUDED" not in text for text in all_sent), all_sent
+        assert all("DESKTOP_TOOL_MUST_STAY_EXCLUDED" not in text for text in all_sent), all_sent
 
         print(json.dumps({
             "concurrentProviders": ["Claude", "Codex"],
-            "simulatedConversations": 4,
+            "simulatedConversations": 5,
             "dummyRequests": len(all_sent),
             "outOfOrderResults": True,
             "alertAndClean": True,
             "autoFollowedAcrossSessions": True,
             "readerFrozeThenResumed": True,
             "providerTitles": ["Claude Alpha", "Claude Beta",
-                               "Codex Alpha", "Codex Beta"],
+                               "Codex Alpha", "Codex Beta",
+                               "Claude Desktop Exact Title"],
+            "claudeDesktopCacheObserved": True,
             "encryptedAndToolsExcluded": True,
             "placeholderNeverRendered": True,
             "tickerNavigation": "alert-to-clean",
