@@ -263,16 +263,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekSettingsMenu = TickerSettingsMenu()
         configureSettingsMenu(peekSettingsMenu)
         peekSettingsMenu.install(on: peekPrimaryActions.displaySettingsButton)
-        // Placement remains available in Display Settings; four permanent
-        // corner arrows made the provider/session identity unreadable.
-        peekToolbar = NSStackView(views: [peekPrimaryActions])
+        peekToolbar = NSStackView(views: [peekCornerControls, peekPrimaryActions])
         peekToolbar.orientation = .horizontal
         peekToolbar.alignment = .centerY
         peekToolbar.spacing = 2
         peekToolbar.translatesAutoresizingMaskIntoConstraints = false
         peekToolbar.setContentHuggingPriority(.required, for: .horizontal)
         peekToolbar.setContentCompressionResistancePriority(.required, for: .horizontal)
-        peekToolbar.widthAnchor.constraint(equalToConstant: 124).isActive = true
+        peekToolbar.widthAnchor.constraint(equalToConstant: 214).isActive = true
         tickerAlarmColor = TickerBackgroundPreference.load()
         applyTickerAppearance(alarmActive: false)
         peekBar.addSubview(peekProviderIcon)
@@ -570,6 +568,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func publishAPI() {
         let visibleFrame = (panel.screen ?? NSScreen.main)?.visibleFrame
         let tickerPresentation = peekTicker.presentationMetrics
+        let tickerToolbarAttached = peekToolbar.arrangedSubviews.count == 2 &&
+            peekToolbar.arrangedSubviews[0] === peekCornerControls &&
+            peekToolbar.arrangedSubviews[1] === peekPrimaryActions
         api.publish([
             "schemaVersion": 1,
             "ready": true,
@@ -665,7 +666,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "hoverDisclosure": false,
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": false,
-            "tickerCornerButtons": [],
+            "tickerCornerButtons": peekCornerControls.accessibilityNames,
+            "tickerCornerControlsVisible": peekMode &&
+                tickerToolbarAttached &&
+                !peekCornerControls.isHidden,
+            "tickerToolbarActions": peekCornerControls.accessibilityNames +
+                peekPrimaryActions.accessibilityNames,
             "availableWindowPositions": ["top-left", "top-center", "top-right",
                                          "bottom-left", "bottom-center", "bottom-right"],
             "tickerPrimaryActions": peekPrimaryActions.accessibilityNames,

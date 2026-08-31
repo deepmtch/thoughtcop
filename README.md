@@ -119,9 +119,9 @@ Ticker movement redraws the attributed string directly inside the clipped viewpo
 on every frame instead of translating a partially rasterized text-field bitmap.
 A formatting-only or empty summary is discarded and cannot replace the last
 visible message.
-The ticker's compact toolbar keeps only the primary actions visible. Six precise
-window positions remain available in the native **Display Settings** menu without
-squeezing the provider and session identity.
+The ticker's compact toolbar keeps the four corner-placement arrows and the
+primary actions visible. Six precise window positions also remain available in
+the native **Display Settings** menu.
 The settings menu's **Violation Highlight Color…** item opens the native macOS color picker.
 The ticker uses the semantic macOS window surface during normal operation and the selected color only
 for an actual alert. Custom colors and opacity are remembered, text/icons

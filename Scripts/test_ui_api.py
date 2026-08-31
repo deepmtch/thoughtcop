@@ -99,9 +99,17 @@ closed = state()
 assert closed["uiStyle"] == "single-line-ticker"
 assert closed["tickerSettingsControlVisible"] is True
 assert closed["windowWidth"] == closed["contentViewWidth"] == 510
+assert closed["tickerCornerControlsVisible"] is True
+assert closed["tickerCornerButtons"] == [
+    "Move window to top left corner", "Move window to top right corner",
+    "Move window to bottom left corner", "Move window to bottom right corner",
+]
 assert closed["tickerPrimaryActions"] == [
     "Edit check prompt", "Display settings",
     "Open message navigation", "Hide Thinkpeek",
+]
+assert closed["tickerToolbarActions"] == [
+    *closed["tickerCornerButtons"], *closed["tickerPrimaryActions"],
 ]
 
 records = [json.loads(line) for line in LOG.read_text().splitlines() if line.strip()]
@@ -132,6 +140,7 @@ print(json.dumps({
     "violationEmptyState": violations["violationEmptyStateVisible"],
     "checkPromptAPI": True,
     "tickerContentWidthMatched": closed["windowWidth"] == closed["contentViewWidth"],
+    "tickerCornerButtonsVisible": closed["tickerCornerControlsVisible"],
     "screenshotBytes": len(png),
     "loggedHTTPCommands": http_commands,
     "logContainsOnlyMetadata": True,
