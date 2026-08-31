@@ -110,7 +110,7 @@ final class FullMessageView: NSVisualEffectView {
             controlsButton.centerYAnchor.constraint(equalTo: exitControls.centerYAnchor),
             controlsButton.trailingAnchor.constraint(equalTo: exitControls.leadingAnchor,
                                                       constant: -6),
-            scrollView.topAnchor.constraint(equalTo: exitControls.bottomAnchor, constant: 3),
+            scrollView.topAnchor.constraint(equalTo: exitControls.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -158,12 +158,12 @@ final class FullMessageView: NSVisualEffectView {
             toneWash.layer?.backgroundColor = NSColor.systemOrange
                 .withAlphaComponent(0.10).cgColor
             toneStripe.layer?.backgroundColor = NSColor.systemOrange.cgColor
-            sourceLabel.textColor = .systemOrange
+            sourceLabel.textColor = .secondaryLabelColor
         case .error:
             toneWash.layer?.backgroundColor = NSColor.systemRed
                 .withAlphaComponent(0.12).cgColor
             toneStripe.layer?.backgroundColor = NSColor.systemRed.cgColor
-            sourceLabel.textColor = .systemRed
+            sourceLabel.textColor = .secondaryLabelColor
         }
     }
 

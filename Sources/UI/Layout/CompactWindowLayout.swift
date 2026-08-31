@@ -15,7 +15,10 @@ enum CompactWindowSizing {
     // The standard 560-point panel remains two-tiered. A single row becomes
     // useful only in the wider history view, where the controls have room to
     // remain visibly grouped instead of collapsing into an icon strip.
-    static let stackThreshold: CGFloat = 620
+    // The 700-point history window also uses two tiers. A single row squeezed
+    // the session picker, navigation, filter, utilities, and Hide into an
+    // unreadable toolbar.
+    static let stackThreshold: CGFloat = 760
     static let messagePreviewHeight: CGFloat = 210
     static let defaultsKey = "compactWindowWidth"
 

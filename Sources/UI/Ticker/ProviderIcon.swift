@@ -2,6 +2,7 @@ import AppKit
 
 enum MessageProvider: String {
     case claude
+    case codex
     case chatGPT
     case unknown
 
@@ -9,15 +10,15 @@ enum MessageProvider: String {
         let normalized = source.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         if normalized.hasPrefix("claude") { return .claude }
-        if normalized.hasPrefix("codex") || normalized.hasPrefix("chatgpt") {
-            return .chatGPT
-        }
+        if normalized.hasPrefix("codex") { return .codex }
+        if normalized.hasPrefix("chatgpt") { return .chatGPT }
         return .unknown
     }
 
     var accessibilityName: String {
         switch self {
         case .claude: return "Claude"
+        case .codex: return "Codex"
         case .chatGPT: return "ChatGPT"
         case .unknown: return "AI provider"
         }
@@ -26,6 +27,7 @@ enum MessageProvider: String {
     var installedApplicationPath: String? {
         switch self {
         case .claude: return "/Applications/Claude.app"
+        case .codex: return "/Applications/ChatGPT.app"
         case .chatGPT: return "/Applications/ChatGPT.app"
         case .unknown: return nil
         }
@@ -47,6 +49,7 @@ enum MessageProvider: String {
         let symbolName: String
         switch self {
         case .claude: symbolName = "sparkles"
+        case .codex: symbolName = "chevron.left.forwardslash.chevron.right"
         case .chatGPT: symbolName = "bubble.left.and.bubble.right.fill"
         case .unknown: symbolName = "brain.head.profile"
         }

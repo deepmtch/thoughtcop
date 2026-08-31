@@ -20,6 +20,8 @@ final class MessagePreview {
     let text: String
     let kind: String
     var evaluation: MessageEvaluationState = .pending
+    var violationID: String?
+    var violationReviewed = false
 
     init(source: String, text: String, kind: String) {
         self.source = source
@@ -30,29 +32,22 @@ final class MessagePreview {
     var tickerText: String {
         switch evaluation {
         case .alert(let decision):
-            return "⚠ \(decision.reason) — \(text)"
+            return "Violation: \(decision.reason)"
         case .failed:
-            return "⛔ Thinkpeek check failed — \(text)"
+            return "Check unavailable — this message was not evaluated"
         default:
             return text
         }
     }
 
     var displaySource: String {
-        switch evaluation {
-        case .alert:
-            return "Thinkpeek · Warning"
-        case .failed:
-            return "Thinkpeek · Check error"
-        default:
-            return source
-        }
+        source
     }
 
     var readerTone: MessageReaderTone {
         switch evaluation {
-        case .alert: return .warning
-        case .failed: return .error
+        case .alert: return .error
+        case .failed: return .warning
         default: return .normal
         }
     }
@@ -66,10 +61,10 @@ final class MessagePreview {
         switch evaluation {
         case .alert(let decision):
             let proof = decision.evidence.isEmpty ? "" : "\nEvidence: \(decision.evidence)"
-            return "⚠ **WARNING**\n\(decision.reason)\(proof)\n\n" +
+            return "**Violation**\n\(decision.reason)\(proof)\n\n" +
                 "Triggered by \(source):\n\(text)"
         case .failed(let message):
-            return "⛔ **THINKPEEK CHECK ERROR**\nThe checker could not evaluate this item.\n" +
+            return "**Check unavailable**\nThis message was not evaluated.\n" +
                 "\(message)\n\nOriginal item from \(source):\n\(text)"
         default:
             return text
@@ -106,6 +101,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var positionButton: NSButton!
     private var checkRulesButton: NSButton!
     private var historyFilterControl: NSSegmentedControl!
+    private var navigationGroup: DetailToolbarGroup!
+    private var utilitiesGroup: DetailToolbarGroup!
+    private var violationEmptyState: HistoryEmptyStateView!
     private var tickerSettingsMenu: TickerSettingsMenu!
     private var peekSettingsMenu: TickerSettingsMenu!
     private var checkRulesEditor: CheckRulesEditor?
@@ -144,6 +142,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var violationsOnly = false
     private var unacknowledgedViolationIndex: Int?
     private var violationsMenuItem: NSMenuItem?
+    private var violationStatusMenuItem: NSMenuItem?
     private var checkerRequestTokens = Set<UUID>()
     private var checkerActivityDestination: String?
     private var operationState = OperationPresentationState()
@@ -213,9 +212,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         content.clicked = { [weak self] in
             self?.api.perform(.showMessage, origin: .appKit)
         }
-        content.doubleClicked = { [weak self] in
-            self?.api.perform(.showControls, origin: .appKit)
-        }
 
         peekBar = NSVisualEffectView()
         peekBar.material = .headerView
@@ -265,14 +261,16 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekSettingsMenu = TickerSettingsMenu()
         configureSettingsMenu(peekSettingsMenu)
         peekSettingsMenu.install(on: peekPrimaryActions.displaySettingsButton)
-        peekToolbar = NSStackView(views: [peekCornerControls, peekPrimaryActions])
+        // Placement remains available in Display Settings; four permanent
+        // corner arrows made the provider/session identity unreadable.
+        peekToolbar = NSStackView(views: [peekPrimaryActions])
         peekToolbar.orientation = .horizontal
         peekToolbar.alignment = .centerY
         peekToolbar.spacing = 2
         peekToolbar.translatesAutoresizingMaskIntoConstraints = false
         peekToolbar.setContentHuggingPriority(.required, for: .horizontal)
         peekToolbar.setContentCompressionResistancePriority(.required, for: .horizontal)
-        peekToolbar.widthAnchor.constraint(equalToConstant: 192).isActive = true
+        peekToolbar.widthAnchor.constraint(equalToConstant: 124).isActive = true
         tickerAlarmColor = TickerBackgroundPreference.load()
         applyTickerAppearance(alarmActive: false)
         peekBar.addSubview(peekProviderIcon)
@@ -285,7 +283,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         fullMessageView = FullMessageView(frame: .zero)
         fullMessageView.closeRequested = { [weak self] in
-            self?.hideHUD()
+            self?.api.perform(.close, origin: .appKit)
         }
         fullMessageView.controlsRequested = { [weak self] in
             self?.api.perform(.showControls, origin: .appKit)
@@ -319,7 +317,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         detailExitControls = DetailExitControls(frame: .zero)
         detailExitControls.closeRequested = { [weak self] in
-            self?.hideHUD()
+            self?.api.perform(.close, origin: .appKit)
         }
         detailHeader.addSubview(detailExitControls)
 
@@ -393,17 +391,16 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         latestButton.isHidden = true
 
         checkRulesButton = NSButton(
-            image: NSImage(systemSymbolName: "text.bubble",
+            image: NSImage(systemSymbolName: "checkmark.shield",
                            accessibilityDescription: "Edit check prompt") ?? NSImage(),
             target: self, action: #selector(requestCheckRules(_:)))
         checkRulesButton.bezelStyle = .accessoryBarAction
         checkRulesButton.isBordered = false
-        checkRulesButton.imagePosition = .imageOnly
+        checkRulesButton.imagePosition = .imageLeading
         checkRulesButton.controlSize = .small
         checkRulesButton.toolTip = "Edit check prompt"
         checkRulesButton.setAccessibilityLabel("Edit check prompt")
         checkRulesButton.translatesAutoresizingMaskIntoConstraints = false
-        checkRulesButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
         checkRulesButton.heightAnchor.constraint(equalToConstant: 26).isActive = true
 
         historyFilterControl = NSSegmentedControl(
@@ -414,7 +411,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         historyFilterControl.toolTip = "Filter message history"
         historyFilterControl.setAccessibilityLabel("History filter")
         historyFilterControl.translatesAutoresizingMaskIntoConstraints = false
-        historyFilterControl.widthAnchor.constraint(equalToConstant: 142).isActive = true
+        historyFilterControl.widthAnchor.constraint(greaterThanOrEqualToConstant: 176).isActive = true
         historyFilterControl.isHidden = true
 
         positionButton = NSButton(frame: .zero)
@@ -427,12 +424,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         positionButton.heightAnchor.constraint(equalToConstant: 26).isActive = true
         updateSettingsMenuChecks(savedSpeed)
 
-        let navigation = DetailToolbarGroup(
+        navigationGroup = DetailToolbarGroup(
             views: [previousButton, positionLabel, nextButton, restartTickerButton])
-        let utilities = DetailToolbarGroup(
+        utilitiesGroup = DetailToolbarGroup(
             views: [historyFilterControl, checkRulesButton, positionButton,
                     expandButton, latestButton])
-        let controls = NSStackView(views: [navigation, utilities])
+        let controls = NSStackView(views: [navigationGroup, utilitiesGroup])
         controls.orientation = .horizontal
         controls.alignment = .centerY
         controls.spacing = 8
@@ -469,6 +466,16 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         feedStack.translatesAutoresizingMaskIntoConstraints = false
         feedStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         feedView.addSubview(feedStack)
+
+        violationEmptyState = HistoryEmptyStateView(frame: .zero)
+        violationEmptyState.editPromptRequested = { [weak self] in
+            self?.api.perform(.editCheckRules, origin: .appKit)
+        }
+        violationEmptyState.isHidden = true
+        feedStack.addArrangedSubview(violationEmptyState)
+        violationEmptyState.widthAnchor.constraint(
+            equalTo: feedStack.widthAnchor,
+            constant: -feedStack.edgeInsets.left - feedStack.edgeInsets.right).isActive = true
 
         NSLayoutConstraint.activate([
             peekBar.topAnchor.constraint(equalTo: content.topAnchor),
@@ -575,7 +582,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "windowVisible": panel.isVisible,
             "menuBarAvailable": statusItem != nil,
             "violationCount": violationRecords.count,
+            "violationStorageError": violationStore.lastError ?? NSNull(),
+            "violationRetentionLimit": ViolationStore.maximumRecords,
             "violationsVisible": violationsOnly && !peekMode && !messageMode,
+            "violationEmptyStateVisible": violationEmptyState?.isHidden == false,
             "currentViolationVisible": unacknowledgedViolationIndex != nil,
             "historyFilter": violationsOnly ? "violations" : "all",
             "keyboardNavigation": ["left/up/k: previous", "right/down/j: next",
@@ -631,7 +641,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "tickerReduceMotion": NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
             "tickerSpeed": peekTicker.speed.rawValue,
             "tickerPointsPerSecond": Int(peekTicker.speed.pointsPerSecond),
-            "tickerBackgroundMode": tickerAlarmActive ? "alarm" : "normal-white",
+            "tickerBackgroundMode": tickerAlarmActive ? "alarm" : "normal-semantic",
             "tickerBackgroundRGBA": TickerBackgroundPreference.components(
                 of: tickerActiveBackgroundColor)?.map(Double.init) ?? NSNull(),
             "tickerAlarmActive": tickerAlarmActive,
@@ -652,8 +662,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "waitingSources": operationState.waitingSources,
             "hoverDisclosure": false,
             "singleClickOpensMessage": true,
-            "doubleClickOpensControls": true,
-            "tickerCornerButtons": peekCornerControls.accessibilityNames,
+            "doubleClickOpensControls": false,
+            "tickerCornerButtons": [],
+            "availableWindowPositions": ["top-left", "top-center", "top-right",
+                                         "bottom-left", "bottom-center", "bottom-right"],
             "tickerPrimaryActions": peekPrimaryActions.accessibilityNames,
             "settingsMenuStructure": tickerSettingsMenu?.structure ?? [:],
             "settingsMenuItems": tickerSettingsMenu?.topLevelTitles ?? [],
@@ -733,7 +745,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             frame.origin.x = center.x - frame.width / 2
             frame.origin.y = center.y - frame.height / 2
         }
-        panel.setFrame(frame, display: true, animate: animated)
+        panel.setFrame(frame, display: true,
+                       animate: animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         guard let placement, let placementBounds else { return }
 
         let restorePlacement = { [weak self] in
@@ -787,6 +800,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .close: dismissDetailsToTicker()
         case .quit: quitApplication()
         case .editCheckRules: showCheckRulesEditor()
+        case .closeCheckRules:
+            checkRulesEditor?.close()
         case .saveCheckRules(let text, let rawMode):
             guard let mode = CheckInstructionMode(rawValue: rawMode) else { return }
             CheckRulesStore.saveRaw(text)
@@ -821,12 +836,23 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                               keyEquivalent: "")
         show.target = self
         menu.addItem(show)
-        let violations = NSMenuItem(title: "Show Violations (0)",
+        let violationStatus = NSMenuItem(title: "Violations · All clear",
+                                         action: nil, keyEquivalent: "")
+        violationStatus.isEnabled = false
+        menu.addItem(violationStatus)
+        violationStatusMenuItem = violationStatus
+        let violations = NSMenuItem(title: "Open Violation History…",
                                     action: #selector(showViolationsFromMenu(_:)),
-                                    keyEquivalent: "")
+                                    keyEquivalent: "v")
+        violations.keyEquivalentModifierMask = [.command, .shift]
         violations.target = self
         menu.addItem(violations)
         violationsMenuItem = violations
+        let checkPrompt = NSMenuItem(title: "Edit Check Prompt…",
+                                     action: #selector(showCheckPromptFromMenu(_:)),
+                                     keyEquivalent: ",")
+        checkPrompt.target = self
+        menu.addItem(checkPrompt)
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit Thinkpeek", action: #selector(quitFromMenu(_:)),
                               keyEquivalent: "q")
@@ -849,6 +875,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func showViolationsFromMenu(_ sender: Any?) {
         api.perform(.showViolations, origin: .appKit)
+    }
+
+    @objc private func showCheckPromptFromMenu(_ sender: Any?) {
+        api.perform(.editCheckRules, origin: .appKit)
     }
 
     @objc private func quitFromMenu(_ sender: Any?) { quitApplication() }
@@ -1076,10 +1106,20 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func showCurrentMessage() {
         let snapshot: MessageReaderSnapshot
+        var openedIndex: Int?
         if let index = unacknowledgedViolationIndex,
            index >= 0, index < eventPreviews.count {
             let preview = eventPreviews[index]
             compactIndex = index
+            openedIndex = index
+            snapshot = MessageReaderSnapshot(source: preview.displaySource,
+                                             text: preview.detailText,
+                                             kind: preview.kind,
+                                             tone: preview.readerTone)
+        } else if !compactMode, compactIndex >= 0,
+                  compactIndex < eventPreviews.count {
+            let preview = eventPreviews[compactIndex]
+            openedIndex = compactIndex
             snapshot = MessageReaderSnapshot(source: preview.displaySource,
                                              text: preview.detailText,
                                              kind: preview.kind,
@@ -1093,11 +1133,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             guard compactIndex >= 0, compactIndex < eventPreviews.count else { return }
             let preview = eventPreviews[compactIndex]
+            openedIndex = compactIndex
             snapshot = MessageReaderSnapshot(source: preview.displaySource,
                                              text: preview.detailText,
                                              kind: preview.kind,
                                              tone: preview.readerTone)
         }
+        if let openedIndex { markViolationReviewed(at: openedIndex) }
         messageReaderSnapshot = snapshot
         fullMessageView.show(source: snapshot.source, text: snapshot.text,
                              kind: snapshot.kind, tone: snapshot.tone)
@@ -1145,21 +1187,39 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func showPrevious() {
-        guard compactMode, compactIndex > 0 else { return }
+        if !compactMode {
+            let indexes = visibleEventIndexes
+            guard let position = indexes.firstIndex(of: compactIndex), position > 0 else { return }
+            selectExpandedMessage(at: indexes[position - 1])
+            return
+        }
+        guard compactIndex > 0 else { return }
         unacknowledgedViolationIndex = nil
         compactIndex -= 1
         selectedMessageChanged()
     }
 
     private func showNext() {
-        guard compactMode, compactIndex + 1 < eventCards.count else { return }
+        if !compactMode {
+            let indexes = visibleEventIndexes
+            guard let position = indexes.firstIndex(of: compactIndex),
+                  position + 1 < indexes.count else { return }
+            selectExpandedMessage(at: indexes[position + 1])
+            return
+        }
+        guard compactIndex + 1 < eventCards.count else { return }
         unacknowledgedViolationIndex = nil
         compactIndex += 1
         selectedMessageChanged()
     }
 
     private func showFirst() {
-        guard compactMode, !eventCards.isEmpty else { return }
+        if !compactMode {
+            guard let first = visibleEventIndexes.first else { return }
+            selectExpandedMessage(at: first)
+            return
+        }
+        guard !eventCards.isEmpty else { return }
         unacknowledgedViolationIndex = nil
         compactIndex = 0
         selectedMessageChanged()
@@ -1194,10 +1254,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func showViolations() {
-        guard !violationRecords.isEmpty else {
-            showHUDFromMenu(nil)
-            return
-        }
         violationsOnly = true
         unacknowledgedViolationIndex = nil
         showExpandedFeed()
@@ -1225,6 +1281,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                         minSize: NSSize(width: 520, height: 360),
                         maxSize: maxSize)
         updateCardVisibility()
+        unseenCount = 0
+        latestButton.title = "Latest ↓"
+        if let latest = visibleEventIndexes.last { selectExpandedMessage(at: latest) }
     }
 
     private func updateCardVisibility() {
@@ -1267,10 +1326,23 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             expandButton.isHidden = true
             restartTickerButton.isEnabled = false
             latestButton.isHidden = false
+            let indexes = visibleEventIndexes
+            if !indexes.contains(compactIndex), let latest = indexes.last {
+                compactIndex = latest
+            }
         }
+        violationEmptyState.showStorageError(violationStore.lastError)
+        let showViolationEmptyState = !compactMode && violationsOnly &&
+            (violationRecords.isEmpty || violationStore.lastError != nil)
+        violationEmptyState.isHidden = !showViolationEmptyState
+        navigationGroup.isHidden = !compactMode
         historyFilterControl.isHidden = compactMode
         historyFilterControl.selectedSegment = violationsOnly ? 1 : 0
+        historyFilterControl.setLabel("All \(eventCards.count)", forSegment: 0)
         historyFilterControl.setLabel("Violations \(violationRecords.count)", forSegment: 1)
+        for (index, card) in eventCards.enumerated() {
+            card.setSelected(!compactMode && index == compactIndex && !card.isHidden)
+        }
         feedView.layoutSubtreeIfNeeded()
         fitCompactControlsToContent()
         if compactMode {
@@ -1326,8 +1398,19 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func displayTime(_ timestamp: String) -> String {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let date = iso.date(from: timestamp) else { return timestamp }
-        let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss"
+        let fallback = ISO8601DateFormatter()
+        guard let date = iso.date(from: timestamp) ?? fallback.date(from: timestamp) else {
+            return timestamp
+        }
+        let calendar = Calendar.current
+        let fmt = DateFormatter()
+        if calendar.isDateInToday(date) {
+            fmt.dateFormat = "'Today,' HH:mm"
+        } else if calendar.isDateInYesterday(date) {
+            fmt.dateFormat = "'Yesterday,' HH:mm"
+        } else {
+            fmt.dateFormat = "d MMM, HH:mm"
+        }
         return fmt.string(from: date)
     }
 
@@ -1368,6 +1451,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let follow = !deferScrollAndLayout &&
             (nearBottom() || feedStack.arrangedSubviews.isEmpty)
         let card = EventCard(source: source, time: displayTime(event.timestamp), event: event)
+        card.selectedRequested = { [weak self, weak card] in
+            guard let self, let card,
+                  let index = self.eventCards.firstIndex(where: { $0 === card }) else { return }
+            self.selectExpandedMessage(at: index)
+        }
+        card.openRequested = { [weak self, weak card] in
+            guard let self, let card,
+                  let index = self.eventCards.firstIndex(where: { $0 === card }) else { return }
+            self.selectExpandedMessage(at: index)
+            self.api.perform(.showMessage, origin: .appKit)
+        }
         card.contentChanged = { [weak self, weak card] in
             guard let self, let card else { return }
             self.cardContentDidChange(card)
@@ -1400,6 +1494,22 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return card
     }
 
+    private var visibleEventIndexes: [Int] {
+        eventPreviews.indices.filter { !violationsOnly || eventPreviews[$0].alarmActive }
+    }
+
+    private func selectExpandedMessage(at index: Int) {
+        guard !compactMode, eventCards.indices.contains(index),
+              !eventCards[index].isHidden else { return }
+        compactIndex = index
+        for (cardIndex, card) in eventCards.enumerated() {
+            card.setSelected(cardIndex == index && !card.isHidden)
+        }
+        panel.makeFirstResponder(eventCards[index])
+        eventCards[index].scrollToVisible(eventCards[index].bounds)
+        publishAPI()
+    }
+
     private func cardContentDidChange(_ card: EventCard) {
         feedView.layoutSubtreeIfNeeded()
         if compactMode,
@@ -1428,9 +1538,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let preview = eventPreviews.last else { continue }
             preview.evaluation = .alert(EvaluationDecision(
                 alert: true, reason: record.reason, evidence: record.evidence))
-            let proof = record.evidence.isEmpty ? "" : "\nEvidence: \(record.evidence)"
-            card.setAlert("⚠ VIOLATION · \(record.provider)\n\(record.reason)\(proof)\n" +
-                "Check prompt: \(record.checkPrompt)")
+            preview.violationID = record.id
+            preview.violationReviewed = record.reviewedAt != nil
+            card.setViolation(reason: record.reason, evidence: record.evidence,
+                              provider: record.provider, latencyMs: record.latencyMs,
+                              checkPrompt: record.checkPrompt)
+            card.setViolationReviewed(record.reviewedAt != nil)
         }
         if !violationRecords.isEmpty {
             compactIndex = eventCards.count - 1
@@ -1440,11 +1553,18 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func updateViolationMenu() {
         let count = violationRecords.count
-        violationsMenuItem?.title = count == 0
-            ? "Violations · All clear" : "Show Violations · \(count) recorded"
-        violationsMenuItem?.isEnabled = count > 0
+        let newCount = violationRecords.filter { $0.reviewedAt == nil }.count
+        violationStatusMenuItem?.title = violationStore.lastError != nil
+            ? "Violations · History unavailable"
+            : (count == 0
+            ? "Violations · All clear"
+            : (newCount == 0 ? "Violations · \(count) reviewed"
+                             : "Violations · \(newCount) new · \(count) recorded"))
+        violationStatusMenuItem?.toolTip = "Keeps the latest \(ViolationStore.maximumRecords) violations locally."
+        violationsMenuItem?.title = "Open Violation History…"
+        violationsMenuItem?.isEnabled = true
         historyFilterControl?.setLabel("Violations \(count)", forSegment: 1)
-        let hasUnacknowledged = unacknowledgedViolationIndex != nil
+        let hasUnacknowledged = newCount > 0
         statusItem?.button?.image = NSImage(
             systemSymbolName: count > 0
                 ? (hasUnacknowledged
@@ -1452,14 +1572,25 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 : "text.bubble.fill",
             accessibilityDescription: hasUnacknowledged
                 ? "Thinkpeek has a new violation" : "Thinkpeek")
-        statusItem?.button?.title = count == 0 ? "" : " \(count > 9 ? "9+" : String(count))"
+        statusItem?.button?.title = newCount == 0 ? "" : " \(newCount > 9 ? "9+" : String(newCount))"
         statusItem?.button?.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
         statusItem?.button?.setAccessibilityLabel(count == 0
             ? "Thinkpeek, no recorded violations"
-            : "Thinkpeek, \(count) recorded violation\(count == 1 ? "" : "s")")
+            : "Thinkpeek, \(newCount) new and \(count) recorded violation\(count == 1 ? "" : "s")")
         statusItem?.button?.toolTip = count == 0
             ? "Thinkpeek · no recorded violations"
-            : "Thinkpeek · \(count) recorded violation\(count == 1 ? "" : "s")"
+            : "Thinkpeek · \(newCount) new · \(count) recorded"
+    }
+
+    private func markViolationReviewed(at index: Int) {
+        guard eventPreviews.indices.contains(index),
+              let id = eventPreviews[index].violationID,
+              !eventPreviews[index].violationReviewed else { return }
+        violationRecords = violationStore.markReviewed(id: id)
+        eventPreviews[index].violationReviewed = true
+        eventCards[index].setViolationReviewed(true)
+        if unacknowledgedViolationIndex == index { unacknowledgedViolationIndex = nil }
+        updateViolationMenu()
     }
 
     private func clearFeed() {
@@ -1591,6 +1722,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         status.toolTip = status.stringValue
         picker.toolTip = status.stringValue
         status.textColor = d.ready ? .secondaryLabelColor : .systemPurple
+        checkRulesButton.title = d.ready ? "Checks On" : "Checks Off"
+        checkRulesButton.contentTintColor = d.ready ? .systemGreen : .secondaryLabelColor
+        checkRulesButton.toolTip = d.ready
+            ? "Checks are enabled. Click to edit the check prompt."
+            : "Checks are off: \(d.detail). Click to configure them."
+        checkRulesButton.setAccessibilityLabel(d.ready
+            ? "Checks on. Edit check prompt" : "Checks off. Edit check prompt")
     }
 
     private func sourceName(for path: String) -> String {
@@ -1634,24 +1772,40 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showAlert(_ decision: EvaluationDecision, provider: String,
                            _ ms: Double, timestamp: String, card: EventCard,
                            preview: MessagePreview) {
+        let shouldRevealTicker = peekMode || !panel.isVisible
+        let priorSelection = compactIndex
         preview.evaluation = .alert(decision)
-        let proof = decision.evidence.isEmpty ? "" : "\n\(decision.evidence)"
-        card.setAlert("⚠ VIOLATION · \(provider) · \(Int(ms)) ms\n" +
-            "\(decision.reason)\(proof)\nCheck prompt: \(CheckRulesStore.instruction())")
+        card.setViolation(reason: decision.reason, evidence: decision.evidence,
+                          provider: provider, latencyMs: Int(ms),
+                          checkPrompt: CheckRulesStore.instruction())
         let record = ViolationRecord(
             timestamp: timestamp, source: preview.source, content: preview.text,
             reason: decision.reason, evidence: decision.evidence, provider: provider,
             latencyMs: Int(ms), checkPrompt: CheckRulesStore.instruction())
         violationRecords = violationStore.append(record)
+        preview.violationID = record.id
+        preview.violationReviewed = false
+        card.setViolationReviewed(false)
         NSSound.beep()
+        NSAccessibility.post(element: panel as Any,
+                             notification: .announcementRequested,
+                             userInfo: [
+                                .announcement: "New Thinkpeek violation from \(preview.source). \(decision.reason)",
+                                .priority: NSAccessibilityPriorityLevel.high.rawValue,
+                             ])
         alertCount = violationRecords.count
         if let index = eventPreviews.firstIndex(where: { $0 === preview }) {
-            compactIndex = index
+            if shouldRevealTicker { compactIndex = index }
             unacknowledgedViolationIndex = index
         }
         violationsOnly = false
-        applyPeekMode(true, animated: false)
-        panel.orderFrontRegardless()
+        if shouldRevealTicker {
+            applyPeekMode(true, animated: false)
+            panel.orderFrontRegardless()
+        } else {
+            compactIndex = priorSelection
+            updateCardVisibility()
+        }
         panel.title = "⚠ Thinkpeek alert — \(alertCount)"
         apiEvents.append([
             "kind": "drift-alert", "text": decision.reason,
@@ -1680,7 +1834,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                           preview existingPreview: MessagePreview?) {
         let requestToken = UUID()
         let destination = checkLabel()
-        existingCard?.setFooter("Sending evidence to \(destination)…")
+        existingCard?.setFooter("Checking against your prompt with \(destination)…")
         apiEvents.append([
             "kind": "drift-request-started", "text": "sent for evaluation",
             "destination": destination, "source": source,
@@ -1715,8 +1869,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                timestamp: block.ts, card: card, preview: preview)
             case .scored(_, let provider):
                 existingPreview?.evaluation = .clear
-                existingCard?.setFooter("✓ \(provider) checked · no alert · \(Int(ms)) ms",
-                                        color: .systemGreen)
+                existingCard?.setFooter("No violation · checked by \(provider) in \(Int(ms)) ms")
                 self.apiEvents.append([
                     "kind": "drift-clean", "text": "no alert", "provider": provider,
                     "source": source, "latencyMs": Int(ms),
@@ -1837,17 +1990,16 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Backfilled history is not re-checked: it would alert on reasoning
             // the user has already seen, on every launch.
             guard !block.backfilled else {
-                card.setFooter("History · already seen")
                 continue
             }
             guard block.externallyEvaluable else {
-                card.setFooter("Local display only · no provider summary for checker")
+                card.setFooter("Not evaluated · provider supplied no checkable summary")
                 continue
             }
 
             let state = driftStatus()
             guard state.ready else {
-                card.setFooter("Local display only · \(state.detail)")
+                card.setFooter("Not evaluated · \(state.detail)")
                 continue
             }
             evaluate(block, source: source, card: card, preview: preview)

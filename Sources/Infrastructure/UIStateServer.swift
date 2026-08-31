@@ -25,6 +25,7 @@ enum UICommand {
     case close
     case quit
     case editCheckRules
+    case closeCheckRules
     case saveCheckRules(text: String, mode: String)
     case selectSession(path: String?)
     case corner(String)
@@ -51,6 +52,7 @@ enum UICommand {
         case .close: return "close"
         case .quit: return "quit"
         case .editCheckRules: return "check-rules"
+        case .closeCheckRules: return "check-rules/close"
         case .saveCheckRules: return "save-check-rules"
         case .selectSession: return "select-session"
         case .corner(let value): return "corner/\(value)"
@@ -196,6 +198,7 @@ final class UIStateServer {
         case "/hide": return .hideHUD
         case "/quit": return .quit
         case "/check-rules": return .editCheckRules
+        case "/check-rules/close": return .closeCheckRules
         case "/corner/top-left": return .corner("top-left")
         case "/corner/top-right": return .corner("top-right")
         case "/corner/bottom-left": return .corner("bottom-left")

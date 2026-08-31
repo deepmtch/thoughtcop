@@ -357,7 +357,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert finished["navigableCount"] == 3, finished
         assert finished["violationCount"] == 1, finished
         assert finished["currentViolationVisible"] is True, finished
-        assert finished["peekSource"] == "Thinkpeek · Warning", finished
+        assert finished["peekSource"] == "Claude · Claude Alpha", finished
         assert "Dummy detected explicit Claude uncertainty" in finished["peekText"], finished
         assert "unavailable" not in finished["peekText"].lower(), finished
         assert finished["tickerAlarmActive"] is True, finished
@@ -410,7 +410,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         get_json(API_BASE, "/previous")
         previous = wait_for(lambda state: state.get("currentIndex") == 0)
         assert previous["tickerAlarmActive"] is True, previous
-        assert previous["peekSource"] == "Thinkpeek · Warning", previous
+        assert previous["peekSource"] == "Claude · Claude Alpha", previous
         assert "Dummy detected explicit Claude uncertainty" in previous["peekText"], previous
 
         get_json(API_BASE, "/next")

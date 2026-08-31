@@ -119,26 +119,25 @@ Ticker movement redraws the attributed string directly inside the clipped viewpo
 on every frame instead of translating a partially rasterized text-field bitmap.
 A formatting-only or empty summary is discarded and cannot replace the last
 visible message.
-The ticker's top-right icon toolbar moves the window to the left, right, top, or
-bottom screen edge without changing the other axis; the settings icon follows the
-four position controls. The message row keeps the full ticker width below it.
-The settings menu's **Alarm Color…** item opens the native macOS color picker.
-The ticker remains white during normal operation and uses the selected color only
+The ticker's compact toolbar keeps only the primary actions visible. Six precise
+window positions remain available in the native **Display Settings** menu without
+squeezing the provider and session identity.
+The settings menu's **Violation Highlight Color…** item opens the native macOS color picker.
+The ticker uses the semantic macOS window surface during normal operation and the selected color only
 for an actual alert. Custom colors and opacity are remembered, text/icons
-automatically switch contrast, and **Use Default Alarm Color** restores the
+automatically switch contrast, and **Use Default Violation Color** restores the
 critical-red light/dark warning surface.
 A single click opens a dedicated full-message reader; **Done** or a click outside
-the reader returns to the ticker. The visible controls button or a deliberate double-click opens the
-separate navigation/settings view. The **↤** control returns directly to the
+the reader returns to the ticker. The visible controls button opens the separate
+navigation/settings view. The **↤** control returns directly to the
 ticker's beginning. The settings menu selects and remembers Slow, Normal, or Fast
 ticker movement and provides Top/Bottom × Left/Center/Right presets.
-The reader keeps **Done** visible and places **Quit Thinkpeek** in the standard
-ellipsis overflow menu because the accessory HUD has no standard application menu.
+The reader keeps **Done** visible. **Hide Thinkpeek** is the ticker's direct X
+action, and **Quit Thinkpeek** remains available from the menu bar.
 Escape from the reader, controls, or full history always returns directly to the
 one-line ticker.
 Controls and full history use the same lifecycle pattern: **Done** returns to the
-ticker without terminating the monitor, while **Quit Thinkpeek** remains in the
-ellipsis overflow menu.
+ticker without terminating the monitor.
 The controls and full-message views can be resized horizontally from 380 to 560
 points. Their width is remembered; below 500 points the header stacks into two
 rows so the session selector and controls remain usable. The settings menu also
@@ -155,6 +154,8 @@ Keyboard navigation follows standard list/carousel conventions: Left, Up, or K
 selects the previous message; Right, Down, or J selects the next; Home and End
 jump to the first and latest messages; Return or Space opens the selected
 message; Escape returns to the ticker; and Command-Shift-V opens violations.
+Focused text editors and standard controls retain their native arrow, Space,
+Return, Home, End, J, and K behavior.
 
 Auto mode follows every active session and nested agent. Use the session picker
 to pin one session. Cards show the local time, source session, and original

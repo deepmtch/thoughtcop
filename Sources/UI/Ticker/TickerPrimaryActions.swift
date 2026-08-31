@@ -32,7 +32,7 @@ final class TickerPrimaryActions: NSStackView {
             target: nil, action: nil)
         displaySettingsButton = NSButton(frame: .zero)
         controlsButton = NSButton(
-            image: NSImage(systemSymbolName: "slider.horizontal.3",
+            image: NSImage(systemSymbolName: "rectangle.grid.1x2",
                            accessibilityDescription: "Open controls") ?? NSImage(),
             target: nil, action: nil)
         hideButton = NSButton(
@@ -43,12 +43,12 @@ final class TickerPrimaryActions: NSStackView {
 
         orientation = .horizontal
         alignment = .centerY
-        spacing = 2
+        spacing = 4
         for button in [checkRulesButton, displaySettingsButton, controlsButton, hideButton] {
             button.bezelStyle = .accessoryBarAction
             button.isBordered = false
             button.translatesAutoresizingMaskIntoConstraints = false
-            button.widthAnchor.constraint(equalToConstant: 24).isActive = true
+            button.widthAnchor.constraint(equalToConstant: 28).isActive = true
             button.heightAnchor.constraint(equalToConstant: 28).isActive = true
             addArrangedSubview(button)
         }

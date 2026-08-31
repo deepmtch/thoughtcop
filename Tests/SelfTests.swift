@@ -283,20 +283,20 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
     let preview = MessagePreview(source: "Codex · Test", text: "Tool call: exec",
                                  kind: "analysis")
     preview.evaluation = .alert(decision)
-    guard preview.tickerText.contains("⚠ changed"),
+    guard preview.tickerText == "Violation: changed",
           preview.detailText.contains("Sources/Test.swift"),
-          preview.displaySource == "Thinkpeek · Warning",
-          preview.readerTone == .warning else {
+          preview.displaySource == "Codex · Test",
+          preview.readerTone == .error else {
         FileHandle.standardError.write(
             "alert presentation self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
     preview.evaluation = .failed("provider payload exceeded its limit")
-    guard preview.tickerText.contains("⛔ Thinkpeek check failed"),
-          preview.detailText.contains("THINKPEEK CHECK ERROR"),
+    guard preview.tickerText.contains("Check unavailable"),
+          preview.detailText.contains("Check unavailable"),
           preview.detailText.contains("Original item from Codex · Test"),
-          preview.displaySource == "Thinkpeek · Check error",
-          preview.readerTone == .error else {
+          preview.displaySource == "Codex · Test",
+          preview.readerTone == .warning else {
         FileHandle.standardError.write(
             "check-error attribution self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -625,7 +625,6 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
     defer { defaults.removePersistentDomain(forName: suiteName) }
     let sample = NSColor(srgbRed: 0.2, green: 0.4, blue: 0.7, alpha: 0.85)
     let initial = TickerBackgroundPreference.load(defaults: defaults)
-        .flatMap(TickerBackgroundPreference.components(of:)) ?? []
     TickerBackgroundPreference.save(sample, defaults: defaults)
     let restored = TickerBackgroundPreference.load(defaults: defaults)
     let values = restored.flatMap(TickerBackgroundPreference.components(of:)) ?? []
@@ -642,24 +641,17 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
     let tickerIsBold = NSFontManager.shared.traits(of: ticker.textFont)
         .contains(.boldFontMask)
     TickerBackgroundPreference.save(nil, defaults: defaults)
-    guard initial.count == 4,
-          ((abs(initial[0] - 0.992) < 0.002 &&
-            abs(initial[1] - 0.925) < 0.002 &&
-            abs(initial[2] - 0.918) < 0.002) ||
-           (abs(initial[0] - 0.227) < 0.002 &&
-            abs(initial[1] - 0.118) < 0.002 &&
-            abs(initial[2] - 0.118) < 0.002)),
+    guard initial == nil,
           values.count == 4,
           abs(values[0] - 0.2) < 0.001,
           abs(values[1] - 0.4) < 0.001,
           abs(values[2] - 0.7) < 0.001,
           abs(values[3] - 0.85) < 0.001,
           normalValues.count == 4,
-          abs(normalValues[0] - 1) < 0.001,
-          abs(normalValues[1] - 1) < 0.001,
-          abs(normalValues[2] - 1) < 0.001,
+          normalValues == (TickerBackgroundPreference.components(
+            of: NSColor.windowBackgroundColor) ?? []),
           alarmValues == values,
-          defaultAlarmValues == initial,
+          defaultAlarmValues.count == 4,
           !tickerIsBold,
           TickerBackgroundPreference.load(defaults: defaults) == nil,
           TickerBackgroundPreference.usesDarkForeground(on: .white),
@@ -668,7 +660,7 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
             .data(using: .utf8)!)
         exit(1)
     }
-    print("ticker background: normalWhite=true alarmOnly=true custom=true " +
+    print("ticker background: semanticSurface=true alarmOnly=true custom=true " +
           "defaultAlarm=true autoContrast=true textWeight=regular")
     exit(0)
 }
@@ -682,7 +674,7 @@ if CommandLine.arguments.contains("--message-view-selftest") {
     let shortHeight = message.preferredHeight(forWidth: 560)
     guard message.source == "Codex · Message test",
           message.text == "Complete rendered summary with inline code.",
-          message.lifecycleButtonTitles == ["Hide Thinkpeek"],
+          message.lifecycleButtonTitles == ["Done"],
           message.tone == .normal,
           shortHeight == 118,
           !message.text.contains("**") else {
@@ -861,25 +853,25 @@ if CommandLine.arguments.contains("--ticker-corner-selftest") ||
 if CommandLine.arguments.contains("--provider-icon-selftest") {
     let claude = ProviderIconView(frame: .zero)
     claude.update(source: "Claude · Appium")
-    let chatGPT = ProviderIconView(frame: .zero)
-    chatGPT.update(source: "Codex · Thought watch 2")
+    let codex = ProviderIconView(frame: .zero)
+    codex.update(source: "Codex · Thought watch 2")
     let explicitChatGPT = MessageProvider.detect(from: "ChatGPT · Example")
-    let nativeIconsAvailable = [MessageProvider.claude, .chatGPT].allSatisfy {
+    let nativeIconsAvailable = [MessageProvider.claude, .codex, .chatGPT].allSatisfy {
         guard let path = $0.installedApplicationPath else { return false }
         return FileManager.default.fileExists(atPath: path)
     }
     guard claude.provider == .claude,
-          chatGPT.provider == .chatGPT,
+          codex.provider == .codex,
           explicitChatGPT == .chatGPT,
           claude.image != nil,
-          chatGPT.image != nil,
+          codex.image != nil,
           claude.accessibilityLabel() == "Provider: Claude",
-          chatGPT.accessibilityLabel() == "Provider: ChatGPT" else {
+          codex.accessibilityLabel() == "Provider: Codex" else {
         FileHandle.standardError.write(
             "provider icon self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("provider icons: claude=true chatGPT=true nativeAppIcons=\(nativeIconsAvailable) accessible=true")
+    print("provider icons: claude=true codex=true nativeAppIcons=\(nativeIconsAvailable) accessible=true")
     exit(0)
 }
 
@@ -890,15 +882,15 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
     settings.update(speed: .normal, width: CompactWindowSizing.standardWidth,
                     usesDefaultAlarmColor: true)
     let expected = [
-        "Ticker Speed": ["Slow", "Normal", "Fast"],
+        "Scroll Speed": ["Slow", "Normal", "Fast"],
         "Window Width": ["Narrow", "Standard"],
         "Window Position": ["Top Left", "Top Center", "Top Right", "Bottom Left",
                             "Bottom Center", "Bottom Right"],
-        "Appearance": ["Alarm Color…", "Use Default Alarm Color"],
+        "Appearance": ["Violation Highlight Color…", "Use Default Violation Color"],
     ]
     guard settings.structure == expected, settings.menu.numberOfItems == 4,
           settings.usesSingleButtonLauncher,
-          settings.topLevelTitles == ["Ticker Speed", "Window Width",
+          settings.topLevelTitles == ["Scroll Speed", "Window Width",
                                       "Window Position", "Appearance"] else {
         FileHandle.standardError.write(
             "settings menu self-test failed\n".data(using: .utf8)!)
@@ -924,7 +916,8 @@ if CommandLine.arguments.contains("--check-rules-editor-selftest") ||
         CheckRulesStore.saveMode(mode, defaults: defaults)
     }, closed: {})
     guard editor.currentText == CheckRulesStore.defaultValue,
-          editor.actionTitles == ["Cancel", "Save"], editor.actionsAreHorizontal,
+          editor.actionTitles == ["Cancel", "Save Check Instructions"],
+          editor.actionsAreHorizontal,
           editor.currentMode == .eachLine,
           CheckRulesStore.instruction(defaults: defaults) ==
             CheckRulesStore.defaultValue,
@@ -934,7 +927,7 @@ if CommandLine.arguments.contains("--check-rules-editor-selftest") ||
         .compactMap({ $0 as? NSStackView })
         .flatMap(\.arrangedSubviews)
         .compactMap({ $0 as? NSButton })
-        .first(where: { $0.title == "Save" }) else { exit(1) }
+        .first(where: { $0.title == "Save Check Instructions" }) else { exit(1) }
     saveButton.performClick(nil)
     guard saveActionRan,
           CheckRulesStore.loadRaw(defaults: defaults) == CheckRulesStore.defaultValue,
@@ -978,10 +971,10 @@ if CommandLine.arguments.contains("--compact-width-selftest") {
           CompactWindowSizing.clamped(700) == 560,
           CompactWindowSizing.headerStyle(for: 400) == .stacked,
           CompactWindowSizing.headerStyle(for: 560) == .stacked,
-          CompactWindowSizing.headerStyle(for: 700) == .inline,
+          CompactWindowSizing.headerStyle(for: 700) == .stacked,
           CompactWindowSizing.headerHeight(for: 400) == 82,
           CompactWindowSizing.headerHeight(for: 560) == 82,
-          CompactWindowSizing.headerHeight(for: 700) == 52,
+          CompactWindowSizing.headerHeight(for: 700) == 82,
           CompactWindowSizing.controlsHeight(for: 400) == 292,
           CompactWindowSizing.controlsHeight(for: 560) == 292,
           shouldShowHistoryFeed(peekMode: false, messageMode: false,
@@ -1000,15 +993,13 @@ if CommandLine.arguments.contains("--interaction-selftest") ||
     let interactionView = CompactInteractionView(frame: NSRect(x: 0, y: 0,
                                                                width: 460, height: 70))
     interactionView.dragOnly = true
-    guard CompactInteractionUX.clickDecisionDelay >= 0.18,
-          CompactInteractionUX.clickDecisionDelay <= 0.30,
-          CompactInteractionUX.dragTolerance >= 2,
+    guard CompactInteractionUX.dragTolerance >= 2,
           interactionView.backgroundCursor === NSCursor.arrow else {
         FileHandle.standardError.write("compact interaction self-test failed\n"
             .data(using: .utf8)!)
         exit(1)
     }
-    print("compact interaction: cursor=arrow singleClick=message doubleClick=controls")
+    print("compact interaction: cursor=arrow singleClick=immediate dragSafe=true")
     exit(0)
 }
 
@@ -1047,13 +1038,13 @@ if CommandLine.arguments.contains("--exit-controls-selftest") {
     var closed = false
     controls.closeRequested = { closed = true }
     controls.requestClose(nil)
-    guard controls.buttonTitles == ["Hide Thinkpeek"],
-          controls.accessibilityNames == ["Hide Thinkpeek"], closed else {
+    guard controls.buttonTitles == ["Done"],
+          controls.accessibilityNames == ["Close details"], closed else {
         FileHandle.standardError.write(
             "exit controls self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("exit controls: close=true quit=true overflow=false visible=true accessible=true")
+    print("exit controls: doneReturnsToTicker=true visible=true accessible=true")
     exit(0)
 }
 
@@ -1116,16 +1107,29 @@ if CommandLine.arguments.contains("--violation-store-selftest") {
     store.append(first)
     store.append(second)
     let reloaded = ViolationStore(path: path).load()
+    let reviewed = store.markReviewed(id: first.id,
+                                      at: "2026-08-31T12:02:00Z")
     let attributes = try? FileManager.default.attributesOfItem(atPath: path)
     let permissions = (attributes?[.posixPermissions] as? NSNumber)?.intValue
+    let damagedPath = path + ".damaged"
+    try? Data("not-json".utf8).write(to: URL(fileURLWithPath: damagedPath))
+    let damagedStore = ViolationStore(path: damagedPath)
+    let damagedLoad = damagedStore.load()
+    let damagedAppend = damagedStore.append(first)
+    let damagedContents = try? String(contentsOfFile: damagedPath, encoding: .utf8)
     try? FileManager.default.removeItem(atPath: path)
-    guard reloaded == [first, second], permissions == 0o600,
-          reloaded[0].checkPrompt == "Claude is waiting for the user" else {
+    try? FileManager.default.removeItem(atPath: damagedPath)
+    guard reloaded == [first, second], reviewed.first?.reviewedAt != nil,
+          reviewed.last?.reviewedAt == nil, permissions == 0o600,
+          reloaded[0].checkPrompt == "Claude is waiting for the user",
+          damagedLoad.isEmpty, damagedAppend == [first],
+          damagedStore.lastError != nil, damagedContents == "not-json" else {
         FileHandle.standardError.write(
             "violation store self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("violations: persisted=true ordered=true promptSnapshot=true permissions=0600")
+    print("violations: persisted=true ordered=true reviewedState=true " +
+          "corruptFilePreserved=true promptSnapshot=true permissions=0600")
     exit(0)
 }
 
@@ -1139,6 +1143,7 @@ if CommandLine.arguments.contains("--ui-command-api-selftest") {
     api.perform(.showControls, origin: .appKit)
     api.perform(.hideHUD, origin: .http)
     api.perform(.showViolations, origin: .http)
+    api.perform(.closeCheckRules, origin: .http)
     api.perform(.historyFilter("violations"), origin: .http)
     api.perform(.next, origin: .http)
     api.perform(.saveCheckRules(text: "SECRET_RULE_CONTENT", mode: "whole-text"),
@@ -1146,6 +1151,7 @@ if CommandLine.arguments.contains("--ui-command-api-selftest") {
     let log = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
     try? FileManager.default.removeItem(at: logURL)
     guard handled == ["first", "controls", "hide", "show-violations",
+                      "check-rules/close",
                       "filter/violations", "next",
                       "save-check-rules"],
           log.contains("\"origin\":\"appKit\""),
@@ -1187,7 +1193,18 @@ if CommandLine.arguments.contains("--keyboard-navigation-selftest") {
             "keyboard navigation self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("keyboard navigation: arrows=true jk=true homeEnd=true open=true violations=true")
+    let editor = NSTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 80))
+    panel.contentView?.addSubview(editor)
+    _ = panel.makeFirstResponder(editor)
+    let actionCount = actions.count
+    press(123); press(125); press(49, " "); press(0, "j")
+    guard actions.count == actionCount else {
+        FileHandle.standardError.write(
+            "keyboard focus-preservation self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("keyboard navigation: arrows=true jk=true homeEnd=true open=true " +
+          "violations=true focusedEditorPreserved=true")
     exit(0)
 }
 }

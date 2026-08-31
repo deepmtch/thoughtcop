@@ -31,7 +31,7 @@ enum TickerBackgroundPreference {
     static func load(defaults: UserDefaults = .standard) -> NSColor? {
         if defaults.string(forKey: modeKey) == "system" { return nil }
         guard let values = defaults.array(forKey: defaultsKey) as? [NSNumber] else {
-            return stickyYellow
+            return nil
         }
         return color(from: values.map { CGFloat(truncating: $0) })
     }
@@ -47,19 +47,26 @@ enum TickerBackgroundPreference {
     }
 
     static func usesDarkForeground(on color: NSColor) -> Bool {
-        guard let rgb = color.usingColorSpace(.sRGB) else { return false }
+        guard let foreground = color.usingColorSpace(.sRGB),
+              let surface = NSColor.windowBackgroundColor.usingColorSpace(.sRGB)
+        else { return false }
+        let alpha = foreground.alphaComponent
+        let red = foreground.redComponent * alpha + surface.redComponent * (1 - alpha)
+        let green = foreground.greenComponent * alpha + surface.greenComponent * (1 - alpha)
+        let blue = foreground.blueComponent * alpha + surface.blueComponent * (1 - alpha)
         func linear(_ value: CGFloat) -> CGFloat {
             value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
         }
-        let luminance = 0.2126 * linear(rgb.redComponent) +
-            0.7152 * linear(rgb.greenComponent) +
-            0.0722 * linear(rgb.blueComponent)
-        return luminance > 0.42
+        let luminance = 0.2126 * linear(red) + 0.7152 * linear(green) +
+            0.0722 * linear(blue)
+        let blackContrast = (luminance + 0.05) / 0.05
+        let whiteContrast = 1.05 / (luminance + 0.05)
+        return blackContrast >= whiteContrast
     }
 }
 
 enum TickerAppearance {
-    static let normalBackground = NSColor.white
+    static let normalBackground = NSColor.windowBackgroundColor
 
     static func background(alarmActive: Bool,
                            configuredAlarmColor: NSColor?) -> NSColor {
@@ -75,5 +82,10 @@ final class TickerBackgroundView: NSView {
 
     override func updateLayer() {
         layer?.backgroundColor = color?.cgColor ?? NSColor.clear.cgColor
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }

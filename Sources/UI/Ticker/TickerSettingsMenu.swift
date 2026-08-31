@@ -27,7 +27,7 @@ final class TickerSettingsMenu: NSObject {
 
     func install(on button: NSButton) {
         menu = NSMenu()
-        menu.addItem(submenuItem(title: "Ticker Speed", symbol: "speedometer",
+        menu.addItem(submenuItem(title: "Scroll Speed", symbol: "speedometer",
                                  submenu: speedMenu()))
         menu.addItem(submenuItem(title: "Window Width", symbol: "arrow.left.and.right",
                                  submenu: widthMenu()))
@@ -71,7 +71,7 @@ final class TickerSettingsMenu: NSObject {
     }
 
     private func speedMenu() -> NSMenu {
-        let submenu = NSMenu(title: "Ticker Speed")
+        let submenu = NSMenu(title: "Scroll Speed")
         for (index, speed) in TickerSpeed.allCases.enumerated() {
             let item = NSMenuItem(title: speed.title, action: #selector(speedPicked(_:)),
                                   keyEquivalent: "")
@@ -122,13 +122,13 @@ final class TickerSettingsMenu: NSObject {
 
     private func appearanceMenu() -> NSMenu {
         let submenu = NSMenu(title: "Appearance")
-        let choose = NSMenuItem(title: "Alarm Color…",
+        let choose = NSMenuItem(title: "Violation Highlight Color…",
                                 action: #selector(backgroundPicked(_:)), keyEquivalent: "")
         choose.target = self
         choose.image = NSImage(systemSymbolName: "paintpalette",
                                accessibilityDescription: choose.title)
         submenu.addItem(choose)
-        defaultAlarmColorItem = NSMenuItem(title: "Use Default Alarm Color",
+        defaultAlarmColorItem = NSMenuItem(title: "Use Default Violation Color",
                                           action: #selector(systemBackgroundPicked(_:)),
                                           keyEquivalent: "")
         defaultAlarmColorItem.target = self

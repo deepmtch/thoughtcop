@@ -2,12 +2,15 @@
 
 import AppKit
 
-final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
+final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDelegate {
     private let textView = NSTextView(frame: .zero)
     private let modeButton = NSPopUpButton(frame: .zero, pullsDown: false)
     private let saveHandler: (String, CheckInstructionMode) -> Void
     private let closeHandler: () -> Void
     private let buttonRow = NSStackView()
+    private var originalText: String
+    private var originalMode: CheckInstructionMode
+    private var allowClose = false
 
     var currentText: String { textView.string }
     var currentMode: CheckInstructionMode {
@@ -24,10 +27,12 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
          closed: @escaping () -> Void) {
         saveHandler = save
         closeHandler = closed
+        originalText = contents
+        originalMode = mode
         let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 560, height: 380),
                              styleMask: [.titled, .closable, .resizable],
                              backing: .buffered, defer: false)
-        window.title = "What to Check"
+        window.title = "Check Prompt"
         window.level = .floating
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 440, height: 300)
@@ -49,25 +54,53 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) { closeHandler() }
 
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard !allowClose, isDirty else { return true }
+        presentUnsavedChangesAlert()
+        return false
+    }
+
+    private var isDirty: Bool {
+        textView.string != originalText || currentMode != originalMode
+    }
+
     private func buildContent(contents: String, mode: CheckInstructionMode) {
         guard let content = window?.contentView else { return }
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
         let title = NSTextField(labelWithString: "What should Thinkpeek flag?")
         title.font = .systemFont(ofSize: 15, weight: .semibold)
         title.translatesAutoresizingMaskIntoConstraints = false
 
         let help = NSTextField(labelWithString:
-            "Your text is sent verbatim. Choose explicitly how multiple lines are evaluated.")
+            "Thinkpeek sends this instruction and the provider's readable reasoning to your configured checker exactly as shown.")
         help.font = .systemFont(ofSize: 12)
         help.textColor = .secondaryLabelColor
         help.translatesAutoresizingMaskIntoConstraints = false
+        help.maximumNumberOfLines = 2
+        help.lineBreakMode = .byWordWrapping
+
+        let modeLabel = NSTextField(labelWithString: "Evaluate as:")
+        modeLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        modeLabel.textColor = .labelColor
+        modeLabel.translatesAutoresizingMaskIntoConstraints = false
 
         CheckInstructionMode.allCases.forEach { value in
             modeButton.addItem(withTitle: value.title)
             modeButton.lastItem?.representedObject = value.rawValue
         }
         modeButton.selectItem(at: CheckInstructionMode.allCases.firstIndex(of: mode) ?? 0)
+        modeButton.target = self
+        modeButton.action = #selector(modeChanged(_:))
         modeButton.translatesAutoresizingMaskIntoConstraints = false
+        modeButton.setAccessibilityLabel("Evaluation mode")
+        modeButton.setAccessibilityHelp("Choose whether the entire prompt or each non-empty line is evaluated as one instruction.")
+
+        let promptLabel = NSTextField(labelWithString: "Check instructions")
+        promptLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        promptLabel.textColor = .labelColor
+        promptLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -77,6 +110,8 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
 
         textView.string = contents
         textView.font = .systemFont(ofSize: 13)
+        textView.textColor = .textColor
+        textView.backgroundColor = .textBackgroundColor
         textView.isRichText = false
         textView.allowsUndo = true
         textView.isHorizontallyResizable = false
@@ -86,14 +121,25 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(
             width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
+        textView.delegate = self
+        textView.setAccessibilityLabel("Check instructions")
+        textView.setAccessibilityHelp("Enter the exact instruction Thinkpeek should use to flag provider reasoning.")
         scrollView.documentView = textView
+
+        let privacy = NSTextField(labelWithString:
+            "Stored locally. Reasoning is sent only when checking is enabled.")
+        privacy.font = .systemFont(ofSize: 11)
+        privacy.textColor = .secondaryLabelColor
+        privacy.translatesAutoresizingMaskIntoConstraints = false
 
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel(_:)))
         cancel.bezelStyle = .rounded
         cancel.keyEquivalent = "\u{1b}"
-        let save = NSButton(title: "Save", target: self, action: #selector(save(_:)))
+        let save = NSButton(title: "Save Check Instructions", target: self,
+                            action: #selector(save(_:)))
         save.bezelStyle = .rounded
-        save.keyEquivalent = "\r"
+        save.keyEquivalent = "s"
+        save.keyEquivalentModifierMask = [.command]
         save.setAccessibilityLabel("Save check rules locally in Thinkpeek")
         buttonRow.orientation = .horizontal
         buttonRow.alignment = .centerY
@@ -102,7 +148,8 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
         buttonRow.addArrangedSubview(save)
         buttonRow.translatesAutoresizingMaskIntoConstraints = false
 
-        for view in [title, help, modeButton, scrollView, buttonRow] { content.addSubview(view) }
+        for view in [title, help, modeLabel, modeButton, promptLabel,
+                     scrollView, privacy, buttonRow] { content.addSubview(view) }
         NSLayoutConstraint.activate([
             title.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             title.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
@@ -110,14 +157,23 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
             help.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 5),
             help.leadingAnchor.constraint(equalTo: title.leadingAnchor),
             help.trailingAnchor.constraint(equalTo: title.trailingAnchor),
+            modeLabel.topAnchor.constraint(equalTo: help.bottomAnchor, constant: 14),
+            modeLabel.leadingAnchor.constraint(equalTo: title.leadingAnchor),
+            modeLabel.centerYAnchor.constraint(equalTo: modeButton.centerYAnchor),
             modeButton.topAnchor.constraint(equalTo: help.bottomAnchor, constant: 10),
-            modeButton.leadingAnchor.constraint(equalTo: title.leadingAnchor),
+            modeButton.leadingAnchor.constraint(equalTo: modeLabel.trailingAnchor, constant: 8),
             modeButton.trailingAnchor.constraint(lessThanOrEqualTo: title.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: modeButton.bottomAnchor, constant: 10),
+            promptLabel.topAnchor.constraint(equalTo: modeButton.bottomAnchor, constant: 14),
+            promptLabel.leadingAnchor.constraint(equalTo: title.leadingAnchor),
+            scrollView.topAnchor.constraint(equalTo: promptLabel.bottomAnchor, constant: 6),
             scrollView.leadingAnchor.constraint(equalTo: title.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: title.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: buttonRow.topAnchor, constant: -14),
+            scrollView.bottomAnchor.constraint(equalTo: privacy.topAnchor, constant: -10),
             scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 170),
+            privacy.leadingAnchor.constraint(equalTo: title.leadingAnchor),
+            privacy.centerYAnchor.constraint(equalTo: buttonRow.centerYAnchor),
+            privacy.trailingAnchor.constraint(lessThanOrEqualTo: buttonRow.leadingAnchor,
+                                               constant: -12),
             buttonRow.trailingAnchor.constraint(equalTo: title.trailingAnchor),
             buttonRow.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -16),
         ])
@@ -125,8 +181,39 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate {
 
     @objc private func save(_ sender: Any?) {
         saveHandler(textView.string, currentMode)
+        originalText = textView.string
+        originalMode = currentMode
+        allowClose = true
         close()
     }
 
-    @objc private func cancel(_ sender: Any?) { close() }
+    @objc private func cancel(_ sender: Any?) {
+        guard isDirty else { allowClose = true; close(); return }
+        presentUnsavedChangesAlert()
+    }
+
+    @objc private func modeChanged(_ sender: Any?) {}
+
+    private func presentUnsavedChangesAlert() {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Save changes to the check prompt?"
+        alert.informativeText = "Unsaved check instructions will be lost."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Save Changes")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Discard Changes")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
+            switch response {
+            case .alertFirstButtonReturn:
+                self.save(nil)
+            case .alertThirdButtonReturn:
+                self.allowClose = true
+                self.close()
+            default:
+                break
+            }
+        }
+    }
 }

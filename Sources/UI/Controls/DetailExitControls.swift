@@ -12,7 +12,7 @@ final class DetailExitControls: NSStackView {
     }
 
     override init(frame frameRect: NSRect) {
-        closeButton = NSButton(title: "Hide Thinkpeek", target: nil, action: nil)
+        closeButton = NSButton(title: "Done", target: nil, action: nil)
         super.init(frame: frameRect)
 
         orientation = .horizontal
@@ -24,8 +24,8 @@ final class DetailExitControls: NSStackView {
 
         closeButton.target = self
         closeButton.action = #selector(requestClose(_:))
-        closeButton.toolTip = "Hide Thinkpeek — show it again from the menu bar"
-        closeButton.setAccessibilityLabel("Hide Thinkpeek")
+        closeButton.toolTip = "Close details and return to the Thinkpeek ticker"
+        closeButton.setAccessibilityLabel("Close details")
         closeButton.keyEquivalent = "\u{1b}"
 
         closeButton.bezelStyle = .rounded

@@ -4,12 +4,87 @@
 import AppKit
 
 enum CompactInteractionUX {
-    static let clickDecisionDelay: TimeInterval = 0.22
     static let dragTolerance: CGFloat = 2
 }
 
 final class FlippedView: NSView {
     override var isFlipped: Bool { true }
+}
+
+final class HistoryEmptyStateView: NSView {
+    var editPromptRequested: (() -> Void)?
+    private let icon: NSImageView
+    private let title: NSTextField
+    private let detail: NSTextField
+    private let edit: NSButton
+
+    override init(frame frameRect: NSRect) {
+        icon = NSImageView(image: NSImage())
+        title = NSTextField(labelWithString: "")
+        detail = NSTextField(labelWithString: "")
+        edit = NSButton(title: "Edit Check Prompt…", target: nil, action: nil)
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        icon.image = NSImage(
+            systemSymbolName: "checkmark.shield",
+            accessibilityDescription: "No violations") ?? NSImage()
+        icon.contentTintColor = .systemGreen
+        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 30, weight: .medium)
+
+        title.stringValue = "No violations recorded"
+        title.font = .systemFont(ofSize: 16, weight: .semibold)
+        title.alignment = .center
+
+        detail.stringValue =
+            "Matches to your check prompt will appear here and remain available after restart."
+        detail.font = .systemFont(ofSize: 12)
+        detail.textColor = .secondaryLabelColor
+        detail.alignment = .center
+        detail.maximumNumberOfLines = 2
+        detail.lineBreakMode = .byWordWrapping
+
+        edit.target = self
+        edit.action = #selector(editPrompt(_:))
+        edit.bezelStyle = .rounded
+        edit.controlSize = .regular
+        edit.setAccessibilityLabel("Edit the prompt used to detect violations")
+
+        let stack = NSStackView(views: [icon, title, detail, edit])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 10
+        stack.setCustomSpacing(14, after: detail)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 230),
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 42),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -42),
+            detail.widthAnchor.constraint(lessThanOrEqualToConstant: 390),
+        ])
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    @objc private func editPrompt(_ sender: Any?) { editPromptRequested?() }
+
+    func showStorageError(_ message: String?) {
+        let hasError = message != nil
+        icon.image = NSImage(systemSymbolName: hasError
+            ? "exclamationmark.shield" : "checkmark.shield",
+            accessibilityDescription: hasError ? "Violation history unavailable"
+                                               : "No violations")
+        icon.contentTintColor = hasError ? .systemOrange : .systemGreen
+        title.stringValue = hasError ? "Violation history unavailable"
+                                     : "No violations recorded"
+        detail.stringValue = message ??
+            "Matches to your check prompt will appear here and remain available after restart."
+        edit.isHidden = hasError
+    }
 }
 
 /// A wrapping label whose intrinsic width never pushes its container wider.
@@ -89,16 +164,19 @@ final class ConstrainedPanel: NSPanel {
               !flags.contains(.option) else {
             return super.performKeyEquivalent(with: event)
         }
-        switch event.keyCode {
-        case 123, 126: previousRequested?(); return true
-        case 124, 125: nextRequested?(); return true
-        case 115: firstRequested?(); return true
-        case 119: latestRequested?(); return true
-        case 36, 49: openMessageRequested?(); return true
-        default: break
+        let focusedControl = firstResponder is NSTextView || firstResponder is NSControl
+        if !focusedControl {
+            switch event.keyCode {
+            case 123, 126: previousRequested?(); return true
+            case 124, 125: nextRequested?(); return true
+            case 115: firstRequested?(); return true
+            case 119: latestRequested?(); return true
+            case 36, 49: openMessageRequested?(); return true
+            default: break
+            }
         }
-        if characters == "k" { previousRequested?(); return true }
-        if characters == "j" { nextRequested?(); return true }
+        if !focusedControl, characters == "k" { previousRequested?(); return true }
+        if !focusedControl, characters == "j" { nextRequested?(); return true }
         return super.performKeyEquivalent(with: event)
     }
 
@@ -121,13 +199,11 @@ final class ConstrainedPanel: NSPanel {
 
 final class CompactInteractionView: NSView {
     var clicked: (() -> Void)?
-    var doubleClicked: (() -> Void)?
     var draggingChanged: ((Bool) -> Void)?
     var dragOnly = false {
         didSet { discardCursorRects(); resetCursorRects() }
     }
     private var dragging = false
-    private var pendingClick: DispatchWorkItem?
 
     /// Native macOS window backgrounds keep the standard arrow even when the
     /// surface can initiate a window drag. Hand cursors are reserved for links.
@@ -148,11 +224,6 @@ final class CompactInteractionView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard dragOnly else { super.mouseDown(with: event); return }
-        if event.clickCount == 2 {
-            pendingClick?.cancel()
-            doubleClicked?()
-            return
-        }
         dragging = true
         draggingChanged?(true)
         let startOrigin = window?.frame.origin
@@ -163,12 +234,7 @@ final class CompactInteractionView: NSView {
         if let startOrigin, let endOrigin,
            hypot(endOrigin.x - startOrigin.x, endOrigin.y - startOrigin.y)
               < CompactInteractionUX.dragTolerance {
-            let work = DispatchWorkItem { [weak self] in self?.clicked?() }
-            pendingClick?.cancel()
-            pendingClick = work
-            DispatchQueue.main.asyncAfter(
-                deadline: .now() + CompactInteractionUX.clickDecisionDelay,
-                execute: work)
+            clicked?()
         }
     }
 }
@@ -226,12 +292,16 @@ func renderedBody(_ text: String, kind: String) -> NSAttributedString {
 
 final class EventCard: NSView {
     var contentChanged: (() -> Void)?
+    var selectedRequested: (() -> Void)?
+    var openRequested: (() -> Void)?
     private let footer = NSTextField(labelWithString: "")
     private let body = IntrinsicTextView(frame: .zero)
     private let stack = NSStackView()
     private let violationBadge = NSTextField(labelWithString: "VIOLATION")
+    private var violationBadgeWidth: NSLayoutConstraint!
     private let violationAccent = NSView(frame: .zero)
-    private let violationGradient = CAGradientLayer()
+    private let providerIcon = ProviderIconView(frame: .zero)
+    private var selected = false
 
     init(source: String, time: String, event: UIEvent) {
         super.init(frame: .zero)
@@ -256,7 +326,8 @@ final class EventCard: NSView {
         timeLabel.textColor = .tertiaryLabelColor
         timeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        violationBadge.font = .systemFont(ofSize: 9, weight: .bold)
+        violationBadge.stringValue = "Violation"
+        violationBadge.font = .systemFont(ofSize: 11, weight: .semibold)
         violationBadge.textColor = .white
         violationBadge.alignment = .center
         violationBadge.wantsLayer = true
@@ -264,10 +335,17 @@ final class EventCard: NSView {
         violationBadge.layer?.cornerRadius = 5
         violationBadge.isHidden = true
         violationBadge.translatesAutoresizingMaskIntoConstraints = false
-        violationBadge.widthAnchor.constraint(equalToConstant: 70).isActive = true
+        violationBadgeWidth = violationBadge.widthAnchor.constraint(equalToConstant: 78)
+        violationBadgeWidth.isActive = true
         violationBadge.heightAnchor.constraint(equalToConstant: 20).isActive = true
 
+        providerIcon.update(source: source)
+        providerIcon.translatesAutoresizingMaskIntoConstraints = false
+        providerIcon.widthAnchor.constraint(equalToConstant: 18).isActive = true
+        providerIcon.heightAnchor.constraint(equalToConstant: 18).isActive = true
+
         header.addArrangedSubview(violationBadge)
+        header.addArrangedSubview(providerIcon)
         header.addArrangedSubview(sourceLabel)
         header.addArrangedSubview(NSView())
         header.addArrangedSubview(timeLabel)
@@ -316,6 +394,9 @@ final class EventCard: NSView {
         setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         setContentHuggingPriority(.required, for: .vertical)
         setContentCompressionResistancePriority(.required, for: .vertical)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.row)
+        setAccessibilityLabel("Message from \(source), \(time)")
 
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 14),
@@ -333,8 +414,8 @@ final class EventCard: NSView {
 
         switch event.kind {
         case "activity":
-            layer?.backgroundColor = NSColor.systemYellow.withAlphaComponent(0.10).cgColor
-            layer?.borderColor = NSColor.systemYellow.withAlphaComponent(0.28).cgColor
+            layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.28).cgColor
         case "omitted-analysis":
             layer?.backgroundColor = NSColor.systemPurple.withAlphaComponent(0.08).cgColor
             layer?.borderColor = NSColor.systemPurple.withAlphaComponent(0.22).cgColor
@@ -347,9 +428,31 @@ final class EventCard: NSView {
 
     required init?(coder: NSCoder) { nil }
 
-    override func layout() {
-        super.layout()
-        violationGradient.frame = bounds
+    override var acceptsFirstResponder: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        selectedRequested?()
+        if event.clickCount == 2 { openRequested?() }
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { setSelected(true) }
+        return accepted
+    }
+
+    func setSelected(_ selected: Bool) {
+        self.selected = selected
+        setAccessibilitySelected(selected)
+        layer?.borderWidth = selected ? 2 : 1
+        if selected {
+            layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.9).cgColor
+        } else if violationBadge.isHidden {
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.28).cgColor
+        } else {
+            layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.48).cgColor
+        }
     }
 
     func setFooter(_ text: String, color: NSColor = .secondaryLabelColor) {
@@ -371,32 +474,46 @@ final class EventCard: NSView {
     func setAlert(_ text: String) {
         violationBadge.isHidden = false
         violationAccent.isHidden = false
-        violationGradient.colors = [
-            NSColor.systemRed.withAlphaComponent(0.16).cgColor,
-            NSColor.systemOrange.withAlphaComponent(0.09).cgColor,
-            NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor,
-        ]
-        violationGradient.locations = [0, 0.42, 1]
-        violationGradient.startPoint = CGPoint(x: 0, y: 0)
-        violationGradient.endPoint = CGPoint(x: 1, y: 1)
-        violationGradient.cornerRadius = 12
-        if violationGradient.superlayer == nil {
-            layer?.insertSublayer(violationGradient, at: 0)
+        layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.08).cgColor
+        layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.48).cgColor
+        layer?.borderWidth = selected ? 2 : 1
+        setFooter(text, color: .secondaryLabelColor)
+    }
+
+    func setViolation(reason: String, evidence: String, provider: String,
+                      latencyMs: Int, checkPrompt: String) {
+        let content = NSMutableAttributedString()
+        content.append(NSAttributedString(
+            string: reason,
+            attributes: [.font: NSFont.systemFont(ofSize: 15, weight: .semibold),
+                         .foregroundColor: NSColor.labelColor]))
+        if !evidence.isEmpty {
+            content.append(NSAttributedString(
+                string: "\n\nEvidence\n",
+                attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+                             .foregroundColor: NSColor.secondaryLabelColor]))
+            content.append(NSAttributedString(
+                string: "“\(evidence)”",
+                attributes: [.font: NSFont.systemFont(ofSize: 13),
+                             .foregroundColor: NSColor.labelColor]))
         }
-        layer?.backgroundColor = NSColor.clear.cgColor
-        layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.78).cgColor
-        layer?.borderWidth = 2
-        layer?.shadowColor = NSColor.systemRed.cgColor
-        layer?.shadowOpacity = 0.16
-        layer?.shadowRadius = 10
-        layer?.shadowOffset = .zero
-        setFooter(text, color: .systemRed)
+        body.textStorage?.setAttributedString(content)
+        setAlert("Checked by \(provider) · \(latencyMs) ms")
+        footer.toolTip = "Check prompt: \(checkPrompt)"
+        setAccessibilityLabel("Violation. \(reason). Source: \(provider).")
+    }
+
+    func setViolationReviewed(_ reviewed: Bool) {
+        violationBadge.stringValue = reviewed ? "Violation" : "New violation"
+        violationBadgeWidth.constant = reviewed ? 78 : 96
+        violationBadge.layer?.backgroundColor = (reviewed
+            ? NSColor.systemRed.withAlphaComponent(0.82) : NSColor.systemRed).cgColor
     }
 
     func setError(_ text: String) {
-        layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.14).cgColor
-        layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.72).cgColor
-        layer?.borderWidth = 2
-        setFooter(text, color: .systemRed)
+        layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.08).cgColor
+        layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.45).cgColor
+        layer?.borderWidth = 1
+        setFooter(text, color: .labelColor)
     }
 }

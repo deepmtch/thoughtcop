@@ -40,7 +40,7 @@ assert controls["contentHeight"] > 0, controls["contentHeight"]
 assert abs(controls["viewportHeight"] - min(210, controls["contentHeight"])) <= 1
 assert controls["cardCount"] > 0, controls["cardCount"]
 assert controls["closeControlVisible"] is True
-assert controls["quitControlVisible"] is True
+assert controls["quitControlVisible"] is False
 assert controls["quitControlInOverflow"] is False
 selected_index = controls["currentIndex"]
 
@@ -51,7 +51,7 @@ assert reader["uiStyle"] == "full-message", reader["uiStyle"]
 assert reader["messageReaderFrozen"] is True
 assert 118 <= reader["windowHeight"] <= 420, reader["windowHeight"]
 assert reader["closeControlVisible"] is True
-assert reader["quitControlVisible"] is True
+assert reader["quitControlVisible"] is False
 assert reader["quitControlInOverflow"] is False
 
 get("/controls")
@@ -66,6 +66,29 @@ if selected_index > 0:
     time.sleep(0.15)
     previous = state()
     assert previous["currentIndex"] == selected_index - 1
+
+get("/toggle-expanded")
+time.sleep(0.15)
+history = state()
+assert history["uiStyle"] == "expanded-card-feed", history["uiStyle"]
+assert history["compactMode"] is False
+assert history["historyFilter"] == "all"
+assert history["closeControlVisible"] is True
+
+get("/filter/violations")
+time.sleep(0.15)
+violations = state()
+assert violations["historyFilter"] == "violations"
+assert violations["violationsVisible"] is True
+if violations["violationCount"] == 0:
+    assert violations["violationEmptyStateVisible"] is True
+
+get("/check-rules")
+time.sleep(0.15)
+assert state()["checkRulesEditorVisible"] is True
+get("/check-rules/close")
+time.sleep(0.15)
+assert state()["checkRulesEditorVisible"] is False
 
 png = get("/screenshot")
 assert png.startswith(b"\x89PNG\r\n\x1a\n") and len(png) > 1_000
@@ -89,7 +112,8 @@ http_commands = [
     record["command"] for record in records
     if record["event"] == "command" and record["origin"] == "http"
 ]
-for expected in ["controls", "message", "previous", "close"]:
+for expected in ["controls", "message", "previous", "show-history",
+                 "filter/violations", "check-rules", "check-rules/close", "close"]:
     if expected == "previous" and selected_index == 0:
         continue
     assert expected in http_commands, (expected, http_commands)
@@ -99,6 +123,9 @@ print(json.dumps({
     "controlsViewport": controls["viewportHeight"],
     "readerHeight": reader["windowHeight"],
     "selectedIndexPreserved": returned["currentIndex"] == selected_index,
+    "expandedHistory": history["uiStyle"] == "expanded-card-feed",
+    "violationEmptyState": violations["violationEmptyStateVisible"],
+    "checkPromptAPI": True,
     "screenshotBytes": len(png),
     "loggedHTTPCommands": http_commands,
     "logContainsOnlyMetadata": True,

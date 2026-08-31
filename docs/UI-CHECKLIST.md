@@ -7,9 +7,10 @@ running `/ui` inspection surface. A checked item is not merely planned.
 ## Window lifecycle and escape routes
 
 - [x] One-line ticker is the stable resting state (460 × 70 points).
-- [x] Full-message reader has visible **Done** and **Quit** actions.
-- [x] Controls and full history have an always-visible **Close** action.
-- [x] Controls and full history have an always-visible **Quit** action.
+- [x] Full-message reader, controls, and history have a visible **Done** action
+  that returns to the ticker.
+- [x] The ticker has a direct **Hide** action; **Quit Thinkpeek** is always in the
+  menu-bar menu.
 - [x] Escape from reader, controls, or history returns directly to ticker.
 - [x] Command-Q activates Quit while a detail view owns focus.
 - [x] Clicking outside the full-message reader returns to ticker.
@@ -38,21 +39,27 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Restart returns ticker to the beginning and then closes controls.
 - [x] Session picker supports automatic and explicit-session selection.
 - [x] Unseen/history state is labeled instead of silently changing selection.
+- [x] Expanded history has a visible selected row and supports Up/Down, J/K,
+  Home/End, Return, and Space without stealing keys from text controls.
+- [x] Violation history distinguishes **New** from **Reviewed** and has a real
+  empty state plus an explicit storage-error state.
 
 ## Settings
 
 - [x] Settings use compact Speed, Width, Position, and Appearance submenus.
 - [x] What to Check uses local app storage as its only source of truth.
 - [x] No triggers file or file path remains in the UI or runtime configuration.
-- [x] Editor actions are horizontal Save/Cancel controls with no generic alert icon.
+- [x] Editor actions are horizontal Save/Cancel controls; Return inserts a
+  newline, Command-S saves, and unsaved dismissal requires a decision.
 - [x] Ticker speed offers Slow, Normal, and Fast and persists the choice.
 - [x] Width offers Narrow and Standard, supports drag resize, and persists.
 - [x] Position offers six Top/Bottom × Left/Center/Right presets.
-- [x] Ticker exposes unmistakable icon-only controls for all four corners.
-- [x] Each corner control moves both axes to the selected corner.
+- [x] Six window positions are available in the native Display Settings menu;
+  permanent corner arrows do not crowd the ticker.
 - [x] Top positions use the macOS visible frame below the menu bar.
 - [x] Ticker background uses the native color picker and persists opacity.
-- [x] First-run ticker background defaults to light Sticky-note yellow.
+- [x] Normal mode uses the semantic macOS window surface; first-run violation
+  mode uses a dynamic critical-red light/dark surface.
 - [x] System-background reset is available.
 - [x] Foreground text/icons automatically maintain light/dark contrast.
 
@@ -65,7 +72,9 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Provider icons expose an explicit provider accessibility label.
 - [x] Session, status, message position, history, and lifecycle controls have
   explicit accessibility names instead of relying on symbol pronunciation.
-- [x] Close and Quit use visible text, tooltips, accessibility names, shortcuts.
+- [x] Done, Hide, and Quit have unambiguous placement, labels, and shortcuts.
+- [x] New violations post a high-priority VoiceOver announcement with source
+  and reason.
 - [x] Source labels truncate safely and retain full text in a tooltip.
 - [x] Text remains selectable in the full-message reader.
 - [x] Controls reflow at narrow width instead of clipping.
@@ -85,10 +94,10 @@ running `/ui` inspection surface. A checked item is not merely planned.
 
 - [x] Minimize and Zoom: this is a transient HUD, not a document window; ticker
   and Close are its compact/minimized behaviors.
-- [x] Save, Open, Undo, and dirty-document warnings: no document is edited.
+- [x] Check-prompt edits support Undo and dirty-close confirmation.
 - [x] Destructive confirmation: Close preserves monitoring; Quit deletes no data.
-- [x] Standard traffic lights: replaced by explicit Close/Quit because the resting
-  HUD is intentionally borderless.
+- [x] Standard traffic lights: replaced by explicit Done/Hide because the
+  resting HUD is intentionally borderless; Quit remains in the menu bar.
 
 ## Automated gates
 

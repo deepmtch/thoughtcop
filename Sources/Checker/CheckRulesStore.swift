@@ -18,7 +18,9 @@ enum CheckRulesStore {
     static let suiteName = "com.thinkpeek.app"
     static let defaultsKey = "runtimeCheckRules"
     static let modeKey = "runtimeCheckInstructionMode"
-    static let defaultValue = "Claude is confused or waiting for user to do someting.\n"
+    // Flagging is opt-in. A hidden, product-authored heuristic must never be
+    // mistaken for the user's own policy.
+    static let defaultValue = ""
     static let localDefaults = UserDefaults(suiteName: suiteName)!
 
     static func loadRaw() -> String {
