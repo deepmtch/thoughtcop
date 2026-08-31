@@ -16,7 +16,6 @@ final class FullMessageView: NSVisualEffectView {
     private let exitControls = DetailExitControls(frame: .zero)
     var closeRequested: (() -> Void)?
     var controlsRequested: (() -> Void)?
-    var quitRequested: (() -> Void)?
 
     var source: String { sourceLabel.stringValue }
     var text: String { textView.string }
@@ -66,7 +65,6 @@ final class FullMessageView: NSVisualEffectView {
         addSubview(controlsButton)
 
         exitControls.closeRequested = { [weak self] in self?.closeRequested?() }
-        exitControls.quitRequested = { [weak self] in self?.quitRequested?() }
         addSubview(exitControls)
 
         textView.isEditable = false

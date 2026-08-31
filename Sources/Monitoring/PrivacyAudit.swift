@@ -30,7 +30,7 @@ func auditMetadata(in line: String) -> [[String: Any]] {
             if plaintextCount > 0 {
                 action = "reasoning_selected"
             } else if summaryCount > 0 {
-                action = "provider_summary_not_sent"
+                action = "provider_summary_displayed_locally"
             } else {
                 action = "encrypted_reasoning_not_sent"
             }

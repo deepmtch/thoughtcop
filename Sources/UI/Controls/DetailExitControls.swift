@@ -4,18 +4,15 @@ import AppKit
 
 final class DetailExitControls: NSStackView {
     private let closeButton: NSButton
-    private let quitButton: NSButton
     var closeRequested: (() -> Void)?
-    var quitRequested: (() -> Void)?
 
-    var buttonTitles: [String] { [closeButton.title, quitButton.title] }
+    var buttonTitles: [String] { [closeButton.title] }
     var accessibilityNames: [String] {
-        [closeButton.accessibilityLabel() ?? "", quitButton.accessibilityLabel() ?? ""]
+        [closeButton.accessibilityLabel() ?? ""]
     }
 
     override init(frame frameRect: NSRect) {
-        closeButton = NSButton(title: "Close", target: nil, action: nil)
-        quitButton = NSButton(title: "Quit", target: nil, action: nil)
+        closeButton = NSButton(title: "Hide Thinkpeek", target: nil, action: nil)
         super.init(frame: frameRect)
 
         orientation = .horizontal
@@ -27,8 +24,8 @@ final class DetailExitControls: NSStackView {
 
         closeButton.target = self
         closeButton.action = #selector(requestClose(_:))
-        closeButton.toolTip = "Close details and return to the ticker (Esc)"
-        closeButton.setAccessibilityLabel("Close details and return to ticker")
+        closeButton.toolTip = "Hide Thinkpeek — show it again from the menu bar"
+        closeButton.setAccessibilityLabel("Hide Thinkpeek")
         closeButton.keyEquivalent = "\u{1b}"
 
         closeButton.bezelStyle = .rounded
@@ -36,20 +33,9 @@ final class DetailExitControls: NSStackView {
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
         addArrangedSubview(closeButton)
 
-        quitButton.target = self
-        quitButton.action = #selector(requestQuit(_:))
-        quitButton.toolTip = "Quit Thinkpeek (Command-Q)"
-        quitButton.setAccessibilityLabel("Quit Thinkpeek")
-        quitButton.keyEquivalent = "q"
-        quitButton.keyEquivalentModifierMask = [.command]
-        quitButton.bezelStyle = .rounded
-        quitButton.controlSize = .small
-        quitButton.setContentHuggingPriority(.required, for: .horizontal)
-        addArrangedSubview(quitButton)
     }
 
     required init?(coder: NSCoder) { nil }
 
     @objc func requestClose(_ sender: Any?) { closeRequested?() }
-    @objc func requestQuit(_ sender: Any?) { quitRequested?() }
 }

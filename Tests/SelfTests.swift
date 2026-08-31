@@ -113,7 +113,9 @@ if CommandLine.arguments.contains("--claude-desktop-conversation-selftest") {
     while second == nil, Date() < deadline {
         RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    guard first?.isEmpty == true, second?.count == 1,
+    guard first?.count == 1, first?.first?.block.backfilled == true,
+          first?.first?.block.text == "Exact first paragraph.\n\nExact second paragraph.",
+          second?.count == 1,
           second?.first?.identifier == "conversation-1|assistant-live|0",
           second?.first?.block.text == "Exact newly arrived Claude Desktop thinking." else {
         FileHandle.standardError.write(
@@ -121,7 +123,7 @@ if CommandLine.arguments.contains("--claude-desktop-conversation-selftest") {
         exit(1)
     }
     print("claude desktop: exactThinking=true exactTitle=true " +
-          "messagesToolsSummariesEncryptedExcluded=true staleReplay=false live=true")
+          "messagesToolsSummariesEncryptedExcluded=true startupHistory=true live=true")
     exit(0)
 }
 
@@ -317,6 +319,7 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
     let claudeBlocks = blocks(in: claude)
     let openAIReasoning = openAIBlocks.filter { $0.kind == .thinking }
     let localOnlyReasoning = localOnlyBlocks.filter { $0.kind == .thinking }
+    let summaryReasoning = summaryBlocks.filter { $0.kind == .thinking }
     let claudeReasoning = claudeBlocks.filter { $0.kind == .thinking }
     guard openAIReasoning.count == 1,
           openAIReasoning[0].text ==
@@ -329,8 +332,11 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
           localOnlyReasoning[0].text == "Local-only OpenAI reasoning text.",
           localOnlyReasoning[0].evaluationRecord.content == localOnlyReasoning[0].text,
           localOnlyReasoning[0].externallyEvaluable,
-          summaryBlocks.allSatisfy({ $0.kind == .activity &&
-                                     !$0.externallyEvaluable }),
+          summaryReasoning.count == 1,
+          summaryReasoning[0].text == "**First readable summary**\n\n" +
+            "**Second readable summary**",
+          summaryReasoning[0].evaluationRecord.eventType == "reasoning_summary",
+          !summaryReasoning[0].externallyEvaluable,
           claudeReasoning.count == 1,
           claudeReasoning[0].text ==
             "Inspecting the complete Claude thinking text.\n\n" +
@@ -343,7 +349,7 @@ if CommandLine.arguments.contains("--provider-reasoning-selftest") {
         exit(1)
     }
     print("provider reasoning: openAITextComplete=true " +
-          "encryptedAndSummaryOnlyHidden=true claudeThinkingComplete=true " +
+          "summaryOnlyDisplayedLocally=true claudeThinkingComplete=true " +
           "plaintextReasoningExternallyEvaluable=true")
     exit(0)
 }
@@ -637,9 +643,12 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
         .contains(.boldFontMask)
     TickerBackgroundPreference.save(nil, defaults: defaults)
     guard initial.count == 4,
-          abs(initial[0] - 0.97) < 0.001,
-          abs(initial[1] - 0.96) < 0.001,
-          abs(initial[2] - 0.56) < 0.001,
+          ((abs(initial[0] - 0.992) < 0.002 &&
+            abs(initial[1] - 0.925) < 0.002 &&
+            abs(initial[2] - 0.918) < 0.002) ||
+           (abs(initial[0] - 0.227) < 0.002 &&
+            abs(initial[1] - 0.118) < 0.002 &&
+            abs(initial[2] - 0.118) < 0.002)),
           values.count == 4,
           abs(values[0] - 0.2) < 0.001,
           abs(values[1] - 0.4) < 0.001,
@@ -673,7 +682,7 @@ if CommandLine.arguments.contains("--message-view-selftest") {
     let shortHeight = message.preferredHeight(forWidth: 560)
     guard message.source == "Codex · Message test",
           message.text == "Complete rendered summary with inline code.",
-          message.lifecycleButtonTitles == ["Close", "Quit"],
+          message.lifecycleButtonTitles == ["Hide Thinkpeek"],
           message.tone == .normal,
           shortHeight == 118,
           !message.text.contains("**") else {
@@ -700,7 +709,7 @@ if CommandLine.arguments.contains("--message-view-selftest") {
             "message content-fit self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("message view: dedicated=true markdownRendered=true close=true quit=true " +
+    print("message view: dedicated=true markdownRendered=true hide=true menuQuit=true " +
           "errorTone=true contentFit=true")
     exit(0)
 }
@@ -766,16 +775,19 @@ if CommandLine.arguments.contains("--ticker-actions-selftest") {
     settingsMenu.install(on: actions.displaySettingsButton)
     var checkRules = false
     var controls = false
+    var hidden = false
     actions.checkRulesRequested = { checkRules = true }
     actions.controlsRequested = { controls = true }
+    actions.hideRequested = { hidden = true }
     actions.requestCheckRulesForTest()
     actions.requestControlsForTest()
+    actions.requestHideForTest()
     activity.begin(destination: "Groq · Test")
     guard actions.accessibilityNames == ["Edit check prompt", "Display settings",
-                                         "Open message navigation"],
+                                         "Open message navigation", "Hide Thinkpeek"],
           actions.displaySettingsButton.target != nil,
           actions.displaySettingsButton.action != nil,
-          checkRules, controls,
+          checkRules, controls, hidden,
           activity.isChecking, !activity.isHidden,
           activity.destination == "Groq · Test",
           activity.accessibilityLabel() == "Checking reasoning with Groq · Test" else {
@@ -788,7 +800,7 @@ if CommandLine.arguments.contains("--ticker-actions-selftest") {
             .data(using: .utf8)!)
         exit(1)
     }
-    print("ticker actions: checkRules=oneClick settings=oneClick controls=oneClick " +
+    print("ticker actions: checkRules=oneClick settings=oneClick controls=oneClick hide=oneClick " +
           "checkerLight=true accessible=true")
     exit(0)
 }
@@ -1033,14 +1045,10 @@ if CommandLine.arguments.contains("--escape-selftest") {
 if CommandLine.arguments.contains("--exit-controls-selftest") {
     let controls = DetailExitControls(frame: .zero)
     var closed = false
-    var quit = false
     controls.closeRequested = { closed = true }
-    controls.quitRequested = { quit = true }
     controls.requestClose(nil)
-    controls.requestQuit(nil)
-    guard controls.buttonTitles == ["Close", "Quit"],
-          controls.accessibilityNames == ["Close details and return to ticker",
-                                          "Quit Thinkpeek"], closed, quit else {
+    guard controls.buttonTitles == ["Hide Thinkpeek"],
+          controls.accessibilityNames == ["Hide Thinkpeek"], closed else {
         FileHandle.standardError.write(
             "exit controls self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -1070,7 +1078,7 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
     try? FileManager.default.removeItem(atPath: path)
     guard log.components(separatedBy: "\"action\":\"app_started\"").count - 1 == 2,
           log.contains("tool_record_discarded"),
-          log.contains("provider_summary_not_sent"),
+          log.contains("provider_summary_displayed_locally"),
           log.contains("reasoning_selected"),
           log.contains("external_reasoning_request"),
           log.contains("external_reasoning_result"),
@@ -1092,19 +1100,54 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--violation-store-selftest") {
+    let path = NSTemporaryDirectory() + "/thinkpeek-violations-\(UUID().uuidString).json"
+    let first = ViolationRecord(
+        timestamp: "2026-08-31T12:00:00Z", source: "Claude · Alpha",
+        content: "Reasoning that matched the check prompt", reason: "Asked user to wait",
+        evidence: "wait for you", provider: "Dummy · deterministic",
+        latencyMs: 42, checkPrompt: "Claude is waiting for the user")
+    let second = ViolationRecord(
+        timestamp: "2026-08-31T12:01:00Z", source: "Codex · Beta",
+        content: "Another matching reasoning record", reason: "Confused",
+        evidence: "I am unsure", provider: "Dummy · deterministic",
+        latencyMs: 53, checkPrompt: "The agent is confused")
+    let store = ViolationStore(path: path)
+    store.append(first)
+    store.append(second)
+    let reloaded = ViolationStore(path: path).load()
+    let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+    let permissions = (attributes?[.posixPermissions] as? NSNumber)?.intValue
+    try? FileManager.default.removeItem(atPath: path)
+    guard reloaded == [first, second], permissions == 0o600,
+          reloaded[0].checkPrompt == "Claude is waiting for the user" else {
+        FileHandle.standardError.write(
+            "violation store self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("violations: persisted=true ordered=true promptSnapshot=true permissions=0600")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--ui-command-api-selftest") {
     let logURL = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("thinkpeek-ui-api-\(UUID().uuidString).jsonl")
     let api = UIStateServer(logURL: logURL)
     var handled: [String] = []
     api.actionHandler = { handled.append($0.name) }
+    api.perform(.first, origin: .appKit)
     api.perform(.showControls, origin: .appKit)
+    api.perform(.hideHUD, origin: .http)
+    api.perform(.showViolations, origin: .http)
+    api.perform(.historyFilter("violations"), origin: .http)
     api.perform(.next, origin: .http)
     api.perform(.saveCheckRules(text: "SECRET_RULE_CONTENT", mode: "whole-text"),
                 origin: .appKit)
     let log = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
     try? FileManager.default.removeItem(at: logURL)
-    guard handled == ["controls", "next", "save-check-rules"],
+    guard handled == ["first", "controls", "hide", "show-violations",
+                      "filter/violations", "next",
+                      "save-check-rules"],
           log.contains("\"origin\":\"appKit\""),
           log.contains("\"origin\":\"http\""),
           !log.contains("SECRET_RULE_CONTENT") else {
@@ -1113,6 +1156,38 @@ if CommandLine.arguments.contains("--ui-command-api-selftest") {
         exit(1)
     }
     print("UI command API: appKit=true http=true sameHandler=true contentFreeLog=true")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--keyboard-navigation-selftest") {
+    let panel = ConstrainedPanel(contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
+                                 styleMask: [.borderless], backing: .buffered,
+                                 defer: false)
+    var actions: [String] = []
+    panel.previousRequested = { actions.append("previous") }
+    panel.nextRequested = { actions.append("next") }
+    panel.firstRequested = { actions.append("first") }
+    panel.latestRequested = { actions.append("latest") }
+    panel.openMessageRequested = { actions.append("open") }
+    panel.violationsRequested = { actions.append("violations") }
+    func press(_ keyCode: UInt16, _ characters: String = "",
+               _ modifiers: NSEvent.ModifierFlags = []) {
+        let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: modifiers,
+            timestamp: 0, windowNumber: 0, context: nil,
+            characters: characters, charactersIgnoringModifiers: characters,
+            isARepeat: false, keyCode: keyCode)!
+        _ = panel.performKeyEquivalent(with: event)
+    }
+    press(123); press(125); press(0, "k"); press(0, "j")
+    press(115); press(119); press(36, "\r"); press(9, "v", [.command, .shift])
+    guard actions == ["previous", "next", "previous", "next", "first",
+                      "latest", "open", "violations"] else {
+        FileHandle.standardError.write(
+            "keyboard navigation self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("keyboard navigation: arrows=true jk=true homeEnd=true open=true violations=true")
     exit(0)
 }
 }

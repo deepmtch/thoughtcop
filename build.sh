@@ -10,6 +10,7 @@ swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
     -module-cache-path "$module_cache" -o "$build_dir/thinkpeek" \
     Sources/App/Config.swift \
     Sources/Checker/CheckRulesStore.swift \
+    Sources/Checker/ViolationStore.swift \
     Sources/Monitoring/Transcript.swift \
     Sources/Monitoring/ClaudeCloudActivity.swift \
     Sources/Monitoring/ClaudeDesktopConversation.swift \

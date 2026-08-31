@@ -70,12 +70,13 @@ Codex tasks write rollout events to:
 ```
 
 Codex reasoning items use plaintext `content[].reasoning_text` when the provider
-supplies it. Otherwise Thinkpeek shows that original reasoning is unavailable;
-provider `summary[]` and duplicate `event_msg/agent_reasoning` entries are ignored. Full plaintext is
-both displayed locally and sent verbatim to the configured external checker.
-Provider summaries, tool calls/results, messages, and encrypted-only records are
-not sent. Task starts are progress only and never replace readable content or
-enter card history.
+supplies it. When Codex supplies only a readable `summary[]`, ThinkPeek displays
+the complete summary locally; duplicate `event_msg/agent_reasoning` entries are
+ignored. Plaintext reasoning is displayed locally and sent verbatim to the
+configured external checker. Provider summaries are local-display-only and are
+never sent. Tool calls/results, messages, and encrypted-only records are not
+sent. Task starts are progress only and never replace readable content or enter
+card history.
 Encrypted-only records are hidden by default. Task names come from
 `~/.codex/session_index.jsonl`. Auto mode follows both Claude and Codex, and the
 picker labels every source explicitly.
@@ -125,7 +126,7 @@ The settings menu's **Alarm Color…** item opens the native macOS color picker.
 The ticker remains white during normal operation and uses the selected color only
 for an actual alert. Custom colors and opacity are remembered, text/icons
 automatically switch contrast, and **Use Default Alarm Color** restores the
-light Sticky-note yellow warning color.
+critical-red light/dark warning surface.
 A single click opens a dedicated full-message reader; **Done** or a click outside
 the reader returns to the ticker. The visible controls button or a deliberate double-click opens the
 separate navigation/settings view. The **↤** control returns directly to the
@@ -149,12 +150,17 @@ dedicated reader, while **Show all** displays the complete history.
 action; Escape returns directly to the ticker. Compact and full-feed widths are
 hard-capped at 560 and 700 points, so
 long reasoning wraps and scrolls vertically instead of stretching the window.
+The expanded header uses a native **All | Violations N** segmented filter.
+Keyboard navigation follows standard list/carousel conventions: Left, Up, or K
+selects the previous message; Right, Down, or J selects the next; Home and End
+jump to the first and latest messages; Return or Space opens the selected
+message; Escape returns to the ticker; and Command-Shift-V opens violations.
 
 Auto mode follows every active session and nested agent. Use the session picker
 to pin one session. Cards show the local time, source session, and original
 readable reasoning. Set `THINKPEEK_HISTORY_COUNT` in `.env` to an integer, `0`,
-or `all`. When a provider record has no plaintext reasoning, Thinkpeek presents
-an explicit unavailable state instead of substituting its summary text.
+or `all`. When a provider record contains neither plaintext reasoning nor a
+readable summary, Thinkpeek presents an explicit unavailable state.
 Repeated identical records from the same source are presented once even when
 the transcript records them at multiple timestamps.
 
@@ -180,6 +186,22 @@ The **What to Check…** editor has two explicit modes:
 
 No comments, categories, keywords, or trigger meanings are inferred. Edits take
 effect on the next readable reasoning summary without restarting Thinkpeek.
+
+### Violation history
+
+Every evaluator match is appended to the local 0600-permission store at
+`~/Library/Application Support/Thinkpeek/violations.json`. A record preserves
+the source provider/session, time, matched reason, quoted evidence, original
+reasoning, evaluator provider, latency, and the exact check prompt in force.
+The latest violation immediately takes priority over ordinary working activity,
+unhides the ticker if necessary, sounds the alert, and uses a red warning surface
+with a visible **VIOLATION** label rather than color alone.
+
+The menu-bar shield carries the recorded count. **Show Violations · N recorded**
+opens a dedicated violation-only list even after the ticker has been hidden or
+the app has restarted. The same state is available through `/ui`, and
+`/violations` opens the list through the local command API. `/filter/all` and
+`/filter/violations` exercise the same segmented filter without clicking the UI.
 
 The settings menu's **What to Check…** action edits that local value and mode directly.
 There is no file-backed configuration. The next reasoning block uses the saved
@@ -264,6 +286,16 @@ Run the complete suite with:
 ```bash
 Scripts/test.sh
 ```
+
+Run the opt-in real Claude CLI → transcript → ThinkPeek API latency probe with:
+
+```bash
+python3 Scripts/test_live_claude_api.py
+```
+
+It invokes one tool-free authenticated Claude CLI turn with a small budget cap, polls the
+local ThinkPeek API without clicking the UI, and fails unless the matching
+Claude session reaches the ticker as `Working…` before the CLI turn finishes.
 
 ```bash
 ./.build/thinkpeek --selftest

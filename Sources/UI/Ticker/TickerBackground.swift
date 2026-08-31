@@ -5,8 +5,16 @@ import AppKit
 enum TickerBackgroundPreference {
     static let defaultsKey = "tickerBackgroundRGBA"
     static let modeKey = "tickerBackgroundMode"
-    static let stickyYellow = NSColor(srgbRed: 0.97, green: 0.96,
-                                      blue: 0.56, alpha: 1)
+    // Kimi K3's review recommended a calm critical-red surface instead of the
+    // old monochrome/yellow treatment. Keep the old symbol name as a source
+    // compatibility alias for existing preference code.
+    static let defaultViolationBackground = NSColor(name: nil) { appearance in
+        let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return dark
+            ? NSColor(srgbRed: 0.227, green: 0.118, blue: 0.118, alpha: 1) // #3A1E1E
+            : NSColor(srgbRed: 0.992, green: 0.925, blue: 0.918, alpha: 1) // #FDECEA
+    }
+    static let stickyYellow = defaultViolationBackground
 
     static func components(of color: NSColor) -> [CGFloat]? {
         guard let rgb = color.usingColorSpace(.sRGB) else { return nil }

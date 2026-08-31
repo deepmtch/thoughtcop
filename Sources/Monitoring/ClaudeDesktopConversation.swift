@@ -165,11 +165,12 @@ final class ClaudeDesktopConversationMonitor {
             if inspectedFiles[path] != stamp { changed.append((path, stamp)) }
         }
 
-        // Persistent browser cache must never be replayed as current activity.
-        // Decode the structured records once on the utility queue so their
-        // stable content identifiers form an exact baseline; no timestamp,
-        // keyword, or content heuristic decides what is old.
+        // A desktop conversation can already be actively thinking when
+        // ThinkPeek launches. Surface the configured history count as local
+        // history, then retain exact identifiers so later cache writes appear
+        // once only. No content or timestamp inference decides eligibility.
         if !initialized {
+            var initialEvents: [ClaudeDesktopConversationEvent] = []
             for item in changed {
                 inspectedFiles[item.path] = item.stamp
                 guard item.stamp.size > 0,
@@ -178,10 +179,26 @@ final class ClaudeDesktopConversationMonitor {
                 else { continue }
                 for event in claudeDesktopConversationEvents(inCacheData: data) {
                     emittedIdentifiers.insert(event.identifier)
+                    initialEvents.append(event)
                 }
             }
             initialized = true
-            return []
+            guard BACKFILL > 0 else { return [] }
+            let retained = BACKFILL == Int.max ? initialEvents : Array(
+                initialEvents.sorted { $0.block.ts < $1.block.ts }.suffix(BACKFILL))
+            return retained.map { event in
+                ClaudeDesktopConversationEvent(
+                    identifier: event.identifier, source: event.source,
+                    block: Block(ts: event.block.ts, text: event.block.text,
+                                 sealed: event.block.sealed,
+                                 signatureChars: event.block.signatureChars,
+                                 kind: event.block.kind,
+                                 evaluationText: event.block.evaluationText,
+                                 evaluationEventType: event.block.evaluationEventType,
+                                 externallyEvaluable: event.block.externallyEvaluable,
+                                 activityPhase: event.block.activityPhase,
+                                 backfilled: true))
+            }
         }
 
         var result: [ClaudeDesktopConversationEvent] = []

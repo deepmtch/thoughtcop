@@ -176,10 +176,27 @@ func blocks(in line: String) -> [Block] {
                           evaluationEventType: "reasoning_text",
                           externallyEvaluable: true)]
         }
-        // Encrypted reasoning and provider summaries are audit metadata only.
-        // They contain no original plaintext reasoning and must never displace
-        // a useful ticker item or become navigable UI history.
-        if encryptedChars > 0 || payload["summary"] != nil {
+        let summaryTexts: [String] =
+            (payload["summary"] as? [[String: Any]] ?? []).compactMap { item -> String? in
+            guard item["type"] as? String == "summary_text",
+                  let text = item["text"] as? String,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return nil }
+            return text
+        }
+        if !summaryTexts.isEmpty {
+            let summaryText = summaryTexts.joined(separator: "\n\n")
+            // Codex commonly persists only this readable provider summary. It
+            // is useful local status, but is not original reasoning and must
+            // never enter the external checker.
+            return [activityBlock(ts: ts, phase: .updated),
+                    Block(ts: ts, text: summaryText,
+                          sealed: false, signatureChars: encryptedChars,
+                          kind: .thinking, evaluationText: summaryText,
+                          evaluationEventType: "reasoning_summary",
+                          externallyEvaluable: false)]
+        }
+        if encryptedChars > 0 {
             return [activityBlock(ts: ts, phase: .updated)]
         }
         return [activityBlock(ts: ts, phase: .updated)]

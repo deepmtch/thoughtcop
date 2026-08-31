@@ -203,6 +203,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
     ]) + "\n")
 
     audit_path = root / "privacy-audit.jsonl"
+    violations_path = root / "violations.json"
     ui_log_path = root / "ui-api.jsonl"
     claude_cache = root / "claude-cache"
     claude_cache.mkdir()
@@ -221,6 +222,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         "THINKPEEK_CLAUDE_CACHE": str(claude_cache),
         "THINKPEEK_CLAUDE_DESKTOP_CACHE": str(claude_cache),
         "THINKPEEK_PRIVACY_AUDIT_PATH": str(audit_path),
+        "THINKPEEK_VIOLATIONS_PATH": str(violations_path),
         "THINKPEEK_UI_API_LOG": str(ui_log_path),
         "THINKPEEK_HISTORY_COUNT": "0",
     })
@@ -246,8 +248,19 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             os.fsync(stream.fileno())
         cloud_active = wait_for(lambda state:
             state.get("activeSources") == ["Claude · cloud chat 456789"])
-        assert "Claude" in cloud_active["peekSource"], cloud_active
-        assert "working" in cloud_active["peekSource"], cloud_active
+        assert cloud_active["peekSource"] == "Claude · cloud chat 456789", cloud_active
+        assert cloud_active["peekText"] == "Working…", cloud_active
+
+        get_json(API_BASE, "/message")
+        live_reader = wait_for(lambda state: state.get("messageMode") is True)
+        assert live_reader["messageReaderSource"] == \
+            "Claude · cloud chat 456789", live_reader
+        assert live_reader["messageReaderText"].startswith("Working…"), live_reader
+        get_json(API_BASE, "/close")
+        collapsed = wait_for(lambda state:
+            state.get("peekMode") is True and state.get("windowVisible") is True)
+        assert collapsed["peekSource"] == "Claude · cloud chat 456789", collapsed
+        assert collapsed["peekText"] == "Working…", collapsed
 
         with cloud_stream.open("a", encoding="utf-8") as stream:
             stream.write('data: {"event_type":"stream_event","payload":'
@@ -264,7 +277,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             state.get("waitingSources") == ["Claude · cloud chat 456789"])
         assert cloud_waiting["operationPending"] is False, cloud_waiting
         assert cloud_waiting["operationWaiting"] is True, cloud_waiting
-        assert "waiting for you" in cloud_waiting["peekSource"], cloud_waiting
+        assert cloud_waiting["peekSource"] == "Claude · cloud chat 456789", cloud_waiting
+        assert cloud_waiting["peekText"] == "Waiting for you…", cloud_waiting
 
         with cloud_stream.open("a", encoding="utf-8") as stream:
             stream.write('data: {"event_type":"system","payload":'
@@ -288,7 +302,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         both_active = wait_for(lambda state:
             len(state.get("activeSources", [])) == 2)
         assert both_active["operationPending"] is True, both_active
-        assert "Claude + Codex" in both_active["peekSource"], both_active
+        assert both_active["peekSource"] == "Codex · Codex Alpha", both_active
+        assert both_active["peekText"] == "Working…", both_active
 
         append(claude_path, {
             "timestamp": record_timestamp(100),
@@ -309,7 +324,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "timestamp": record_timestamp(200),
             "type": "response_item",
             "payload": {"type": "reasoning", "summary": [{
-                "type": "summary_text", "text": "ENCRYPTED_PLACEHOLDER_MUST_NOT_RENDER"
+                "type": "summary_text", "text": "CODEX_LOCAL_SUMMARY"
             }], "encrypted_content": "sealed"},
         })
         append(codex_path, {
@@ -338,11 +353,42 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "CODEX_CLEAN: I have a clear deterministic plan.",
         ]), sent
         assert all("TOOL_SECRET" not in text for text in sent), sent
-        assert all("ENCRYPTED_PLACEHOLDER" not in text for text in sent), sent
-        assert finished["navigableCount"] == 2, finished
-        assert "CODEX_CLEAN" in finished["peekText"], finished
+        assert all("CODEX_LOCAL_SUMMARY" not in text for text in sent), sent
+        assert finished["navigableCount"] == 3, finished
+        assert finished["violationCount"] == 1, finished
+        assert finished["currentViolationVisible"] is True, finished
+        assert finished["peekSource"] == "Thinkpeek · Warning", finished
+        assert "Dummy detected explicit Claude uncertainty" in finished["peekText"], finished
         assert "unavailable" not in finished["peekText"].lower(), finished
-        assert finished["tickerAlarmActive"] is False, finished
+        assert finished["tickerAlarmActive"] is True, finished
+        assert finished["windowVisible"] is True, finished
+        assert len(finished["violations"]) == 1, finished
+        assert finished["violations"][0]["checkPrompt"], finished
+
+        get_json(API_BASE, "/hide")
+        hidden_alert = wait_for(lambda state: state.get("windowVisible") is False)
+        assert hidden_alert["violationCount"] == 1, hidden_alert
+        get_json(API_BASE, "/violations")
+        violation_list = wait_for(lambda state:
+            state.get("uiStyle") == "violations-list" and
+            state.get("windowVisible") is True)
+        assert violation_list["violationsVisible"] is True, violation_list
+        assert violation_list["visibleCardCount"] == 1, violation_list
+        assert violation_list["historyFilter"] == "violations", violation_list
+        get_json(API_BASE, "/filter/all")
+        all_list = wait_for(lambda state:
+            state.get("historyFilter") == "all" and
+            state.get("uiStyle") == "expanded-card-feed")
+        assert all_list["visibleCardCount"] == 3, all_list
+        get_json(API_BASE, "/filter/violations")
+        filtered_again = wait_for(lambda state:
+            state.get("historyFilter") == "violations")
+        assert filtered_again["visibleCardCount"] == 1, filtered_again
+        get_json(API_BASE, "/close")
+        resumed_after_alert = wait_for(lambda state:
+            state.get("uiStyle") == "single-line-ticker")
+        assert "CODEX_CLEAN" in resumed_after_alert["peekText"], resumed_after_alert
+        assert resumed_after_alert["currentViolationVisible"] is False, resumed_after_alert
 
         append(claude_path, {
             "timestamp": record_timestamp(400),
@@ -358,13 +404,19 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert inactive["activeSources"] == [], inactive
 
         get_json(API_BASE, "/previous")
+        local_summary = wait_for(lambda state: state.get("currentIndex") == 1)
+        assert local_summary["peekText"] == "CODEX_LOCAL_SUMMARY", local_summary
+        assert local_summary["peekSource"] == "Codex · Codex Alpha", local_summary
+        get_json(API_BASE, "/previous")
         previous = wait_for(lambda state: state.get("currentIndex") == 0)
         assert previous["tickerAlarmActive"] is True, previous
         assert previous["peekSource"] == "Thinkpeek · Warning", previous
         assert "Dummy detected explicit Claude uncertainty" in previous["peekText"], previous
 
         get_json(API_BASE, "/next")
-        latest = wait_for(lambda state: state.get("currentIndex") == 1)
+        wait_for(lambda state: state.get("currentIndex") == 1)
+        get_json(API_BASE, "/next")
+        latest = wait_for(lambda state: state.get("currentIndex") == 2)
         assert "CODEX_CLEAN" in latest["peekText"], latest
         assert latest["peekSource"] == "Codex · Codex Alpha", latest
         assert latest["tickerAlarmActive"] is False, latest
@@ -372,7 +424,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         # Leave the carousel on an older record, then start a second Claude
         # conversation. The passive ticker must still switch to the new record.
         get_json(API_BASE, "/previous")
-        wait_for(lambda state: state.get("currentIndex") == 0)
+        wait_for(lambda state: state.get("currentIndex") == 1)
         append(claude_second, {
             "timestamp": record_timestamp(1_000),
             "type": "assistant",
@@ -385,7 +437,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         claude_beta = wait_for(lambda state:
             "CLAUDE_SECOND_CLEAN" in state.get("peekText", "") and
             state.get("checkerRequestInFlight") is False)
-        assert claude_beta["currentIndex"] == 2, claude_beta
+        assert claude_beta["currentIndex"] == 3, claude_beta
         assert claude_beta["peekSource"] == "Claude · Claude Beta", claude_beta
 
         # Opening a message is the one explicit freeze state. A concurrent
@@ -403,7 +455,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             }], "encrypted_content": "sealed"},
         })
         frozen = wait_for(lambda state:
-            state.get("navigableCount") == 4 and
+            state.get("navigableCount") == 5 and
             state.get("checkerRequestInFlight") is False)
         assert frozen["messageReaderFrozen"] is True, frozen
         assert frozen["currentIndex"] == frozen_index, frozen
@@ -412,7 +464,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         resumed = wait_for(lambda state:
             state.get("uiStyle") == "single-line-ticker" and
             "CODEX_SECOND_CLEAN" in state.get("peekText", ""))
-        assert resumed["currentIndex"] == 3, resumed
+        assert resumed["currentIndex"] == 4, resumed
         assert resumed["peekSource"] == "Codex · Codex Beta", resumed
 
         # Revisit the first Claude session to prove interleaving is keyed by
@@ -429,7 +481,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         alpha_return = wait_for(lambda state:
             "CLAUDE_ALPHA_RETURN_CLEAN" in state.get("peekText", "") and
             state.get("checkerRequestInFlight") is False)
-        assert alpha_return["currentIndex"] == 4, alpha_return
+        assert alpha_return["currentIndex"] == 5, alpha_return
         assert alpha_return["peekSource"] == "Claude · Claude Alpha", alpha_return
 
         # Claude Desktop stores normal chat thinking in a structured,
@@ -457,7 +509,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         desktop = wait_for(lambda state:
             "CLAUDE_DESKTOP_CLEAN" in state.get("peekText", "") and
             state.get("checkerRequestInFlight") is False)
-        assert desktop["currentIndex"] == 5, desktop
+        assert desktop["currentIndex"] == 6, desktop
         assert desktop["peekSource"] == "Claude · Claude Desktop Exact Title", desktop
 
         audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
@@ -493,7 +545,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
                                "Claude Desktop Exact Title"],
             "claudeDesktopCacheObserved": True,
             "encryptedAndToolsExcluded": True,
-            "placeholderNeverRendered": True,
+            "localSummaryDisplayedButNotSent": True,
             "tickerNavigation": "alert-to-clean",
             "checkerLightObserved": True,
             "claudeCloudLifecycleObserved": True,

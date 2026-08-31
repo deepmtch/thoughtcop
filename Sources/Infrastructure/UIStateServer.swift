@@ -10,13 +10,18 @@ enum UICommandOrigin: String {
 }
 
 enum UICommand {
+    case first
     case previous
     case next
     case latest
     case showHistory
+    case showViolations
+    case historyFilter(String)
     case restartTicker
     case showMessage
     case showControls
+    case showHUD
+    case hideHUD
     case close
     case quit
     case editCheckRules
@@ -31,13 +36,18 @@ enum UICommand {
 
     var name: String {
         switch self {
+        case .first: return "first"
         case .previous: return "previous"
         case .next: return "next"
         case .latest: return "latest"
         case .showHistory: return "show-history"
+        case .showViolations: return "show-violations"
+        case .historyFilter(let value): return "filter/\(value)"
         case .restartTicker: return "restart-ticker"
         case .showMessage: return "message"
         case .showControls: return "controls"
+        case .showHUD: return "show"
+        case .hideHUD: return "hide"
         case .close: return "close"
         case .quit: return "quit"
         case .editCheckRules: return "check-rules"
@@ -170,14 +180,20 @@ final class UIStateServer {
 
     private func command(for path: String) -> UICommand? {
         switch path {
+        case "/first": return .first
         case "/previous": return .previous
         case "/next": return .next
         case "/latest": return .latest
         case "/toggle-expanded": return .showHistory
+        case "/violations": return .showViolations
+        case "/filter/all": return .historyFilter("all")
+        case "/filter/violations": return .historyFilter("violations")
         case "/restart-ticker": return .restartTicker
         case "/message": return .showMessage
         case "/controls", "/reveal": return .showControls
-        case "/close", "/hide": return .close
+        case "/show": return .showHUD
+        case "/close": return .close
+        case "/hide": return .hideHUD
         case "/quit": return .quit
         case "/check-rules": return .editCheckRules
         case "/corner/top-left": return .corner("top-left")

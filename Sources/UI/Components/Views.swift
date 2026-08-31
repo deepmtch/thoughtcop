@@ -66,6 +66,12 @@ final class IntrinsicTextView: NSTextView {
 
 final class ConstrainedPanel: NSPanel {
     var escapeRequested: (() -> Void)?
+    var previousRequested: (() -> Void)?
+    var nextRequested: (() -> Void)?
+    var firstRequested: (() -> Void)?
+    var latestRequested: (() -> Void)?
+    var openMessageRequested: (() -> Void)?
+    var violationsRequested: (() -> Void)?
     override var canBecomeKey: Bool { true }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -73,6 +79,26 @@ final class ConstrainedPanel: NSPanel {
             escapeRequested?()
             return true
         }
+        guard event.type == .keyDown else { return super.performKeyEquivalent(with: event) }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let characters = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        if flags.contains([.command, .shift]), characters == "v" {
+            violationsRequested?(); return true
+        }
+        guard !flags.contains(.command), !flags.contains(.control),
+              !flags.contains(.option) else {
+            return super.performKeyEquivalent(with: event)
+        }
+        switch event.keyCode {
+        case 123, 126: previousRequested?(); return true
+        case 124, 125: nextRequested?(); return true
+        case 115: firstRequested?(); return true
+        case 119: latestRequested?(); return true
+        case 36, 49: openMessageRequested?(); return true
+        default: break
+        }
+        if characters == "k" { previousRequested?(); return true }
+        if characters == "j" { nextRequested?(); return true }
         return super.performKeyEquivalent(with: event)
     }
 
@@ -203,6 +229,9 @@ final class EventCard: NSView {
     private let footer = NSTextField(labelWithString: "")
     private let body = IntrinsicTextView(frame: .zero)
     private let stack = NSStackView()
+    private let violationBadge = NSTextField(labelWithString: "VIOLATION")
+    private let violationAccent = NSView(frame: .zero)
+    private let violationGradient = CAGradientLayer()
 
     init(source: String, time: String, event: UIEvent) {
         super.init(frame: .zero)
@@ -227,6 +256,18 @@ final class EventCard: NSView {
         timeLabel.textColor = .tertiaryLabelColor
         timeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
+        violationBadge.font = .systemFont(ofSize: 9, weight: .bold)
+        violationBadge.textColor = .white
+        violationBadge.alignment = .center
+        violationBadge.wantsLayer = true
+        violationBadge.layer?.backgroundColor = NSColor.systemRed.cgColor
+        violationBadge.layer?.cornerRadius = 5
+        violationBadge.isHidden = true
+        violationBadge.translatesAutoresizingMaskIntoConstraints = false
+        violationBadge.widthAnchor.constraint(equalToConstant: 70).isActive = true
+        violationBadge.heightAnchor.constraint(equalToConstant: 20).isActive = true
+
+        header.addArrangedSubview(violationBadge)
         header.addArrangedSubview(sourceLabel)
         header.addArrangedSubview(NSView())
         header.addArrangedSubview(timeLabel)
@@ -251,7 +292,8 @@ final class EventCard: NSView {
         footer.font = .systemFont(ofSize: 11, weight: .medium)
         footer.textColor = .secondaryLabelColor
         footer.isHidden = true
-        footer.lineBreakMode = .byTruncatingMiddle
+        footer.lineBreakMode = .byWordWrapping
+        footer.maximumNumberOfLines = 0
         footer.preferredMaxLayoutWidth = 500
         footer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         footer.setContentCompressionResistancePriority(.required, for: .vertical)
@@ -266,6 +308,11 @@ final class EventCard: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         addSubview(stack)
+        violationAccent.translatesAutoresizingMaskIntoConstraints = false
+        violationAccent.wantsLayer = true
+        violationAccent.layer?.backgroundColor = NSColor.systemRed.cgColor
+        violationAccent.isHidden = true
+        addSubview(violationAccent, positioned: .above, relativeTo: nil)
         setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         setContentHuggingPriority(.required, for: .vertical)
         setContentCompressionResistancePriority(.required, for: .vertical)
@@ -278,6 +325,10 @@ final class EventCard: NSView {
             header.widthAnchor.constraint(equalTo: stack.widthAnchor),
             body.widthAnchor.constraint(equalTo: stack.widthAnchor),
             footer.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            violationAccent.leadingAnchor.constraint(equalTo: leadingAnchor),
+            violationAccent.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            violationAccent.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+            violationAccent.widthAnchor.constraint(equalToConstant: 5),
         ])
 
         switch event.kind {
@@ -296,6 +347,11 @@ final class EventCard: NSView {
 
     required init?(coder: NSCoder) { nil }
 
+    override func layout() {
+        super.layout()
+        violationGradient.frame = bounds
+    }
+
     func setFooter(_ text: String, color: NSColor = .secondaryLabelColor) {
         footer.stringValue = text
         footer.textColor = color
@@ -313,9 +369,28 @@ final class EventCard: NSView {
     var displayedText: String { body.string }
 
     func setAlert(_ text: String) {
-        layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.10).cgColor
-        layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.45).cgColor
-        setFooter(text, color: .systemOrange)
+        violationBadge.isHidden = false
+        violationAccent.isHidden = false
+        violationGradient.colors = [
+            NSColor.systemRed.withAlphaComponent(0.16).cgColor,
+            NSColor.systemOrange.withAlphaComponent(0.09).cgColor,
+            NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor,
+        ]
+        violationGradient.locations = [0, 0.42, 1]
+        violationGradient.startPoint = CGPoint(x: 0, y: 0)
+        violationGradient.endPoint = CGPoint(x: 1, y: 1)
+        violationGradient.cornerRadius = 12
+        if violationGradient.superlayer == nil {
+            layer?.insertSublayer(violationGradient, at: 0)
+        }
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.78).cgColor
+        layer?.borderWidth = 2
+        layer?.shadowColor = NSColor.systemRed.cgColor
+        layer?.shadowOpacity = 0.16
+        layer?.shadowRadius = 10
+        layer?.shadowOffset = .zero
+        setFooter(text, color: .systemRed)
     }
 
     func setError(_ text: String) {

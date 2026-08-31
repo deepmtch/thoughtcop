@@ -34,7 +34,9 @@ for test in \
     --compact-width-selftest \
     --interaction-selftest \
     --privacy-audit-selftest \
-    --ui-command-api-selftest
+    --violation-store-selftest \
+    --ui-command-api-selftest \
+    --keyboard-navigation-selftest
 do
     ./.build/thinkpeek "$test"
 done

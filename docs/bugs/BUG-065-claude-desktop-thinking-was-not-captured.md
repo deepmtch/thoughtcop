@@ -38,8 +38,9 @@ the ticker to show that Desktop thinking, regardless of polling frequency.
 - Send that plaintext thinking verbatim through the existing checker boundary.
 - Do not emit user/assistant messages, tools, tool results, summaries, or
   empty/encrypted-only records.
-- Build an exact content-identifier baseline from persistent cache records so
-  restarting Thinkpeek does not replay old thinking as new activity.
+- On startup, show the configured number of readable Desktop thinking records
+  as local history, then build an exact content-identifier baseline so cached
+  records are not re-emitted as new activity.
 
 No keyword, OCR, title, timestamp, or semantic heuristic is used to decide what
 counts as reasoning.
@@ -47,7 +48,7 @@ counts as reasoning.
 ## Verification
 
 `--claude-desktop-conversation-selftest` verifies exact multiline preservation,
-the exact title, exclusions, no stale replay, and one-time live delivery.
+ the exact title, exclusions, startup history, and one-time live delivery.
 
 `--inspect-claude-desktop-cache` was run against the cache file from the report.
 It recovered seven structured thinking records under the correct title,
