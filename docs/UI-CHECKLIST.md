@@ -6,7 +6,8 @@ running `/ui` inspection surface. A checked item is not merely planned.
 
 ## Window lifecycle and escape routes
 
-- [x] One-line ticker is the stable resting state (460 × 70 points).
+- [x] One-line ticker is the stable resting state (510 × 70 points), wide
+  enough to keep every primary action inside the visible panel.
 - [x] Full-message reader, controls, and history have a visible **Done** action
   that returns to the ticker.
 - [x] The ticker has a direct **Hide** action; **Quit Thinkpeek** is always in the

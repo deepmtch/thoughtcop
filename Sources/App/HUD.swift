@@ -116,7 +116,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var peekMode = true
     private var messageMode = false
     private var messageReaderSnapshot: MessageReaderSnapshot?
-    private let peekWidth: CGFloat = 460
+    // Match the stable AppKit content surface. A 460-point frame clipped the
+    // final 50 points of the toolbar, including the Hide button.
+    private let peekWidth: CGFloat = 510
     private let peekHeight: CGFloat = 70
     private var compactWidth = CompactWindowSizing.savedWidth()
     private var expandedHeight: CGFloat = 620

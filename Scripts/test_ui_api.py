@@ -98,6 +98,11 @@ time.sleep(0.15)
 closed = state()
 assert closed["uiStyle"] == "single-line-ticker"
 assert closed["tickerSettingsControlVisible"] is True
+assert closed["windowWidth"] == closed["contentViewWidth"] == 510
+assert closed["tickerPrimaryActions"] == [
+    "Edit check prompt", "Display settings",
+    "Open message navigation", "Hide Thinkpeek",
+]
 
 records = [json.loads(line) for line in LOG.read_text().splitlines() if line.strip()]
 allowed = {
@@ -126,6 +131,7 @@ print(json.dumps({
     "expandedHistory": history["uiStyle"] == "expanded-card-feed",
     "violationEmptyState": violations["violationEmptyStateVisible"],
     "checkPromptAPI": True,
+    "tickerContentWidthMatched": closed["windowWidth"] == closed["contentViewWidth"],
     "screenshotBytes": len(png),
     "loggedHTTPCommands": http_commands,
     "logContainsOnlyMetadata": True,
