@@ -393,14 +393,20 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         append(claude_path, {
             "timestamp": record_timestamp(400),
             "type": "assistant",
-            "message": {"content": [{"type": "text", "text": "done"}]},
+            "message": {"content": [{
+                "type": "text", "text": "RESPONSE_CLEAN: done"
+            }]},
         })
         append(codex_path, {
             "timestamp": record_timestamp(450),
             "type": "event_msg", "payload": {"type": "task_complete"},
         })
         inactive = wait_for(lambda state:
-            state.get("operationPending") is False)
+            state.get("operationPending") is False and
+            state.get("checkerRequestInFlight") is False and
+            any(event.get("kind") == "drift-clean" and
+                event.get("evidenceType") == "assistant_response"
+                for event in state.get("events", [])))
         assert inactive["activeSources"] == [], inactive
 
         get_json(API_BASE, "/previous")
@@ -497,7 +503,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
                 "sender": "assistant",
                 "updated_at": record_timestamp(1_300),
                 "content": [
-                    {"type": "text", "text": "MESSAGE_MUST_STAY_EXCLUDED"},
+                    {"type": "text", "text":
+                     "CLAUDE_DESKTOP_RESPONSE_CLEAN: exact desktop response."},
                     {"type": "thinking",
                      "thinking": "CLAUDE_DESKTOP_CLEAN: exact desktop thinking.",
                      "summaries": [{"summary": "SUMMARY_MUST_STAY_EXCLUDED"}]},
@@ -513,22 +520,32 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert desktop["peekSource"] == "Claude · Claude Desktop Exact Title", desktop
 
         audit = [json.loads(line) for line in audit_path.read_text().splitlines()]
-        requests = [item for item in audit
-                    if item.get("action") == "external_reasoning_request"]
-        results = [item for item in audit
-                   if item.get("action") == "external_reasoning_result"]
-        assert len(requests) == 6, requests
-        assert len(results) == 6, results
+        reasoning_requests = [item for item in audit
+            if item.get("action") == "external_reasoning_request"]
+        reasoning_results = [item for item in audit
+            if item.get("action") == "external_reasoning_result"]
+        response_requests = [item for item in audit
+            if item.get("action") == "external_assistant_response_request"]
+        response_results = [item for item in audit
+            if item.get("action") == "external_assistant_response_result"]
+        requests = reasoning_requests + response_requests
+        results = reasoning_results + response_results
+        assert len(reasoning_requests) == 6, reasoning_requests
+        assert len(reasoning_results) == 6, reasoning_results
+        assert len(response_requests) == 2, response_requests
+        assert len(response_results) == 2, response_results
         assert [item["status"] for item in results].count("alert") == 1, results
-        assert [item["status"] for item in results].count("clean") == 5, results
+        assert [item["status"] for item in results].count("clean") == 7, results
         assert {item["request_id"] for item in requests} == \
             {item["request_id"] for item in results}, (requests, results)
 
         with DummyChecker.lock:
             all_sent = list(DummyChecker.requests)
-        assert len(all_sent) == 6, all_sent
+        assert len(all_sent) == 8, all_sent
+        assert "RESPONSE_CLEAN: done" in all_sent, all_sent
+        assert "CLAUDE_DESKTOP_RESPONSE_CLEAN: exact desktop response." \
+            in all_sent, all_sent
         assert "CLAUDE_DESKTOP_CLEAN: exact desktop thinking." in all_sent, all_sent
-        assert all("MESSAGE_MUST_STAY_EXCLUDED" not in text for text in all_sent), all_sent
         assert all("SUMMARY_MUST_STAY_EXCLUDED" not in text for text in all_sent), all_sent
         assert all("DESKTOP_TOOL_MUST_STAY_EXCLUDED" not in text for text in all_sent), all_sent
 
@@ -546,6 +563,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "claudeDesktopCacheObserved": True,
             "encryptedAndToolsExcluded": True,
             "localSummaryDisplayedButNotSent": True,
+            "assistantResponseCheckedButNotDisplayedAsThought": True,
             "tickerNavigation": "alert-to-clean",
             "checkerLightObserved": True,
             "claudeCloudLifecycleObserved": True,

@@ -2,7 +2,7 @@
 
 import Foundation
 
-/// The only record eligible for automatic external evaluation: readable reasoning.
+/// One complete, provider-authored record eligible for external evaluation.
 struct EvaluationRecord {
     let content: String
     let eventType: String
@@ -18,7 +18,7 @@ struct EvaluationRecord {
 }
 
 struct Block {
-    enum Kind { case activity, thinking }
+    enum Kind { case activity, thinking, response }
     enum ActivityPhase: Equatable { case started, updated, waiting, finished }
     let ts: String
     let text: String
@@ -83,6 +83,10 @@ func uiEvent(for block: Block) -> UIEvent {
         return UIEvent(timestamp: block.ts, kind: "omitted-analysis",
                        text: "⟨Original reasoning unavailable — the provider record " +
                              "contains no plaintext reasoning⟩",
+                       readableAnalysis: false)
+    }
+    if block.kind == .response {
+        return UIEvent(timestamp: block.ts, kind: "response", text: block.text,
                        readableAnalysis: false)
     }
     return UIEvent(timestamp: block.ts, kind: "analysis", text: block.text,
@@ -157,6 +161,29 @@ func blocks(in line: String) -> [Block] {
     }
     if obj["type"] as? String == "response_item",
        let payload = obj["payload"] as? [String: Any],
+       payload["type"] as? String == "message",
+       payload["role"] as? String == "assistant" {
+        let texts = (payload["content"] as? [[String: Any]] ?? []).compactMap {
+            item -> String? in
+            guard item["type"] as? String == "output_text",
+                  let text = item["text"] as? String,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return nil }
+            return text
+        }
+        let phase: Block.ActivityPhase = payload["phase"] as? String == "final_answer"
+            ? .finished : .updated
+        guard !texts.isEmpty else { return [activityBlock(ts: ts, phase: phase)] }
+        let response = texts.joined(separator: "\n\n")
+        return [activityBlock(ts: ts, phase: phase),
+                Block(ts: ts, text: response, sealed: false,
+                      signatureChars: 0, kind: .response,
+                      evaluationText: response,
+                      evaluationEventType: "assistant_response",
+                      externallyEvaluable: true)]
+    }
+    if obj["type"] as? String == "response_item",
+       let payload = obj["payload"] as? [String: Any],
        payload["type"] as? String == "reasoning" {
         let reasoningTexts: [String] =
             (payload["content"] as? [[String: Any]] ?? []).compactMap { item -> String? in
@@ -217,7 +244,7 @@ func blocks(in line: String) -> [Block] {
     let hasText = content.contains { ($0["type"] as? String) == "text" }
     let phase: Block.ActivityPhase = isWaitingForUser
         ? .waiting : (hasText && !hasToolUse ? .finished : .updated)
-    let thinking = content.compactMap { block -> Block? in
+    var evaluable = content.compactMap { block -> Block? in
         switch block["type"] as? String {
         case "thinking":
             let text = (block["thinking"] as? String) ?? ""
@@ -235,7 +262,24 @@ func blocks(in line: String) -> [Block] {
             return nil
         }
     }
-    return [activityBlock(ts: ts, phase: phase)] + thinking
+    if obj["isApiErrorMessage"] as? Bool != true {
+        let responseTexts = content.compactMap { block -> String? in
+            guard block["type"] as? String == "text",
+                  let text = block["text"] as? String,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return nil }
+            return text
+        }
+        if !responseTexts.isEmpty {
+            let response = responseTexts.joined(separator: "\n\n")
+            evaluable.append(Block(ts: ts, text: response, sealed: false,
+                                   signatureChars: 0, kind: .response,
+                                   evaluationText: response,
+                                   evaluationEventType: "assistant_response",
+                                   externallyEvaluable: true))
+        }
+    }
+    return [activityBlock(ts: ts, phase: phase)] + evaluable
 }
 
 /// Follows one JSONL file by byte offset, tolerating partial writes and truncation.

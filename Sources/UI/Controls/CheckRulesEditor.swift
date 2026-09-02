@@ -74,7 +74,7 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
         title.translatesAutoresizingMaskIntoConstraints = false
 
         let help = NSTextField(labelWithString:
-            "Thinkpeek sends this instruction and the provider's readable reasoning to your configured checker exactly as shown.")
+            "Thinkpeek checks provider reasoning when available and every assistant response against this instruction exactly as shown.")
         help.font = .systemFont(ofSize: 12)
         help.textColor = .secondaryLabelColor
         help.translatesAutoresizingMaskIntoConstraints = false
@@ -123,11 +123,11 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
             width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
         textView.delegate = self
         textView.setAccessibilityLabel("Check instructions")
-        textView.setAccessibilityHelp("Enter the exact instruction Thinkpeek should use to flag provider reasoning.")
+        textView.setAccessibilityHelp("Enter the exact instruction Thinkpeek should use to flag provider reasoning and assistant responses.")
         scrollView.documentView = textView
 
         let privacy = NSTextField(labelWithString:
-            "Stored locally. Reasoning is sent only when checking is enabled.")
+            "Stored locally. Reasoning and responses are sent only when checking is enabled.")
         privacy.font = .systemFont(ofSize: 11)
         privacy.textColor = .secondaryLabelColor
         privacy.translatesAutoresizingMaskIntoConstraints = false

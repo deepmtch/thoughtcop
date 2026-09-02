@@ -64,17 +64,22 @@ if CommandLine.arguments.contains("--claude-desktop-conversation-selftest") {
     cache.append(Data("conversation-1?tree=True\r\n\r\n".utf8))
     cache.append(compressed)
     let events = claudeDesktopConversationEvents(inCacheData: cache)
-    guard events.count == 1,
-          events[0].identifier == "conversation-1|assistant-1|1",
+    guard events.count == 2,
+          events[0].identifier == "conversation-1|assistant-1|0",
           events[0].source == "Claude · Exact Claude Desktop title",
-          events[0].block.text == "Exact first paragraph.\n\nExact second paragraph.",
-          events[0].block.evaluationRecord.content == events[0].block.text,
-          events[0].block.evaluationRecord.eventType == "thinking",
+          events[0].block.kind == .response,
+          events[0].block.text == "ordinary assistant message",
+          events[0].block.evaluationRecord.eventType == "assistant_response",
           events[0].block.externallyEvaluable,
-          !events[0].block.text.contains("private user message"),
-          !events[0].block.text.contains("ordinary assistant message"),
-          !events[0].block.text.contains("must stay excluded"),
-          !events[0].block.text.contains("secret result") else {
+          events[1].identifier == "conversation-1|assistant-1|1",
+          events[1].block.kind == .thinking,
+          events[1].block.text == "Exact first paragraph.\n\nExact second paragraph.",
+          events[1].block.evaluationRecord.content == events[1].block.text,
+          events[1].block.evaluationRecord.eventType == "thinking",
+          events[1].block.externallyEvaluable,
+          events.allSatisfy({ !$0.block.text.contains("private user message") }),
+          events.allSatisfy({ !$0.block.text.contains("must stay excluded") }),
+          events.allSatisfy({ !$0.block.text.contains("secret result") }) else {
         FileHandle.standardError.write(
             "Claude Desktop structured-thinking boundary failed\n".data(using: .utf8)!)
         exit(1)
@@ -113,8 +118,10 @@ if CommandLine.arguments.contains("--claude-desktop-conversation-selftest") {
     while second == nil, Date() < deadline {
         RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    guard first?.count == 1, first?.first?.block.backfilled == true,
-          first?.first?.block.text == "Exact first paragraph.\n\nExact second paragraph.",
+    guard first?.count == 2,
+          first?.allSatisfy({ $0.block.backfilled }) == true,
+          first?.map(\.block.text) == ["ordinary assistant message",
+            "Exact first paragraph.\n\nExact second paragraph."],
           second?.count == 1,
           second?.first?.identifier == "conversation-1|assistant-live|0",
           second?.first?.block.text == "Exact newly arrived Claude Desktop thinking." else {
@@ -122,8 +129,8 @@ if CommandLine.arguments.contains("--claude-desktop-conversation-selftest") {
             "Claude Desktop live-cache monitor failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("claude desktop: exactThinking=true exactTitle=true " +
-          "messagesToolsSummariesEncryptedExcluded=true startupHistory=true live=true")
+    print("claude desktop: exactThinking=true responsesChecked=true exactTitle=true " +
+          "usersToolsSummariesEncryptedExcluded=true startupHistory=true live=true")
     exit(0)
 }
 
@@ -248,17 +255,20 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
     let codexLine = #"{"timestamp":"2026-08-13T10:00:00.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","status":"completed","call_id":"call_1","input":"tools.apply_patch(...)"}}"#
     let claudeLine = #"{"timestamp":"2026-08-13T10:00:01.000Z","type":"assistant","message":{"content":[{"type":"tool_use","id":"tool_1","name":"Edit","input":{"file_path":"Sources/Test.swift"}}]}}"#
     let messageLine = #"{"timestamp":"2026-08-13T10:00:01.100Z","type":"assistant","message":{"content":[{"type":"text","text":"ordinary assistant message"}]}}"#
+    let apiErrorLine = #"{"timestamp":"2026-08-13T10:00:01.150Z","type":"assistant","isApiErrorMessage":true,"message":{"content":[{"type":"text","text":"rate limit"}]}}"#
+    let codexMessageLine = #"{"timestamp":"2026-08-13T10:00:01.175Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Exact Codex assistant response."}],"phase":"final_answer"}}"#
     let encryptedLine = #"{"timestamp":"2026-08-13T10:00:01.200Z","type":"assistant","message":{"content":[{"type":"thinking","thinking":"","signature":"sealed"}]}}"#
     let duplicateEventLine = #"{"timestamp":"2026-08-13T10:00:01.900Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"**Assessing safe change**"}}"#
     let claudeTurnFinishedLine = #"{"timestamp":"2026-08-13T10:00:03.000Z","type":"system","subtype":"turn_duration","durationMs":1200}"#
     let codexTurnAbortedLine = #"{"timestamp":"2026-08-13T10:00:04.000Z","type":"event_msg","payload":{"type":"turn_aborted"}}"#
     let unrelatedMetadataLine = #"{"timestamp":"2026-08-13T10:00:05.000Z","type":"file-history-snapshot","snapshot":{}}"#
     let reasoningLine = #"{"timestamp":"2026-08-13T10:00:02.000Z","type":"response_item","payload":{"type":"reasoning","content":[{"type":"reasoning_text","text":"Assessing and planning a safe change."}],"summary":[{"type":"summary_text","text":"**Short summary**"}],"encrypted_content":"sealed"}}"#
-    let excludedRecords = blocks(in: codexLine) + blocks(in: claudeLine) +
-        blocks(in: messageLine)
+    let excludedRecords = blocks(in: codexLine) + blocks(in: claudeLine)
     let encryptedRecords = blocks(in: encryptedLine)
     let reasoningRecords = blocks(in: reasoningLine)
     let reasoning = reasoningRecords.filter { $0.kind == .thinking }
+    let claudeResponses = blocks(in: messageLine).filter { $0.kind == .response }
+    let codexResponses = blocks(in: codexMessageLine).filter { $0.kind == .response }
     guard excludedRecords.allSatisfy({ $0.kind == .activity &&
                                       !$0.externallyEvaluable }),
           encryptedRecords.allSatisfy({ $0.kind == .activity &&
@@ -268,6 +278,19 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
           blocks(in: claudeTurnFinishedLine).first?.activityPhase == .finished,
           blocks(in: codexTurnAbortedLine).first?.activityPhase == .finished,
           blocks(in: unrelatedMetadataLine).isEmpty,
+          blocks(in: apiErrorLine).allSatisfy({ $0.kind == .activity &&
+                                                !$0.externallyEvaluable }),
+          claudeResponses.count == 1,
+          claudeResponses[0].text == "ordinary assistant message",
+          claudeResponses[0].evaluationRecord.eventType == "assistant_response",
+          claudeResponses[0].externallyEvaluable,
+          uiEvent(for: claudeResponses[0]).kind == "response",
+          !uiEvent(for: claudeResponses[0]).readableAnalysis,
+          codexResponses.count == 1,
+          codexResponses[0].text == "Exact Codex assistant response.",
+          codexResponses[0].evaluationRecord.eventType == "assistant_response",
+          codexResponses[0].externallyEvaluable,
+          blocks(in: codexMessageLine).first?.activityPhase == .finished,
           reasoning.count == 1,
           reasoning[0].text == "Assessing and planning a safe change.",
           reasoning[0].evaluationRecord.content ==
@@ -276,7 +299,7 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
             "reasoning_text",
           reasoning[0].externallyEvaluable else {
         FileHandle.standardError.write(
-            "reasoning-only boundary self-test failed\n".data(using: .utf8)!)
+            "evaluation boundary self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
 
@@ -301,8 +324,8 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
             "check-error attribution self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("evaluator: verbatim=true binary=true reasoningOnly=true " +
-          "messagesToolsEncryptedExcluded=true " +
+    print("evaluator: verbatim=true binary=true responsesAndReasoning=true " +
+          "toolsEncryptedAndApiErrorsExcluded=true " +
           "completeSummaryArrays=true " +
           "oversizeMeasured=true invalidVisible=true alertAttached=true")
     exit(0)
@@ -1056,37 +1079,53 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
     let toolLine = #"{"timestamp":"2026-08-15T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call_1","output":"TOP_SECRET_TOOL_CONTENT"}}"#
     let summaryLine = #"{"timestamp":"2026-08-15T00:00:01Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"PRIVATE_PROVIDER_SUMMARY"}],"encrypted_content":"sealed"}}"#
     let reasoningLine = #"{"timestamp":"2026-08-15T00:00:02Z","type":"response_item","payload":{"type":"reasoning","content":[{"type":"reasoning_text","text":"PRIVATE_REASONING_CONTENT"}],"encrypted_content":"sealed"}}"#
+    let codexResponseLine = #"{"timestamp":"2026-08-15T00:00:03Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"PRIVATE_CODEX_RESPONSE"}],"phase":"final_answer"}}"#
+    let claudeResponseLine = #"{"timestamp":"2026-08-15T00:00:04Z","type":"assistant","message":{"content":[{"type":"text","text":"PRIVATE_CLAUDE_RESPONSE"}]}}"#
     audit.recordTranscriptLine(toolLine, sourcePath: "/tmp/session.jsonl")
     audit.recordTranscriptLine(summaryLine, sourcePath: "/tmp/session.jsonl")
     audit.recordTranscriptLine(reasoningLine, sourcePath: "/tmp/session.jsonl")
+    audit.recordTranscriptLine(codexResponseLine, sourcePath: "/tmp/session.jsonl")
+    audit.recordTranscriptLine(claudeResponseLine, sourcePath: "/tmp/session.jsonl")
     audit.recordExternalRequest(source: "Codex · Test", destination: "Provider · Model",
                                 recordType: "reasoning_text",
                                 envelopeBytes: 321, requestID: "request-1")
     audit.recordExternalResult(source: "Codex · Test", destination: "Provider · Model",
                                recordType: "reasoning_text", requestID: "request-1",
                                status: "alert", alert: true, latencyMs: 87)
+    audit.recordExternalRequest(source: "Claude · Test", destination: "Provider · Model",
+                                recordType: "assistant_response",
+                                envelopeBytes: 144, requestID: "request-2")
+    audit.recordExternalResult(source: "Claude · Test", destination: "Provider · Model",
+                               recordType: "assistant_response", requestID: "request-2",
+                               status: "clean", alert: false, latencyMs: 43)
     let log = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
     try? FileManager.default.removeItem(atPath: path)
     guard log.components(separatedBy: "\"action\":\"app_started\"").count - 1 == 2,
           log.contains("tool_record_discarded"),
           log.contains("provider_summary_displayed_locally"),
           log.contains("reasoning_selected"),
+          log.contains("assistant_response_selected"),
           log.contains("external_reasoning_request"),
           log.contains("external_reasoning_result"),
+          log.contains("external_assistant_response_request"),
+          log.contains("external_assistant_response_result"),
           log.contains("\"request_id\":\"request-1\""),
           log.contains("\"status\":\"alert\""),
           log.contains("\"alert\":true"),
           log.contains("\"latency_ms\":87"),
           log.contains("\"record_type\":\"reasoning_text\""),
           log.contains("\"envelope_bytes\":321"),
+          log.contains("\"record_type\":\"assistant_response\""),
           !log.contains("TOP_SECRET_TOOL_CONTENT"),
           !log.contains("PRIVATE_PROVIDER_SUMMARY"),
-          !log.contains("PRIVATE_REASONING_CONTENT") else {
+          !log.contains("PRIVATE_REASONING_CONTENT"),
+          !log.contains("PRIVATE_CODEX_RESPONSE"),
+          !log.contains("PRIVATE_CLAUDE_RESPONSE") else {
         FileHandle.standardError.write(
             "privacy audit self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("privacy audit: plaintextReasoning=true providerSummaryExcluded=true " +
+    print("privacy audit: reasoningAndResponses=true providerSummaryExcluded=true " +
           "toolsDiscarded=true outbound=true outcome=true contentLogged=false")
     exit(0)
 }

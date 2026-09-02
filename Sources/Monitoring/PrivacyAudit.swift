@@ -1,4 +1,4 @@
-// Content-free audit trail for the reasoning-only monitoring boundary.
+// Content-free audit trail for the externally evaluated record boundary.
 
 import Foundation
 
@@ -38,6 +38,17 @@ func auditMetadata(in line: String) -> [[String: Any]] {
                      "action": action,
                      "plaintext_reasoning_count": plaintextCount,
                      "provider_summary_count": summaryCount]]
+        case ("response_item", "message"):
+            let responseCount = (payload["content"] as? [[String: Any]] ?? []).filter {
+                $0["type"] as? String == "output_text" &&
+                !(($0["text"] as? String) ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }.count
+            guard payload["role"] as? String == "assistant", responseCount > 0
+            else { return [] }
+            return [["record_type": "codex.assistant_response",
+                     "action": "assistant_response_selected",
+                     "response_part_count": responseCount]]
         case ("response_item", "custom_tool_call"):
             return [["record_type": "codex.tool_call",
                      "action": "tool_record_discarded"]]
@@ -67,6 +78,12 @@ func auditMetadata(in line: String) -> [[String: Any]] {
         case "tool_result":
             return ["record_type": "claude.tool_result",
                     "action": "tool_record_discarded"]
+        case "text":
+            let readable = !((item["text"] as? String) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            guard readable, root["isApiErrorMessage"] as? Bool != true else { return nil }
+            return ["record_type": "claude.assistant_response",
+                    "action": "assistant_response_selected"]
         default:
             return nil
         }
@@ -92,7 +109,8 @@ final class PrivacyAudit {
             FileManager.default.createFile(atPath: path, contents: Data(),
                 attributes: [.posixPermissions: 0o600])
         }
-        appendLocked(["action": "app_started", "scope": "reasoning_only",
+        appendLocked(["action": "app_started",
+                      "scope": "reasoning_and_assistant_responses",
                       "pid": ProcessInfo.processInfo.processIdentifier])
     }
 
@@ -109,7 +127,9 @@ final class PrivacyAudit {
     func recordExternalRequest(source: String, destination: String,
                                recordType: String, envelopeBytes: Int,
                                requestID: String) {
-        append(["action": "external_reasoning_request",
+        let action = recordType == "assistant_response"
+            ? "external_assistant_response_request" : "external_reasoning_request"
+        append(["action": action,
                 "record_type": recordType, "source": source,
                 "destination": destination, "envelope_bytes": envelopeBytes,
                 "request_id": requestID])
@@ -120,8 +140,10 @@ final class PrivacyAudit {
                               recordType: String, requestID: String,
                               status: String, alert: Bool? = nil,
                               latencyMs: Int) {
+        let action = recordType == "assistant_response"
+            ? "external_assistant_response_result" : "external_reasoning_result"
         var event: [String: Any] = [
-            "action": "external_reasoning_result",
+            "action": action,
             "record_type": recordType,
             "source": source,
             "destination": destination,

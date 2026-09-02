@@ -1,7 +1,7 @@
 // Reading Claude Desktop's structured conversation responses from its Chromium
-// cache. Only explicit plaintext `thinking` content becomes externally
-// evaluable; messages, tools, summaries, and empty/encrypted records are not
-// emitted by this monitor.
+// cache. Explicit plaintext `thinking` is displayed and evaluated. Assistant
+// `text` responses are evaluated without being presented as thinking. User
+// messages, tools, summaries, and empty/encrypted records are not emitted.
 
 import Foundation
 
@@ -42,9 +42,22 @@ func claudeDesktopConversationEvents(in jsonData: Data)
         let messageTimestamp = message["updated_at"] as? String ??
             message["created_at"] as? String ?? ""
         for (index, item) in content.enumerated() {
-            guard item["type"] as? String == "thinking",
-                  let thinking = item["thinking"] as? String,
-                  !thinking.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let type = item["type"] as? String
+            let text: String
+            let kind: Block.Kind
+            let eventType: String
+            if type == "thinking", let thinking = item["thinking"] as? String {
+                text = thinking
+                kind = .thinking
+                eventType = "thinking"
+            } else if type == "text", let response = item["text"] as? String {
+                text = response
+                kind = .response
+                eventType = "assistant_response"
+            } else {
+                continue
+            }
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             else { continue }
             let timestamp = item["stop_timestamp"] as? String ??
                 item["start_timestamp"] as? String ?? messageTimestamp
@@ -52,10 +65,10 @@ func claudeDesktopConversationEvents(in jsonData: Data)
             events.append(ClaudeDesktopConversationEvent(
                 identifier: identifier,
                 source: source,
-                block: Block(ts: timestamp, text: thinking, sealed: false,
-                             signatureChars: 0, kind: .thinking,
-                             evaluationText: thinking,
-                             evaluationEventType: "thinking",
+                block: Block(ts: timestamp, text: text, sealed: false,
+                             signatureChars: 0, kind: kind,
+                             evaluationText: text,
+                             evaluationEventType: eventType,
                              externallyEvaluable: true)))
         }
     }

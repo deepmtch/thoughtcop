@@ -539,15 +539,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         api.captureHandler = { [weak self] in self?.captureWindowPNG() }
         api.actionHandler = { [weak self] command in self?.handleCommand(command) }
         api.start()
-        outsideClickMonitor.start { [weak self] location in
-            DispatchQueue.main.async {
-                guard let self,
-                      shouldDismissDetails(isShowingDetails: !self.peekMode,
-                                           isEditorVisible:
-                                            self.checkRulesEditor?.window?.isVisible == true,
-                                           windowFrame: self.panel.frame,
-                                           clickLocation: location) else { return }
-                self.api.perform(.close, origin: .appKit)
+        if !ISOLATED_E2E {
+            outsideClickMonitor.start { [weak self] location in
+                DispatchQueue.main.async {
+                    guard let self,
+                          shouldDismissDetails(isShowingDetails: !self.peekMode,
+                                               isEditorVisible:
+                                                self.checkRulesEditor?.window?.isVisible == true,
+                                               windowFrame: self.panel.frame,
+                                               clickLocation: location) else { return }
+                    self.api.perform(.close, origin: .appKit)
+                }
             }
         }
         requestTranscriptDiscovery(includeSessions: true)
@@ -1867,8 +1869,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             switch outcome {
             case .scored(let decision, let provider) where decision.alert:
                 if card == nil || preview == nil {
-                    let event = UIEvent(timestamp: block.ts, kind: "analysis",
-                                        text: block.text, readableAnalysis: true)
+                    let event = uiEvent(for: block)
                     card = self.addCard(source: source, event: event)
                     preview = self.eventPreviews.last
                 }
@@ -1881,13 +1882,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.apiEvents.append([
                     "kind": "drift-clean", "text": "no alert", "provider": provider,
                     "source": source, "latencyMs": Int(ms),
+                    "evidenceType": block.evaluationRecord.eventType,
                 ])
                 if let existingPreview { self.refreshPreview(existingPreview) }
                 self.publishAPI()
             case .failed(let message):
                 if card == nil || preview == nil {
-                    let event = UIEvent(timestamp: block.ts, kind: "analysis",
-                                        text: block.text, readableAnalysis: true)
+                    let event = uiEvent(for: block)
                     card = self.addCard(source: source, event: event)
                     preview = self.eventPreviews.last
                 }
@@ -1978,6 +1979,28 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 processActivity(source: source,
                                 identity: event.identity,
                                 phase: block.activityPhase ?? .updated)
+                continue
+            }
+            if block.kind == .response {
+                var apiItem = ui.json
+                apiItem["source"] = source
+                apiItem["displayed"] = false
+                apiEvents.append(apiItem)
+                // Responses are factual checker evidence, not provider
+                // reasoning. Evaluate them immediately without presenting them
+                // as thought cards. An alert or checker failure creates a card.
+                guard !block.backfilled else { continue }
+                guard block.externallyEvaluable else { continue }
+                let state = driftStatus()
+                guard state.ready else {
+                    apiEvents.append([
+                        "kind": "drift-skipped", "text": state.detail,
+                        "source": source,
+                        "evidenceType": block.evaluationRecord.eventType,
+                    ])
+                    continue
+                }
+                evaluate(block, source: source, card: nil, preview: nil)
                 continue
             }
             if ui.readableAnalysis, presentableTickerText(ui.text) == nil {

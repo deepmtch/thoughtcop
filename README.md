@@ -1,10 +1,11 @@
 # thinkpeek
 
-See Claude Code and Codex reasoning summaries live — and get shouted at when the
-reasoning goes wrong.
+See Claude Code and Codex reasoning summaries live — and get shouted at when
+either the reasoning or an assistant response violates your check instruction.
 
 Claude Code and Codex append live JSONL session events as turns run. thinkpeek
-tails both sources and reacts when a readable reasoning summary lands on disk.
+tails both sources, displays readable reasoning when the provider supplies it,
+and checks complete assistant-response records even when reasoning is omitted.
 
 | | | |
 |---|---|---|
@@ -15,7 +16,7 @@ tails both sources and reacts when a readable reasoning summary lands on disk.
 ./build.sh                                           # build once
 ./.build/thinkpeek                                   # the window
 ./restart.sh                                         # rebuild and replace a running copy
-./.build/thinkpeek --local-only                      # never send reasoning externally
+./.build/thinkpeek --local-only                      # never send evidence externally
 ```
 
 This checkout uses the repository-managed `.githooks/post-commit` hook. After
@@ -74,9 +75,11 @@ supplies it. When Codex supplies only a readable `summary[]`, ThinkPeek displays
 the complete summary locally; duplicate `event_msg/agent_reasoning` entries are
 ignored. Plaintext reasoning is displayed locally and sent verbatim to the
 configured external checker. Provider summaries are local-display-only and are
-never sent. Tool calls/results, messages, and encrypted-only records are not
-sent. Task starts are progress only and never replace readable content or enter
-card history.
+never sent. Complete assistant responses are evaluated but are not presented as
+thoughts; a response appears in Thinkpeek only when it triggers a violation or
+its check fails. Tool calls, tool results, user messages, and encrypted-only
+records are not sent. Task starts are progress only and never replace readable
+content or enter card history.
 Encrypted-only records are hidden by default. Task names come from
 `~/.codex/session_index.jsonl`. Auto mode follows both Claude and Codex, and the
 picker labels every source explicitly.
@@ -103,8 +106,10 @@ does this by default unless Claude Code is configured to request summaries:
 ```
 
 Add that key to `~/.claude/settings.json`. Existing omitted blocks cannot be
-recovered retroactively. thinkpeek reports operation start immediately and then
-shows either the readable summary or an explicit omitted-summary marker.
+recovered retroactively, and a host application can explicitly override the
+setting. thinkpeek reports operation start immediately and displays readable
+reasoning only when plaintext exists; response checking does not depend on that
+optional stream.
 
 ## Native window
 
@@ -174,10 +179,11 @@ was sent. Per-record `timestamp` fields advance monotonically within the turn.
 
 ## The drift alarm
 
-The native Thinkpeek app sends each new readable reasoning summary, plus your
-locally saved evaluation instruction, to a fast model. Tool calls and tool
-results are discarded by the transcript parser and never enter the automatic
-evaluation path. Thinkpeek does not infer actions from keywords.
+The native Thinkpeek app sends each new complete assistant response and each new
+readable reasoning record, plus your locally saved evaluation instruction, to a
+fast model. Tool calls and tool results are discarded by the transcript parser
+and never enter the automatic evaluation path. Thinkpeek does not infer actions
+from keywords.
 
 The **What to Check…** editor has two explicit modes:
 
@@ -186,14 +192,16 @@ The **What to Check…** editor has two explicit modes:
   evaluation and alerts when any evaluation returns `true`.
 
 No comments, categories, keywords, or trigger meanings are inferred. Edits take
-effect on the next readable reasoning summary without restarting Thinkpeek.
+effect on the next assistant response or readable reasoning record without
+restarting Thinkpeek.
 
 ### Violation history
 
 Every evaluator match is appended to the local 0600-permission store at
 `~/Library/Application Support/Thinkpeek/violations.json`. A record preserves
 the source provider/session, time, matched reason, quoted evidence, original
-reasoning, evaluator provider, latency, and the exact check prompt in force.
+evidence record, evaluator provider, latency, and the exact check prompt in
+force.
 The latest violation immediately takes priority over ordinary working activity,
 unhides the ticker if necessary, sounds the alert, and uses a red warning surface
 with a visible **VIOLATION** label rather than color alone.
@@ -205,8 +213,8 @@ the app has restarted. The same state is available through `/ui`, and
 `/filter/violations` exercise the same segmented filter without clicking the UI.
 
 The settings menu's **What to Check…** action edits that local value and mode directly.
-There is no file-backed configuration. The next reasoning block uses the saved
-rules without restarting Thinkpeek.
+There is no file-backed configuration. The next response or reasoning block uses
+the saved rules without restarting Thinkpeek.
 
 The ticker's checklist button opens **What to Check** directly in one click. The
 sliders button remains reserved for navigation and secondary display preferences.
@@ -215,8 +223,9 @@ sliders button remains reserved for navigation and secondary display preferences
 
 Each app start resets `~/Library/Logs/Thinkpeek/privacy-audit.jsonl`. The JSONL
 records only metadata: session filename, transcript record type, disposition,
-byte count, and actual external reasoning-request destination/size. It records
-tool calls and results as `tool_record_discarded`; it never records reasoning,
+byte count, and actual external evaluation destination/size. It distinguishes
+reasoning requests from assistant-response requests and records tool calls and
+results as `tool_record_discarded`; it never records reasoning, response text,
 tool input, tool output, API keys, or other transcript content.
 
 For independent-line mode, an example is:
