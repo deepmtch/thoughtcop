@@ -238,6 +238,9 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         initial = wait_for(lambda state: state.get("initialScanComplete") is True,
                            timeout=20, process=process,
                            diagnostic_log=ui_log_path)
+        get_json(API_BASE, "/violation-alerts/off")
+        initial = wait_for(lambda state:
+            state.get("violationAlertsEnabled") is False)
         assert initial["externalAnalysisEnabled"] is True, initial
         assert initial["analysisDestination"] == "Dummy · deterministic-checker", initial
 
@@ -638,6 +641,10 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "auditPairs": len(results),
         }, sort_keys=True))
     finally:
+        try:
+            get_json(API_BASE, "/violation-alerts/off")
+        except Exception:
+            pass
         try:
             get_json(API_BASE, "/quit")
         except Exception:
