@@ -157,7 +157,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var violationsOnly = false
     private var unacknowledgedViolationIndex: Int?
     private var violationsMenuItem: NSMenuItem?
-    private var violationStatusMenuItem: NSMenuItem?
     private var checkerRequestTokens = Set<UUID>()
     private var checkerActivityDestination: String?
     private var operationState = OperationPresentationState()
@@ -611,6 +610,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 $0.reviewedAt == nil
             },
             "menuBarAvailable": statusItem != nil,
+            "statusMenuItems": statusItem?.menu?.items
+                .filter { !$0.isSeparatorItem }.map(\.title) ?? [],
             "violationCount": violationRecords.count,
             "violationStorageError": violationStore.lastError ?? NSNull(),
             "violationRetentionLimit": ViolationStore.maximumRecords,
@@ -885,11 +886,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                               keyEquivalent: "")
         show.target = self
         menu.addItem(show)
-        let violationStatus = NSMenuItem(title: "Violations · All clear",
-                                         action: nil, keyEquivalent: "")
-        violationStatus.isEnabled = false
-        menu.addItem(violationStatus)
-        violationStatusMenuItem = violationStatus
         let violations = NSMenuItem(title: "Open Violation History…",
                                     action: #selector(showViolationsFromMenu(_:)),
                                     keyEquivalent: "v")
@@ -1624,14 +1620,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func updateViolationMenu() {
         let count = violationRecords.count
         let newCount = violationRecords.filter { $0.reviewedAt == nil }.count
-        violationStatusMenuItem?.title = violationStore.lastError != nil
-            ? "Violations · History unavailable"
-            : (count == 0
-            ? "Violations · All clear"
-            : (newCount == 0 ? "Violations · \(count) reviewed"
-                             : "Violations · \(newCount) new · \(count) recorded"))
-        violationStatusMenuItem?.toolTip = "Keeps the latest \(ViolationStore.maximumRecords) violations locally."
-        violationsMenuItem?.title = "Open Violation History…"
+        violationsMenuItem?.title = violationHistoryMenuTitle(
+            recorded: count, unreviewed: newCount,
+            storageUnavailable: violationStore.lastError != nil)
+        violationsMenuItem?.toolTip = "Keeps the latest \(ViolationStore.maximumRecords) violations locally."
         violationsMenuItem?.isEnabled = true
         historyFilterControl?.setLabel("Violations \(count)", forSegment: 1)
         let hasUnacknowledged = newCount > 0

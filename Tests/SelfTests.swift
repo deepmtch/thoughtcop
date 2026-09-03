@@ -1233,6 +1233,22 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
 }
 
 if CommandLine.arguments.contains("--violation-store-selftest") {
+    guard violationHistoryMenuTitle(recorded: 0, unreviewed: 0,
+                                    storageUnavailable: false) ==
+            "Open Violation History…",
+          violationHistoryMenuTitle(recorded: 13, unreviewed: 13,
+                                    storageUnavailable: false) ==
+            "Open Violation History (13 New)…",
+          violationHistoryMenuTitle(recorded: 13, unreviewed: 0,
+                                    storageUnavailable: false) ==
+            "Open Violation History (13 Reviewed)…",
+          violationHistoryMenuTitle(recorded: 13, unreviewed: 2,
+                                    storageUnavailable: true) ==
+            "Open Violation History (Unavailable)…" else {
+        FileHandle.standardError.write(
+            "violation menu title self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
     let path = NSTemporaryDirectory() + "/thinkpeek-violations-\(UUID().uuidString).json"
     let first = ViolationRecord(
         timestamp: "2026-08-31T12:00:00Z", source: "Claude · Alpha",

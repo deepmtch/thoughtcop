@@ -2,6 +2,14 @@
 
 import Foundation
 
+func violationHistoryMenuTitle(recorded: Int, unreviewed: Int,
+                               storageUnavailable: Bool) -> String {
+    if storageUnavailable { return "Open Violation History (Unavailable)…" }
+    if unreviewed > 0 { return "Open Violation History (\(unreviewed) New)…" }
+    if recorded > 0 { return "Open Violation History (\(recorded) Reviewed)…" }
+    return "Open Violation History…"
+}
+
 let VIOLATIONS_PATH = ProcessInfo.processInfo.environment["THINKPEEK_VIOLATIONS_PATH"]
     ?? ("~/Library/Application Support/Thinkpeek/violations.json" as NSString)
         .expandingTildeInPath
