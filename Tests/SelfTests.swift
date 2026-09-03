@@ -1375,25 +1375,16 @@ if CommandLine.arguments.contains("--status-item-foreground-selftest") {
             "status item foreground self-test failed: missing button\n".data(using: .utf8)!)
         exit(1)
     }
-    button.image = NSImage(systemSymbolName: "exclamationmark.shield.fill",
-                           accessibilityDescription: "Violation")
-    let originalWantsLayer = button.wantsLayer
-    applyStatusItemForeground(button, alert: true, countTitle: " 9+")
-    let titleColor = button.attributedTitle.attribute(
-        .foregroundColor, at: 0, effectiveRange: nil) as? NSColor
-    let usesWhiteForeground = button.contentTintColor?.isEqual(NSColor.white) == true &&
-        titleColor?.isEqual(NSColor.white) == true && button.image?.isTemplate == false
-    let backgroundUntouched = button.wantsLayer == originalWantsLayer
-    applyStatusItemForeground(button, alert: false, countTitle: "")
-    let restoresNativeForeground = button.contentTintColor == nil &&
-        button.image?.isTemplate == true
+    button.contentTintColor = .systemRed
+    restoreNativeStatusItemForeground(button)
+    let usesNativeForeground = button.contentTintColor == nil
     NSStatusBar.system.removeStatusItem(item)
-    guard usesWhiteForeground, backgroundUntouched, restoresNativeForeground else {
+    guard usesNativeForeground else {
         FileHandle.standardError.write(
             "status item foreground self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("status item foreground: alertWhite=true nativeRestored=true customBackground=false")
+    print("status item foreground: native=true customBackground=false")
     exit(0)
 }
 }

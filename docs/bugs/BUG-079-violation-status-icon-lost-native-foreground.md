@@ -2,28 +2,31 @@
 
 ## Symptom
 
-With unreviewed violations, the Thinkpeek shield and `9+` count rendered black
-instead of using the normal high-contrast menu-bar foreground. The status-item
+With unreviewed violations, Thinkpeek overrode the menu bar's native foreground.
+That made the shield/count capable of disagreeing with every neighboring icon.
+A later forced-white attempt made the mismatch explicit: the shield was white
+while the count and every neighboring item were black. The status-item
 background must not change when a violation is recorded.
 
 ## Evidence
 
-The supplied screenshot showed the black shield and count against the blue
-macOS menu bar. `git log -S` identified commit `dca3658` as the regression: it
-added `contentTintColor = .systemRed` on 2026-09-03. The implementation before
-that commit left the native status-item foreground untouched.
+`git log -S` identified commit `dca3658` as the regression: it added
+`contentTintColor = .systemRed` on 2026-09-03. The implementation before that
+commit left the native status-item foreground untouched. The final supplied
+screenshot showed why another fixed color is also wrong: AppKit selected black
+for all neighboring items while the forced Thinkpeek shield remained white.
 
 ## Root cause
 
-Thinkpeek applied a custom semantic tint to `NSStatusBarButton`. AppKit flattened
-that custom-tinted status content to black in the user's menu-bar environment.
+Thinkpeek applied a custom semantic tint to `NSStatusBarButton` instead of
+letting the status bar choose one foreground consistently for the current
+wallpaper/menu-bar appearance.
 
 ## Fix
 
-Use an explicit white, non-template symbol and white attributed count while an
-unreviewed violation exists. Restore native adaptive rendering after the alert
-is reviewed. Do not set any status-item background. A focused AppKit self-test
-verifies the white symbol and count, native restoration, and that the helper
-does not enable a custom layer/background. The `/ui` diagnostic state exposes
-`statusItemForegroundMode` and `statusItemImageIsTemplate` so the rendered
-policy is testable without UI clicking.
+Restore the pre-regression policy explicitly: clear `contentTintColor` after
+updating violation state so AppKit supplies the native adaptive foreground. Do
+not set any status-item background. A focused AppKit self-test first applies a
+custom tint and verifies that the production helper clears it.
+The `/ui` diagnostic state exposes `statusItemUsesNativeForeground` so the
+foreground policy is testable without UI clicking.

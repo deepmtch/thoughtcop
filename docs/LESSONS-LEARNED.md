@@ -25,7 +25,7 @@ review material under `AGENTS.md`, not historical commentary.
 | Checker work was invisible or briefly reported idle | Register request state and the visible indicator atomically when evidence is accepted. Keep a request/result pair with the same ID for every outbound attempt. | `/ui` in-flight/light assertions and paired audit IDs. |
 | A transient test failure disappeared on retry | A retry is not evidence. Diagnose and remove the race; then rerun the full suite. | Deterministic repeated black-box completion. |
 | Violations disappeared when the HUD was hidden, then a later fix made alerts reopen it | Persist violations independently of window visibility, but user-requested Hide is authoritative. Update the menu badge/history without reopening; only an explicit Show/Open action clears hidden state. | Store self-test plus violation-while-hidden black-box flow. |
-| Violation alerts interrupted the ticker with no user preference | Default visual and audible popup notifications off. Always preserve the unread menu count and semantic alert tint; only an explicit persisted opt-in may temporarily show, sound, and announce a violation, and it restores the prior ticker item after 10 seconds. | Preference/menu self-test plus default-off and enabled-transient black-box assertions. |
+| Violation alerts interrupted the ticker with no user preference | Default visual and audible popup notifications off. Always preserve the unread menu count and semantic alert symbol; only an explicit persisted opt-in may temporarily show, sound, and announce a violation, and it restores the prior ticker item after 10 seconds. | Preference/menu self-test plus default-off and enabled-transient black-box assertions. |
 
 ## UI and interaction
 
@@ -56,7 +56,7 @@ review material under `AGENTS.md`, not historical commentary.
 | Fixing one toolbar broke another control | Review every mode that reuses the changed view: ticker, compact controls, full reader, all-history, violations-history, menu bar, narrow width, keyboard, and accessibility. | `docs/UI-CHECKLIST.md` and mode-specific regression assertions. |
 | Changes were described before being committed and running | Completion means: code and docs committed, full suite green, replacement verified, one process running, and worktree clean. | Commit ID, test output, PID check, and `git status --short`. |
 | Parallel investigation created a risk of unowned changes | Subagents may gather evidence in parallel when requested, but the primary agent owns edits, integration, tests, commit, restart, and final verification. | Clean diff review and one primary-agent commit. |
-| A semantic alert tint made the status icon black | Use an explicit white non-template symbol and white count for violation state, restore native rendering afterward, and never customize the status-item background. | Status-item foreground self-test and `/ui` foreground mode. |
+| Custom red and forced-white status colors disagreed with neighboring icons | Leave both the `NSStatusBarButton` symbol and count on AppKit's native adaptive foreground; communicate violations through shape and count, never foreground/background overrides. | Status-item foreground self-test and `/ui` native-foreground state. |
 | Restart looked frozen for almost 30 seconds | Do not rebuild an unchanged signed bundle; record successful build freshness and print every potentially slow restart phase. | Timed changed and unchanged restart paths. |
 
 ## Release gate
