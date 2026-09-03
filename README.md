@@ -19,6 +19,22 @@ and checks complete assistant-response records even when reasoning is omitted.
 ./.build/thinkpeek --local-only                      # never send evidence externally
 ```
 
+`build.sh` intentionally creates an ad-hoc signed development bundle. It is not
+a distributable release. A direct-download release requires an installed
+Developer ID Application certificate and a validated `notarytool` keychain
+profile:
+
+```bash
+export THINKPEEK_SIGNING_IDENTITY='Developer ID Application: Example (TEAMID)'
+export THINKPEEK_NOTARY_PROFILE='thinkpeek-notary'
+./Scripts/release.sh
+```
+
+The release command fails before building if either credential is unavailable.
+It signs with hardened runtime and a secure timestamp, waits for Apple to accept
+the notarization, staples and validates the ticket, runs Gatekeeper assessment,
+then creates a final ZIP and SHA-256 checksum under `.build/releases/`.
+
 This checkout uses the repository-managed `.githooks/post-commit` hook. After
 each successful commit it rebuilds and replaces the running Thinkpeek exactly
 once, only when that build succeeds. The build produces a minimal macOS app
