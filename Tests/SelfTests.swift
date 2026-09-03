@@ -170,6 +170,17 @@ if CommandLine.arguments.contains("--selftest") {
 }
 
 if CommandLine.arguments.contains("--session-discovery-selftest") {
+    let indexedRoot = FileManager.default.temporaryDirectory
+        .appendingPathComponent("thinkpeek-path-index-\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: indexedRoot,
+                                             withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: indexedRoot) }
+    let pathIndex = TranscriptPathIndex(roots: [indexedRoot.path])
+    let initiallyIndexed = pathIndex.files()
+    let newlyCreatedTranscript = indexedRoot.appendingPathComponent("new.jsonl")
+    try? "{}\n".write(to: newlyCreatedTranscript, atomically: false,
+                       encoding: .utf8)
+    let updatedIndex = pathIndex.files()
     let taskID = "01a02dd4-2314-7f30-8313-b23268b2c1ae"
     let rolloutID = "01a02dee-e313-7d60-8222-ff6e9c8c5c6b"
     let doubleUUIDTranscript = FileManager.default.temporaryDirectory
@@ -195,14 +206,46 @@ if CommandLine.arguments.contains("--session-discovery-selftest") {
     while !completed, Date() < deadline {
         RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
+    var activityReads = 0
+    let cachedDiscovery = TranscriptDiscovery(
+        fileProvider: { [doubleUUIDTranscript.path] },
+        activityProvider: { _ in
+            activityReads += 1
+            return Date()
+        })
+    func runCachedDiscovery() -> Bool {
+        var finished = false
+        guard cachedDiscovery.request(includeSessions: false, completion: { _ in
+            finished = true
+        }) else { return false }
+        let end = Date().addingTimeInterval(2)
+        while !finished, Date() < end {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
+        return finished
+    }
+    let firstCached = runCachedDiscovery()
+    let secondCached = runCachedDiscovery()
+    let readsWhileUnchanged = activityReads
+    if let handle = FileHandle(forWritingAtPath: doubleUUIDTranscript.path) {
+        _ = try? handle.seekToEnd()
+        handle.write(Data("{}\n".utf8))
+        try? handle.close()
+    }
+    let changedCached = runCachedDiscovery()
     guard accepted, returnedIn < 0.05, overlapRejected, completed,
-          codexSessionID(from: doubleUUIDTranscript.path) == taskID else {
+          initiallyIndexed.isEmpty,
+          updatedIndex == [newlyCreatedTranscript.path],
+          codexSessionID(from: doubleUUIDTranscript.path) == taskID,
+          firstCached, secondCached, changedCached,
+          readsWhileUnchanged == 1, activityReads == 2 else {
         FileHandle.standardError.write(
             "session discovery self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
     print("session discovery: mainThreadNonblocking=true overlappingScans=false " +
-          "codexMetadataIdentity=true")
+          "codexMetadataIdentity=true unchangedTailsSkipped=true " +
+          "unchangedTreesSkipped=true")
     exit(0)
 }
 
@@ -507,6 +550,27 @@ if CommandLine.arguments.contains("--presentation-selftest") {
 }
 
 if CommandLine.arguments.contains("--claude-cloud-activity-selftest") {
+    var discovery = ClaudeCacheDiscoveryIndex()
+    let originalNames = (0..<19_584).map { "cache-\($0)" }
+    let firstDiscovery = discovery.update(originalNames)
+    let unchangedDiscovery = discovery.update(originalNames)
+    let addedDiscovery = discovery.update(originalNames + ["new-stream"])
+    let removedDiscovery = discovery.update(originalNames)
+    let recreatedDiscovery = discovery.update(originalNames + ["new-stream"])
+    guard firstDiscovery.added.count == 19_584,
+          firstDiscovery.removed.isEmpty,
+          unchangedDiscovery.added.isEmpty,
+          unchangedDiscovery.removed.isEmpty,
+          addedDiscovery.added == ["new-stream"],
+          addedDiscovery.removed.isEmpty,
+          removedDiscovery.added.isEmpty,
+          removedDiscovery.removed == ["new-stream"],
+          recreatedDiscovery.added == ["new-stream"] else {
+        FileHandle.standardError.write(
+            "Claude cloud discovery index repeated unchanged cache work\n"
+                .data(using: .utf8)!)
+        exit(1)
+    }
     let fixture = """
     data: {"event_type":"system","payload":{"subtype":"status","status":"requesting"}}
     data: {"event_type":"stream_event","payload":{"event":{"type":"message_start"}}}
@@ -534,7 +598,7 @@ if CommandLine.arguments.contains("--claude-cloud-activity-selftest") {
             .data(using: .utf8)!)
         exit(1)
     }
-    print("Claude cloud activity: exact start, update, and finish states")
+    print("Claude cloud activity: exact lifecycle; unchanged cache work skipped")
     exit(0)
 }
 

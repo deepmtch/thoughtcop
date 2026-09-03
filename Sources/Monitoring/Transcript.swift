@@ -1,6 +1,30 @@
 // Reading and tailing Claude Code / Codex JSONL transcripts into Blocks.
 
 import Foundation
+import Darwin
+
+struct ExactFileStamp: Equatable {
+    let size: UInt64
+    let modifiedSeconds: Int
+    let modifiedNanoseconds: Int
+    let isDirectory: Bool
+
+    var modified: Date {
+        Date(timeIntervalSince1970: TimeInterval(modifiedSeconds) +
+             TimeInterval(modifiedNanoseconds) / 1_000_000_000)
+    }
+}
+
+func exactFileStamp(_ path: String) -> ExactFileStamp? {
+    var info = stat()
+    let result = path.withCString { Darwin.lstat($0, &info) }
+    guard result == 0 else { return nil }
+    return ExactFileStamp(
+        size: UInt64(max(0, info.st_size)),
+        modifiedSeconds: Int(info.st_mtimespec.tv_sec),
+        modifiedNanoseconds: Int(info.st_mtimespec.tv_nsec),
+        isDirectory: (info.st_mode & S_IFMT) == S_IFDIR)
+}
 
 /// One complete, provider-authored record eligible for external evaluation.
 struct EvaluationRecord {
@@ -106,6 +130,68 @@ func transcriptFiles(under root: String) -> [String] {
 
 func allTranscriptFiles() -> [String] {
     transcriptFiles(under: CLAUDE_PROJECTS) + transcriptFiles(under: CODEX_SESSIONS)
+}
+
+/// Keeps recursive transcript discovery proportional to directory changes.
+/// Existing transcript content is tailed separately; a new file or directory
+/// changes its parent's exact filesystem modification timestamp.
+final class TranscriptPathIndex {
+    private struct DirectoryStamp: Equatable {
+        let exists: Bool
+        let modifiedSeconds: Int
+        let modifiedNanoseconds: Int
+    }
+
+    private let roots: [String]
+    private var paths: [String]?
+    private var directoryStamps: [String: DirectoryStamp] = [:]
+
+    init(roots: [String] = [CLAUDE_PROJECTS, CODEX_SESSIONS]) {
+        self.roots = roots
+    }
+
+    func files() -> [String] {
+        if paths == nil || directoryStamps.contains(where: {
+            stamp(for: $0.key) != $0.value
+        }) {
+            rebuild()
+        }
+        return paths ?? []
+    }
+
+    private func stamp(for path: String) -> DirectoryStamp {
+        guard let file = exactFileStamp(path), file.isDirectory else {
+            return DirectoryStamp(exists: false, modifiedSeconds: 0,
+                                  modifiedNanoseconds: 0)
+        }
+        return DirectoryStamp(exists: true,
+                              modifiedSeconds: file.modifiedSeconds,
+                              modifiedNanoseconds: file.modifiedNanoseconds)
+    }
+
+    private func rebuild() {
+        let fm = FileManager.default
+        var discoveredFiles: [String] = []
+        var discoveredDirectories = Set(roots)
+        for root in roots {
+            guard let entries = fm.enumerator(atPath: root) else { continue }
+            for case let relative as String in entries {
+                let path = root + "/" + relative
+                var isDirectory: ObjCBool = false
+                guard fm.fileExists(atPath: path, isDirectory: &isDirectory) else {
+                    continue
+                }
+                if isDirectory.boolValue {
+                    discoveredDirectories.insert(path)
+                } else if relative.hasSuffix(".jsonl") {
+                    discoveredFiles.append(path)
+                }
+            }
+        }
+        paths = discoveredFiles
+        directoryStamps = Dictionary(uniqueKeysWithValues:
+            discoveredDirectories.map { ($0, stamp(for: $0)) })
+    }
 }
 
 func newestTranscript() -> String? {

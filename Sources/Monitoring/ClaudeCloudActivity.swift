@@ -8,6 +8,21 @@ struct ProviderActivityEvent {
     let phase: Block.ActivityPhase
 }
 
+/// Tracks cache entry identity so discovery work is proportional to changes,
+/// not to the lifetime size of Claude's Chromium cache.
+struct ClaudeCacheDiscoveryIndex {
+    private(set) var names: Set<String> = []
+
+    mutating func update(_ currentNames: [String])
+        -> (added: Set<String>, removed: Set<String>) {
+        let current = Set(currentNames)
+        let changes = (added: current.subtracting(names),
+                       removed: names.subtracting(current))
+        names = current
+        return changes
+    }
+}
+
 func claudeCloudActivityEvents(in text: String,
                                source: String = "Claude · cloud chat")
     -> [ProviderActivityEvent] {
@@ -46,6 +61,19 @@ private func readableASCII(_ data: Data) -> String {
     return String(decoding: bytes, as: UTF8.self)
 }
 
+func claudeCacheDirectoryChanged(_ directory: String,
+                                 previous: inout ExactFileStamp?) -> Bool {
+    guard let current = exactFileStamp(directory), current.isDirectory else {
+        return false
+    }
+    guard previous?.modifiedSeconds != current.modifiedSeconds ||
+          previous?.modifiedNanoseconds != current.modifiedNanoseconds else {
+        return false
+    }
+    previous = current
+    return true
+}
+
 final class ClaudeCloudActivityMonitor {
     private let queue = DispatchQueue(label: "thinkpeek.claude-cloud-activity",
                                       qos: .utility)
@@ -53,8 +81,9 @@ final class ClaudeCloudActivityMonitor {
     private var offsets: [String: UInt64] = [:]
     private var buffers: [String: String] = [:]
     private var streamSources: [String: String] = [:]
-    private var inspectedSizes: [String: UInt64] = [:]
-    private var lastDiscovery = Date.distantPast
+    private var discoveryIndex = ClaudeCacheDiscoveryIndex()
+    private var incompleteNames: Set<String> = []
+    private var directoryModified: ExactFileStamp?
     private let lock = NSLock()
     private var pollInFlight = false
 
@@ -73,8 +102,8 @@ final class ClaudeCloudActivityMonitor {
         lock.unlock()
 
         queue.async { [self] in
-            if Date().timeIntervalSince(lastDiscovery) >= 1 {
-                lastDiscovery = Date()
+            if claudeCacheDirectoryChanged(directory,
+                                           previous: &directoryModified) {
                 discoverStreams()
             }
             var events: [ProviderActivityEvent] = []
@@ -92,19 +121,44 @@ final class ClaudeCloudActivityMonitor {
     private func discoverStreams() {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory)
         else { return }
-        for name in names {
+        let changes = discoveryIndex.update(names)
+        for name in changes.removed {
+            let path = directory + "/" + name
+            streamSources.removeValue(forKey: path)
+            offsets.removeValue(forKey: path)
+            buffers.removeValue(forKey: path)
+            incompleteNames.remove(name)
+        }
+
+        // Chromium cache entries are named from their cache key. A new Claude
+        // session URL therefore creates a new entry name. Reinspect only newly
+        // appeared names, plus files whose complete 2 KiB header has not arrived
+        // yet. Existing recognized streams are drained separately below.
+        let candidates = changes.added.union(incompleteNames)
+        for name in candidates {
             let path = directory + "/" + name
             guard streamSources[path] == nil,
-                  let attributes = try? FileManager.default.attributesOfItem(atPath: path),
-                  let sizeNumber = attributes[.size] as? NSNumber else { continue }
-            let size = sizeNumber.uint64Value
-            guard inspectedSizes[path] != size else { continue }
-            inspectedSizes[path] = size
-            guard let handle = FileHandle(forReadingAtPath: path) else { continue }
+                  let stamp = exactFileStamp(path) else {
+                incompleteNames.insert(name)
+                continue
+            }
+            let size = stamp.size
+            guard let handle = FileHandle(forReadingAtPath: path) else {
+                incompleteNames.insert(name)
+                continue
+            }
             defer { try? handle.close() }
             let prefix = handle.readData(ofLength: 2048)
             let header = readableASCII(prefix)
-            guard let source = cloudSource(fromCacheHeader: header) else { continue }
+            guard let source = cloudSource(fromCacheHeader: header) else {
+                if size < 2048 {
+                    incompleteNames.insert(name)
+                } else {
+                    incompleteNames.remove(name)
+                }
+                continue
+            }
+            incompleteNames.remove(name)
             streamSources[path] = source
             // Cache files survive Claude and Thinkpeek restarts. Replaying an
             // existing stream from byte zero resurrects completed or waiting
@@ -117,9 +171,7 @@ final class ClaudeCloudActivityMonitor {
     }
 
     private func drain(path: String, source: String) -> [ProviderActivityEvent] {
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
-              let number = attributes[.size] as? NSNumber else { return [] }
-        let size = number.uint64Value
+        guard let size = exactFileStamp(path)?.size else { return [] }
         var offset = offsets[path] ?? 0
         if size < offset {
             offset = 0

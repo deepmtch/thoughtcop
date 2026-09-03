@@ -135,9 +135,13 @@ final class ClaudeDesktopConversationMonitor {
     private let queue = DispatchQueue(label: "thinkpeek.claude-desktop-conversation",
                                       qos: .utility)
     private let directory: String
+    private var discoveryIndex = ClaudeCacheDiscoveryIndex()
+    private var conversationNames: Set<String> = []
+    private var incompleteNames: Set<String> = []
     private var inspectedFiles: [String: FileStamp] = [:]
     private var emittedIdentifiers = Set<String>()
     private var initialized = false
+    private var directoryModified: ExactFileStamp?
     private let lock = NSLock()
     private var pollInFlight = false
 
@@ -166,15 +170,15 @@ final class ClaudeDesktopConversationMonitor {
     }
 
     private func inspectChangedFiles() -> [ClaudeDesktopConversationEvent] {
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory)
-        else { return [] }
+        if claudeCacheDirectoryChanged(directory,
+                                       previous: &directoryModified) {
+            discoverConversationFiles()
+        }
         var changed: [(path: String, stamp: FileStamp)] = []
-        for name in names {
+        for name in conversationNames {
             let path = directory + "/" + name
-            guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
-                  let sizeNumber = attributes[.size] as? NSNumber,
-                  let modified = attributes[.modificationDate] as? Date else { continue }
-            let stamp = FileStamp(size: sizeNumber.uint64Value, modified: modified)
+            guard let file = exactFileStamp(path) else { continue }
+            let stamp = FileStamp(size: file.size, modified: file.modified)
             if inspectedFiles[path] != stamp { changed.append((path, stamp)) }
         }
 
@@ -226,5 +230,38 @@ final class ClaudeDesktopConversationMonitor {
             }
         }
         return result
+    }
+
+    private func discoverConversationFiles() {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory)
+        else { return }
+        let changes = discoveryIndex.update(names)
+        for name in changes.removed {
+            let path = directory + "/" + name
+            conversationNames.remove(name)
+            incompleteNames.remove(name)
+            inspectedFiles.removeValue(forKey: path)
+        }
+
+        let candidates = changes.added.union(incompleteNames)
+        for name in candidates {
+            let path = directory + "/" + name
+            guard let file = exactFileStamp(path),
+                  let handle = FileHandle(forReadingAtPath: path) else {
+                incompleteNames.insert(name)
+                continue
+            }
+            let size = file.size
+            defer { try? handle.close() }
+            let prefix = handle.readData(ofLength: 4096)
+            if isClaudeDesktopConversationCache(prefix) {
+                conversationNames.insert(name)
+                incompleteNames.remove(name)
+            } else if size < 4096 {
+                incompleteNames.insert(name)
+            } else {
+                incompleteNames.remove(name)
+            }
+        }
     }
 }

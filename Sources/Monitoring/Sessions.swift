@@ -130,15 +130,30 @@ struct TranscriptDiscoverySnapshot {
 /// This coordinator guarantees that discovery runs off the main thread and that
 /// a slow scan never overlaps with the next periodic request.
 final class TranscriptDiscovery {
+    private struct FileState {
+        let size: UInt64
+        let modified: Date
+        let activity: Date
+    }
+
     private let queue: DispatchQueue
     private let fileProvider: () -> [String]
+    private let activityProvider: (String) -> Date?
     private let stateLock = NSLock()
     private var scanInFlight = false
+    private var fileStates: [String: FileState] = [:]
 
-    init(fileProvider: @escaping () -> [String] = allTranscriptFiles,
+    convenience init() {
+        let pathIndex = TranscriptPathIndex()
+        self.init(fileProvider: pathIndex.files)
+    }
+
+    init(fileProvider: @escaping () -> [String],
+         activityProvider: @escaping (String) -> Date? = latestTranscriptEventDate,
          queue: DispatchQueue = DispatchQueue(
             label: "thinkpeek.transcript-discovery", qos: .utility)) {
         self.fileProvider = fileProvider
+        self.activityProvider = activityProvider
         self.queue = queue
     }
 
@@ -157,10 +172,11 @@ final class TranscriptDiscovery {
         stateLock.unlock()
 
         queue.async { [self] in
-            let snapshot = makeTranscriptDiscoverySnapshot(
-                paths: fileProvider(), activeHours: activeHours,
-                includeSessions: includeSessions, sessionHours: sessionHours,
-                sessionLimit: sessionLimit)
+            let snapshot = makeSnapshot(paths: fileProvider(),
+                                        activeHours: activeHours,
+                                        includeSessions: includeSessions,
+                                        sessionHours: sessionHours,
+                                        sessionLimit: sessionLimit)
             DispatchQueue.main.async { [self] in
                 stateLock.lock()
                 scanInFlight = false
@@ -170,48 +186,62 @@ final class TranscriptDiscovery {
         }
         return true
     }
-}
 
-private func makeTranscriptDiscoverySnapshot(
-    paths: [String], activeHours: Double, includeSessions: Bool,
-    sessionHours: Double, sessionLimit: Int
-) -> TranscriptDiscoverySnapshot {
-    let fm = FileManager.default
-    let now = Date()
-    let activeCutoff = now.addingTimeInterval(-activeHours * 3600)
-    let sessionCutoff = now.addingTimeInterval(-sessionHours * 3600)
-    var sizes: [String: UInt64] = [:]
-    var active: [(path: String, modified: Date)] = []
-    var newestByRoot: [String: Date] = [:]
+    private func makeSnapshot(
+        paths: [String], activeHours: Double, includeSessions: Bool,
+        sessionHours: Double, sessionLimit: Int
+    ) -> TranscriptDiscoverySnapshot {
+        let now = Date()
+        let activeCutoff = now.addingTimeInterval(-activeHours * 3600)
+        let sessionCutoff = now.addingTimeInterval(-sessionHours * 3600)
+        var sizes: [String: UInt64] = [:]
+        var active: [(path: String, modified: Date)] = []
+        var newestByRoot: [String: Date] = [:]
+        var currentPaths = Set<String>()
 
-    let oldestRelevantCutoff = includeSessions
-        ? min(activeCutoff, sessionCutoff) : activeCutoff
-    for path in paths {
-        guard let attrs = try? fm.attributesOfItem(atPath: path) else { continue }
-        if let size = attrs[.size] as? NSNumber { sizes[path] = size.uint64Value }
-        guard let modified = attrs[.modificationDate] as? Date else { continue }
-        guard modified > oldestRelevantCutoff else { continue }
-        let activity = latestTranscriptEventDate(of: path) ?? modified
-        if activity > activeCutoff { active.append((path, activity)) }
-        if includeSessions, activity > sessionCutoff {
-            let root = rootSessionPath(for: path)
-            if newestByRoot[root] == nil || activity > newestByRoot[root]! {
-                newestByRoot[root] = activity
+        let oldestRelevantCutoff = includeSessions
+            ? min(activeCutoff, sessionCutoff) : activeCutoff
+        for path in paths {
+            currentPaths.insert(path)
+            guard let file = exactFileStamp(path) else { continue }
+            let size = file.size
+            let modified = file.modified
+            sizes[path] = size
+            guard modified > oldestRelevantCutoff else {
+                fileStates.removeValue(forKey: path)
+                continue
+            }
+            let previous = fileStates[path]
+            let activity: Date
+            if previous?.size == size, previous?.modified == modified {
+                activity = previous!.activity
+            } else {
+                activity = activityProvider(path) ?? modified
+                fileStates[path] = FileState(size: size, modified: modified,
+                                             activity: activity)
+            }
+            if activity > activeCutoff { active.append((path, activity)) }
+            if includeSessions, activity > sessionCutoff {
+                let root = rootSessionPath(for: path)
+                if newestByRoot[root] == nil || activity > newestByRoot[root]! {
+                    newestByRoot[root] = activity
+                }
             }
         }
-    }
+        fileStates = fileStates.filter { currentPaths.contains($0.key) }
 
-    let sessions: [SessionInfo]? = includeSessions ? newestByRoot
-        .sorted { $0.value > $1.value }
-        .prefix(sessionLimit)
-        .map { path, modified in
-            SessionInfo(path: path, id: sessionID(for: path),
-                        title: sessionTitle(of: path) ?? "untitled",
-                        project: platformName(for: path), modified: modified)
-        } : nil
-    return TranscriptDiscoverySnapshot(
-        activePaths: active.sorted { $0.modified > $1.modified }.map(\.path),
-        sizes: sizes, sessions: sessions)
+        let sessions: [SessionInfo]? = includeSessions ? newestByRoot
+            .sorted { $0.value > $1.value }
+            .prefix(sessionLimit)
+            .map { path, modified in
+                SessionInfo(path: path, id: sessionID(for: path),
+                            title: sessionTitle(of: path) ?? "untitled",
+                            project: platformName(for: path), modified: modified)
+            } : nil
+        return TranscriptDiscoverySnapshot(
+            activePaths: active.sorted { $0.modified > $1.modified }.map(\.path),
+            sizes: sizes, sessions: sessions)
+    }
 }
 
 /// Filesystem modification time is not a reliable activity signal: Claude can

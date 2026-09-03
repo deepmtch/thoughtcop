@@ -81,3 +81,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-074](BUG-074-violation-reopened-user-hidden-hud.md) | A new violation forcibly reopened a user-hidden HUD | Fixed |
 | [BUG-075](BUG-075-violation-alerts-were-not-configurable.md) | Violations interrupted the ticker without a notification preference | Fixed |
 | [BUG-076](BUG-076-release-build-was-ad-hoc-only.md) | The only build artifact was ad-hoc signed and rejected by Gatekeeper | Blocked on Apple credentials |
+| [BUG-077](BUG-077-claude-cache-monitor-busy-loop.md) | Claude cache discovery continuously consumed more than one CPU core | Fixed |
