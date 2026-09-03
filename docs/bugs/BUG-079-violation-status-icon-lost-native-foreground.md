@@ -20,9 +20,10 @@ that custom-tinted status content to black in the user's menu-bar environment.
 
 ## Fix
 
-Restore the pre-regression policy explicitly: clear `contentTintColor` after
-updating violation state so AppKit supplies the native adaptive foreground. Do
-not set any status-item background. A focused AppKit self-test first applies a
-custom tint and verifies that the production helper clears it.
-The `/ui` diagnostic state exposes `statusItemUsesNativeForeground` so the
-foreground policy is testable without UI clicking.
+Use an explicit white, non-template symbol and white attributed count while an
+unreviewed violation exists. Restore native adaptive rendering after the alert
+is reviewed. Do not set any status-item background. A focused AppKit self-test
+verifies the white symbol and count, native restoration, and that the helper
+does not enable a custom layer/background. The `/ui` diagnostic state exposes
+`statusItemForegroundMode` and `statusItemImageIsTemplate` so the rendered
+policy is testable without UI clicking.

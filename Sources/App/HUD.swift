@@ -4,8 +4,24 @@ import AppKit
 import Foundation
 import QuartzCore
 
-func restoreNativeStatusItemForeground(_ button: NSStatusBarButton) {
-    button.contentTintColor = nil
+func applyStatusItemForeground(_ button: NSStatusBarButton,
+                               alert: Bool, countTitle: String) {
+    let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .bold)
+    if alert {
+        if let whiteImage = button.image?.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(paletteColors: [.white])) {
+            whiteImage.isTemplate = false
+            button.image = whiteImage
+        }
+        button.contentTintColor = .white
+        button.attributedTitle = NSAttributedString(
+            string: countTitle,
+            attributes: [.foregroundColor: NSColor.white, .font: font])
+    } else {
+        button.image?.isTemplate = true
+        button.contentTintColor = nil
+        button.attributedTitle = NSAttributedString(string: "")
+    }
 }
 
 enum ViolationAlertsPreference {
@@ -595,6 +611,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let tickerToolbarAttached = peekToolbar.arrangedSubviews.count == 2 &&
             peekToolbar.arrangedSubviews[0] === peekCornerControls &&
             peekToolbar.arrangedSubviews[1] === peekPrimaryActions
+        let statusItemForegroundMode =
+            statusItem?.button?.contentTintColor?.isEqual(NSColor.white) == true
+                ? "white-alert" : "native"
+        let statusItemImageIsTemplate = statusItem?.button?.image?.isTemplate ?? false
         api.publish([
             "schemaVersion": 1,
             "ready": true,
@@ -614,7 +634,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 $0.reviewedAt == nil
             },
             "menuBarAvailable": statusItem != nil,
-            "statusItemUsesNativeForeground": statusItem?.button?.contentTintColor == nil,
+            "statusItemForegroundMode": statusItemForegroundMode,
+            "statusItemImageIsTemplate": statusItemImageIsTemplate,
             "statusMenuItems": statusItem?.menu?.items
                 .filter { !$0.isSeparatorItem }.map(\.title) ?? [],
             "violationCount": violationRecords.count,
@@ -1639,10 +1660,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 : "text.bubble.fill",
             accessibilityDescription: hasUnacknowledged
                 ? "Thinkpeek has a new violation" : "Thinkpeek")
-        statusItem?.button?.title = newCount == 0 ? "" : " \(newCount > 9 ? "9+" : String(newCount))"
-        statusItem?.button?.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
+        let countTitle = newCount == 0 ? "" : " \(newCount > 9 ? "9+" : String(newCount))"
         if let button = statusItem?.button {
-            restoreNativeStatusItemForeground(button)
+            applyStatusItemForeground(button, alert: hasUnacknowledged, countTitle: countTitle)
         }
         statusItem?.button?.setAccessibilityLabel(count == 0
             ? "Thinkpeek, no recorded violations"
