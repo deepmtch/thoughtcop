@@ -34,6 +34,7 @@ enum UICommand {
     case position(String)
     case chooseBackground
     case backgroundRGBA([Double]?)
+    case violationAlerts(Bool)
 
     var name: String {
         switch self {
@@ -62,6 +63,8 @@ enum UICommand {
         case .chooseBackground: return "choose-background"
         case .backgroundRGBA(let values): return values == nil
             ? "background/system" : "background/rgba"
+        case .violationAlerts(let enabled): return enabled
+            ? "violation-alerts/on" : "violation-alerts/off"
         }
     }
 }
@@ -210,6 +213,8 @@ final class UIStateServer {
         case "/width/standard": return .width(CompactWindowSizing.standardWidth)
         case "/background/blue": return .backgroundRGBA([0.16, 0.38, 0.68, 1])
         case "/background/system": return .backgroundRGBA(nil)
+        case "/violation-alerts/on": return .violationAlerts(true)
+        case "/violation-alerts/off": return .violationAlerts(false)
         case "/position/top-left": return .position("top-left")
         case "/position/top-center": return .position("top-center")
         case "/position/top-right": return .position("top-right")

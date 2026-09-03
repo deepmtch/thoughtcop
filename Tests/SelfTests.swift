@@ -924,23 +924,40 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
     let settings = TickerSettingsMenu()
     settings.install(on: button)
     settings.update(speed: .normal, width: CompactWindowSizing.standardWidth,
-                    usesDefaultAlarmColor: true)
+                    usesDefaultAlarmColor: true, violationAlertsEnabled: false)
     let expected = [
         "Scroll Speed": ["Slow", "Normal", "Fast"],
         "Window Width": ["Narrow", "Standard"],
         "Window Position": ["Top Left", "Top Center", "Top Right", "Bottom Left",
                             "Bottom Center", "Bottom Right"],
         "Appearance": ["Violation Highlight Color…", "Use Default Violation Color"],
+        "Violation Alerts": ["Show for 10 Seconds"],
     ]
-    guard settings.structure == expected, settings.menu.numberOfItems == 4,
+    var requestedAlerts: Bool?
+    settings.violationAlertsRequested = { requestedAlerts = $0 }
+    if let alertItem = settings.menu.item(withTitle: "Violation Alerts")?.submenu?
+        .item(withTitle: "Show for 10 Seconds"), let action = alertItem.action {
+        NSApp.sendAction(action, to: alertItem.target, from: alertItem)
+    }
+    let suite = "thinkpeek.violation-alerts-selftest"
+    guard let defaults = UserDefaults(suiteName: suite) else { exit(1) }
+    defaults.removePersistentDomain(forName: suite)
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let defaultOff = !ViolationAlertsPreference.load(defaults: defaults)
+    ViolationAlertsPreference.save(true, defaults: defaults)
+    guard settings.structure == expected, settings.menu.numberOfItems == 5,
           settings.usesSingleButtonLauncher,
           settings.topLevelTitles == ["Scroll Speed", "Window Width",
-                                      "Window Position", "Appearance"] else {
+                                      "Window Position", "Appearance", "Violation Alerts"],
+          requestedAlerts == true, defaultOff,
+          ViolationAlertsPreference.load(defaults: defaults),
+          ViolationAlertsPreference.displayDuration == 10 else {
         FileHandle.standardError.write(
             "settings menu self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("settings menu: categories=4 singleButton=true hierarchical=true")
+    print("settings menu: categories=5 singleButton=true hierarchical=true " +
+          "violationAlertsDefaultOff=true duration=10")
     exit(0)
 }
 
@@ -1205,6 +1222,8 @@ if CommandLine.arguments.contains("--ui-command-api-selftest") {
     api.perform(.showViolations, origin: .http)
     api.perform(.closeCheckRules, origin: .http)
     api.perform(.historyFilter("violations"), origin: .http)
+    api.perform(.violationAlerts(true), origin: .http)
+    api.perform(.violationAlerts(false), origin: .appKit)
     api.perform(.next, origin: .http)
     api.perform(.saveCheckRules(text: "SECRET_RULE_CONTENT", mode: "whole-text"),
                 origin: .appKit)
@@ -1212,7 +1231,8 @@ if CommandLine.arguments.contains("--ui-command-api-selftest") {
     try? FileManager.default.removeItem(at: logURL)
     guard handled == ["first", "controls", "hide", "show-violations",
                       "check-rules/close",
-                      "filter/violations", "next",
+                      "filter/violations", "violation-alerts/on",
+                      "violation-alerts/off", "next",
                       "save-check-rules"],
           log.contains("\"origin\":\"appKit\""),
           log.contains("\"origin\":\"http\""),

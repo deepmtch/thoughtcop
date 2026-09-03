@@ -360,11 +360,11 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert all("CODEX_LOCAL_SUMMARY" not in text for text in sent), sent
         assert finished["navigableCount"] == 3, finished
         assert finished["violationCount"] == 1, finished
-        assert finished["currentViolationVisible"] is True, finished
-        assert finished["peekSource"] == "Claude · Claude Alpha", finished
-        assert "Dummy detected explicit Claude uncertainty" in finished["peekText"], finished
-        assert "unavailable" not in finished["peekText"].lower(), finished
-        assert finished["tickerAlarmActive"] is True, finished
+        assert finished["violationAlertsEnabled"] is False, finished
+        assert finished["violationAlertVisible"] is False, finished
+        assert finished["menuBarViolationAlertActive"] is True, finished
+        assert finished["currentViolationVisible"] is False, finished
+        assert finished["tickerAlarmActive"] is False, finished
         assert finished["windowVisible"] is True, finished
         assert len(finished["violations"]) == 1, finished
         assert finished["violations"][0]["checkPrompt"], finished
@@ -575,13 +575,43 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             state.get("checkerRequestInFlight") is False)
         assert hidden_violation["windowVisible"] is False, hidden_violation
         assert hidden_violation["hiddenByUser"] is True, hidden_violation
-        assert hidden_violation["currentViolationVisible"] is True, hidden_violation
+        assert hidden_violation["currentViolationVisible"] is False, hidden_violation
+        assert hidden_violation["menuBarViolationAlertActive"] is True, hidden_violation
         get_json(API_BASE, "/violations")
         explicitly_revealed = wait_for(lambda state:
             state.get("windowVisible") is True and
             state.get("historyFilter") == "violations")
         assert explicitly_revealed["hiddenByUser"] is False, explicitly_revealed
         assert explicitly_revealed["visibleCardCount"] == 2, explicitly_revealed
+
+        # Opting in temporarily presents a new violation, then restores the
+        # ticker item that was visible before the alert.
+        get_json(API_BASE, "/close")
+        ticker_before_transient = wait_for(lambda state:
+            state.get("uiStyle") == "single-line-ticker")
+        restore_index = ticker_before_transient["currentIndex"]
+        get_json(API_BASE, "/violation-alerts/on")
+        enabled = wait_for(lambda state:
+            state.get("violationAlertsEnabled") is True)
+        assert enabled["violationAlertVisible"] is False, enabled
+        append(claude_path, {
+            "timestamp": record_timestamp(1_500),
+            "type": "assistant",
+            "message": {"content": [{
+                "type": "text",
+                "text": "TRANSIENT_ALERT: show briefly when opted in",
+            }]},
+        })
+        transient = wait_for(lambda state:
+            state.get("violationCount") == 3 and
+            state.get("violationAlertVisible") is True)
+        assert transient["windowVisible"] is True, transient
+        assert transient["currentViolationVisible"] is True, transient
+        restored = wait_for(lambda state:
+            state.get("violationCount") == 3 and
+            state.get("violationAlertVisible") is False)
+        assert restored["currentIndex"] == restore_index, restored
+        assert restored["currentViolationVisible"] is False, restored
 
         print(json.dumps({
             "concurrentProviders": ["Claude", "Codex"],
@@ -592,6 +622,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "autoFollowedAcrossSessions": True,
             "readerFrozeThenResumed": True,
             "hiddenViolationStayedHidden": hidden_before_alert["windowVisible"] is False,
+            "defaultViolationAlertsOff": finished["violationAlertsEnabled"] is False,
+            "transientViolationRestored": restored["currentIndex"] == restore_index,
             "providerTitles": ["Claude Alpha", "Claude Beta",
                                "Codex Alpha", "Codex Beta",
                                "Claude Desktop Exact Title"],

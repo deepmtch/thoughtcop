@@ -65,6 +65,8 @@ running `/ui` inspection surface. A checked item is not merely planned.
   mode uses a dynamic critical-red light/dark surface.
 - [x] System-background reset is available.
 - [x] Foreground text/icons automatically maintain light/dark contrast.
+- [x] Violation popups are an explicit persisted opt-in, default off, and the
+  enabled popup restores the prior ticker item after 10 seconds.
 
 ## Input, focus, and accessibility
 
@@ -76,8 +78,10 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Session, status, message position, history, and lifecycle controls have
   explicit accessibility names instead of relying on symbol pronunciation.
 - [x] Done, Hide, and Quit have unambiguous placement, labels, and shortcuts.
-- [x] New violations post a high-priority VoiceOver announcement with source
-  and reason.
+- [x] Enabled violation popups post a high-priority VoiceOver announcement with
+  source and reason; disabled popups remain silent and non-interrupting.
+- [x] New unreviewed violations give the menu-bar shield an explicit semantic
+  alert tint in addition to its count and accessible label.
 - [x] Source labels truncate safely and retain full text in a tooltip.
 - [x] Text remains selectable in the full-message reader.
 - [x] Controls reflow at narrow width instead of clipping.

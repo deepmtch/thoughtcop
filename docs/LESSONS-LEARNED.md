@@ -24,6 +24,7 @@ review material under `AGENTS.md`, not historical commentary.
 | Checker work was invisible or briefly reported idle | Register request state and the visible indicator atomically when evidence is accepted. Keep a request/result pair with the same ID for every outbound attempt. | `/ui` in-flight/light assertions and paired audit IDs. |
 | A transient test failure disappeared on retry | A retry is not evidence. Diagnose and remove the race; then rerun the full suite. | Deterministic repeated black-box completion. |
 | Violations disappeared when the HUD was hidden, then a later fix made alerts reopen it | Persist violations independently of window visibility, but user-requested Hide is authoritative. Update the menu badge/history without reopening; only an explicit Show/Open action clears hidden state. | Store self-test plus violation-while-hidden black-box flow. |
+| Violation alerts interrupted the ticker with no user preference | Default visual and audible popup notifications off. Always preserve the unread menu count and semantic alert tint; only an explicit persisted opt-in may temporarily show, sound, and announce a violation, and it restores the prior ticker item after 10 seconds. | Preference/menu self-test plus default-off and enabled-transient black-box assertions. |
 
 ## UI and interaction
 

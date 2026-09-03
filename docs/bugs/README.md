@@ -79,3 +79,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-072](BUG-072-checker-state-briefly-reported-idle.md) | Accepted checks briefly reported idle before their request callback | Fixed |
 | [BUG-073](BUG-073-concurrent-source-hidden-by-latest-activity.md) | Latest activity hid other concurrently active Claude/Codex sessions | Fixed |
 | [BUG-074](BUG-074-violation-reopened-user-hidden-hud.md) | A new violation forcibly reopened a user-hidden HUD | Fixed |
+| [BUG-075](BUG-075-violation-alerts-were-not-configurable.md) | Violations interrupted the ticker without a notification preference | Fixed |

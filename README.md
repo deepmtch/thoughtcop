@@ -135,6 +135,10 @@ The ticker uses the semantic macOS window surface during normal operation and th
 for an actual alert. Custom colors and opacity are remembered, text/icons
 automatically switch contrast, and **Use Default Violation Color** restores the
 critical-red light/dark warning surface.
+**Violation Alerts → Show for 10 Seconds** is off by default. When enabled, a
+new violation temporarily takes over the visible ticker for 10 seconds, then
+restores the item that was there before. Explicitly hidden and open detail
+windows are never interrupted.
 A single click opens a dedicated full-message reader; **Done** or a click outside
 the reader returns to the ticker. The visible controls button opens the separate
 navigation/settings view. The **↤** control returns directly to the
@@ -205,9 +209,12 @@ Every evaluator match is appended to the local 0600-permission store at
 the source provider/session, time, matched reason, quoted evidence, original
 evidence record, evaluator provider, latency, and the exact check prompt in
 force.
-The latest violation immediately takes priority over ordinary working activity,
-unhides the ticker if necessary, sounds the alert, and uses a red warning surface
-with a visible **VIOLATION** label rather than color alone.
+Every new violation updates the unread menu-bar count and gives its shield an
+alert tint. By default it does not interrupt the ticker, play a sound, or post a
+VoiceOver announcement. If the user enables the 10-second alert preference, a
+new violation temporarily takes priority in the visible ticker, sounds the
+alert, and uses a red warning surface with a visible **VIOLATION** label rather
+than color alone. The previous ticker item returns after 10 seconds.
 
 The menu-bar shield carries the recorded count. **Show Violations · N recorded**
 opens a dedicated violation-only list even after the ticker has been hidden or

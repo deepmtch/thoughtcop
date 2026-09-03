@@ -4,6 +4,19 @@ import AppKit
 import Foundation
 import QuartzCore
 
+enum ViolationAlertsPreference {
+    static let defaultsKey = "violationAlertsEnabled"
+    static let displayDuration: TimeInterval = 10
+
+    static func load(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: defaultsKey)
+    }
+
+    static func save(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: defaultsKey)
+    }
+}
+
 func controlsExpansionTitle(compactMode: Bool) -> String? {
     compactMode ? "Show all" : nil
 }
@@ -155,6 +168,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var discardedEmptySummaryCount = 0
     private var statusItem: NSStatusItem?
     private var hiddenByUser = false
+    private var violationAlertsEnabled = ViolationAlertsPreference.load()
+    private var violationAlertDismissal: DispatchWorkItem?
+    private var violationAlertRestoreIndex: Int?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         PrivacyAudit.shared.start()
@@ -589,6 +605,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "alwaysOnTop": panel.level == .floating,
             "windowVisible": panel.isVisible,
             "hiddenByUser": hiddenByUser,
+            "violationAlertsEnabled": violationAlertsEnabled,
+            "violationAlertVisible": violationAlertDismissal != nil,
+            "menuBarViolationAlertActive": violationRecords.contains {
+                $0.reviewedAt == nil
+            },
             "menuBarAvailable": statusItem != nil,
             "violationCount": violationRecords.count,
             "violationStorageError": violationStore.lastError ?? NSNull(),
@@ -803,6 +824,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func handleCommand(_ command: UICommand) {
+        if case .violationAlerts = command {
+            // Changing the preference handles an active transient itself.
+        } else {
+            cancelViolationAlertDismissal()
+        }
         switch command {
         case .first: showFirst()
         case .previous: showPrevious()
@@ -845,6 +871,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard components.count == 4 else { return }
             setTickerBackground(NSColor(srgbRed: components[0], green: components[1],
                                         blue: components[2], alpha: components[3]))
+        case .violationAlerts(let enabled): setViolationAlerts(enabled)
         }
     }
 
@@ -885,6 +912,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func hideHUD() {
+        cancelViolationAlertDismissal()
         hiddenByUser = true
         panel.orderOut(nil)
         publishAPI()
@@ -978,9 +1006,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func updateSettingsMenuChecks(_ speed: TickerSpeed) {
         tickerSettingsMenu?.update(speed: speed, width: compactWidth,
-                                   usesDefaultAlarmColor: tickerAlarmColor == nil)
+                                   usesDefaultAlarmColor: tickerAlarmColor == nil,
+                                   violationAlertsEnabled: violationAlertsEnabled)
         peekSettingsMenu?.update(speed: speed, width: compactWidth,
-                                 usesDefaultAlarmColor: tickerAlarmColor == nil)
+                                 usesDefaultAlarmColor: tickerAlarmColor == nil,
+                                 violationAlertsEnabled: violationAlertsEnabled)
     }
 
     private func configureSettingsMenu(_ menu: TickerSettingsMenu) {
@@ -999,6 +1029,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.defaultAlarmColorRequested = { [weak self] in
             self?.api.perform(.backgroundRGBA(nil), origin: .appKit)
         }
+        menu.violationAlertsRequested = { [weak self] enabled in
+            self?.api.perform(.violationAlerts(enabled), origin: .appKit)
+        }
+    }
+
+    private func setViolationAlerts(_ enabled: Bool) {
+        violationAlertsEnabled = enabled
+        ViolationAlertsPreference.save(enabled)
+        if !enabled { dismissTemporaryViolation() }
+        updateSettingsMenuChecks(peekTicker.speed)
+        publishAPI()
     }
 
     private func setCompactWidth(_ requestedWidth: CGFloat) {
@@ -1603,6 +1644,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 ? "Thinkpeek has a new violation" : "Thinkpeek")
         statusItem?.button?.title = newCount == 0 ? "" : " \(newCount > 9 ? "9+" : String(newCount))"
         statusItem?.button?.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
+        statusItem?.button?.contentTintColor = hasUnacknowledged ? .systemRed : nil
         statusItem?.button?.setAccessibilityLabel(count == 0
             ? "Thinkpeek, no recorded violations"
             : "Thinkpeek, \(newCount) new and \(count) recorded violation\(count == 1 ? "" : "s")")
@@ -1800,8 +1842,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showAlert(_ decision: EvaluationDecision, provider: String,
                            _ ms: Double, timestamp: String, card: EventCard,
                            preview: MessagePreview) {
-        let shouldRevealTicker = peekMode && !hiddenByUser
+        let shouldRevealTicker = violationAlertsEnabled && peekMode && !hiddenByUser
         let priorSelection = compactIndex
+        var restoreSelection = priorSelection
         preview.evaluation = .alert(decision)
         card.setViolation(reason: decision.reason, evidence: decision.evidence,
                           provider: provider, latencyMs: Int(ms),
@@ -1814,24 +1857,35 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         preview.violationID = record.id
         preview.violationReviewed = false
         card.setViolationReviewed(false)
-        NSSound.beep()
-        NSAccessibility.post(element: panel as Any,
-                             notification: .announcementRequested,
-                             userInfo: [
-                                .announcement: "New Thinkpeek violation from \(preview.source). \(decision.reason)",
-                                .priority: NSAccessibilityPriorityLevel.high.rawValue,
-                             ])
+        if shouldRevealTicker {
+            NSSound.beep()
+            NSAccessibility.post(element: panel as Any,
+                                 notification: .announcementRequested,
+                                 userInfo: [
+                                    .announcement: "New Thinkpeek violation from \(preview.source). \(decision.reason)",
+                                    .priority: NSAccessibilityPriorityLevel.high.rawValue,
+                                 ])
+        }
         alertCount = violationRecords.count
         if let index = eventPreviews.firstIndex(where: { $0 === preview }) {
-            if shouldRevealTicker { compactIndex = index }
-            unacknowledgedViolationIndex = index
+            if priorSelection == index, index > 0 { restoreSelection = index - 1 }
+            if shouldRevealTicker {
+                compactIndex = index
+            } else if compactIndex == index, index > 0 {
+                // With popups disabled, a just-arrived violation must not take
+                // over the ticker merely because it was the newest record.
+                compactIndex = index - 1
+            }
+            unacknowledgedViolationIndex = shouldRevealTicker ? index : nil
         }
         violationsOnly = false
         if shouldRevealTicker {
+            if violationAlertDismissal == nil { violationAlertRestoreIndex = restoreSelection }
             applyPeekMode(true, animated: false)
             panel.orderFrontRegardless()
+            scheduleViolationAlertDismissal()
         } else {
-            compactIndex = priorSelection
+            compactIndex = restoreSelection
             updateCardVisibility()
         }
         panel.title = "⚠ Thinkpeek alert — \(alertCount)"
@@ -1842,6 +1896,33 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         ])
         updateViolationMenu()
         updateWindowTitle()
+        publishAPI()
+    }
+
+    private func scheduleViolationAlertDismissal() {
+        violationAlertDismissal?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.dismissTemporaryViolation() }
+        violationAlertDismissal = work
+        let duration = ISOLATED_E2E ? 0.25 : ViolationAlertsPreference.displayDuration
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+    }
+
+    private func cancelViolationAlertDismissal() {
+        violationAlertDismissal?.cancel()
+        violationAlertDismissal = nil
+        violationAlertRestoreIndex = nil
+    }
+
+    private func dismissTemporaryViolation() {
+        violationAlertDismissal?.cancel()
+        violationAlertDismissal = nil
+        unacknowledgedViolationIndex = nil
+        if let restoreIndex = violationAlertRestoreIndex, !eventCards.isEmpty {
+            compactIndex = min(max(0, restoreIndex), eventCards.count - 1)
+            updateCardVisibility()
+            updateWindowTitle()
+        }
+        violationAlertRestoreIndex = nil
         publishAPI()
     }
 

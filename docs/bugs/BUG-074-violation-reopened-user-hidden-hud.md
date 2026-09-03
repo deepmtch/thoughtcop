@@ -22,5 +22,6 @@ History clears the state and presents the requested view.
 ## Verification
 
 The isolated test hides the real AppKit window, emits a new alerting assistant
-response, verifies `/ui.windowVisible == false`, then explicitly opens violation
-history and verifies both violations are present.
+response, verifies `/ui.windowVisible == false` with the unread menu signal
+active, then explicitly opens violation history and verifies both violations are
+present.

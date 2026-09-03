@@ -8,12 +8,14 @@ final class TickerSettingsMenu: NSObject {
     var positionRequested: ((String) -> Void)?
     var backgroundRequested: (() -> Void)?
     var defaultAlarmColorRequested: (() -> Void)?
+    var violationAlertsRequested: ((Bool) -> Void)?
 
     private(set) var menu = NSMenu()
     private weak var launcherButton: NSButton?
     private var speedItems: [TickerSpeed: NSMenuItem] = [:]
     private var widthItems: [String: NSMenuItem] = [:]
     private var defaultAlarmColorItem: NSMenuItem!
+    private var violationAlertsItem: NSMenuItem!
 
     var structure: [String: [String]] {
         Dictionary(uniqueKeysWithValues: menu.items.compactMap { item in
@@ -35,6 +37,8 @@ final class TickerSettingsMenu: NSObject {
                                  submenu: positionMenu()))
         menu.addItem(submenuItem(title: "Appearance", symbol: "paintpalette",
                                  submenu: appearanceMenu()))
+        menu.addItem(submenuItem(title: "Violation Alerts", symbol: "bell.badge",
+                                 submenu: violationAlertsMenu()))
         launcherButton = button
         button.title = ""
         button.image = NSImage(systemSymbolName: "gearshape",
@@ -54,13 +58,15 @@ final class TickerSettingsMenu: NSObject {
                    in: sender)
     }
 
-    func update(speed: TickerSpeed, width: CGFloat, usesDefaultAlarmColor: Bool) {
+    func update(speed: TickerSpeed, width: CGFloat, usesDefaultAlarmColor: Bool,
+                violationAlertsEnabled: Bool) {
         for (candidate, item) in speedItems { item.state = candidate == speed ? .on : .off }
         widthItems["narrow"]?.state = abs(width - CompactWindowSizing.narrowWidth) < 1
             ? .on : .off
         widthItems["standard"]?.state = abs(width - CompactWindowSizing.standardWidth) < 1
             ? .on : .off
         defaultAlarmColorItem.state = usesDefaultAlarmColor ? .on : .off
+        violationAlertsItem.state = violationAlertsEnabled ? .on : .off
     }
 
     private func submenuItem(title: String, symbol: String, submenu: NSMenu) -> NSMenuItem {
@@ -139,6 +145,17 @@ final class TickerSettingsMenu: NSObject {
         return submenu
     }
 
+    private func violationAlertsMenu() -> NSMenu {
+        let submenu = NSMenu(title: "Violation Alerts")
+        violationAlertsItem = NSMenuItem(title: "Show for 10 Seconds",
+                                         action: #selector(violationAlertsPicked(_:)),
+                                         keyEquivalent: "")
+        violationAlertsItem.target = self
+        violationAlertsItem.toolTip = "Temporarily show new violations for 10 seconds"
+        submenu.addItem(violationAlertsItem)
+        return submenu
+    }
+
     @objc private func speedPicked(_ sender: NSMenuItem) {
         guard TickerSpeed.allCases.indices.contains(sender.tag) else { return }
         speedRequested?(TickerSpeed.allCases[sender.tag])
@@ -159,5 +176,8 @@ final class TickerSettingsMenu: NSObject {
     @objc private func backgroundPicked(_ sender: NSMenuItem) { backgroundRequested?() }
     @objc private func systemBackgroundPicked(_ sender: NSMenuItem) {
         defaultAlarmColorRequested?()
+    }
+    @objc private func violationAlertsPicked(_ sender: NSMenuItem) {
+        violationAlertsRequested?(sender.state != .on)
     }
 }
