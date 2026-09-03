@@ -154,6 +154,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var apiEvents: [[String: Any]] = []
     private var discardedEmptySummaryCount = 0
     private var statusItem: NSStatusItem?
+    private var hiddenByUser = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         PrivacyAudit.shared.start()
@@ -211,8 +212,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         content.layer?.cornerRadius = 14
         content.layer?.cornerCurve = .continuous
         content.layer?.masksToBounds = true
-        content.clicked = { [weak self] in
-            self?.api.perform(.showMessage, origin: .appKit)
+        if !ISOLATED_E2E {
+            content.clicked = { [weak self] in
+                self?.api.perform(.showMessage, origin: .appKit)
+            }
         }
 
         peekBar = NSVisualEffectView()
@@ -585,6 +588,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "historyCount": BACKFILL == Int.max ? "all" : String(BACKFILL),
             "alwaysOnTop": panel.level == .floating,
             "windowVisible": panel.isVisible,
+            "hiddenByUser": hiddenByUser,
             "menuBarAvailable": statusItem != nil,
             "violationCount": violationRecords.count,
             "violationStorageError": violationStore.lastError ?? NSNull(),
@@ -881,11 +885,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func hideHUD() {
+        hiddenByUser = true
         panel.orderOut(nil)
         publishAPI()
     }
 
     @objc private func showHUDFromMenu(_ sender: Any?) {
+        hiddenByUser = false
         panel.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
         publishAPI()
@@ -1271,6 +1277,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func showViolations() {
+        hiddenByUser = false
         violationsOnly = true
         unacknowledgedViolationIndex = nil
         showExpandedFeed()
@@ -1793,7 +1800,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showAlert(_ decision: EvaluationDecision, provider: String,
                            _ ms: Double, timestamp: String, card: EventCard,
                            preview: MessagePreview) {
-        let shouldRevealTicker = peekMode || !panel.isVisible
+        let shouldRevealTicker = peekMode && !hiddenByUser
         let priorSelection = compactIndex
         preview.evaluation = .alert(decision)
         card.setViolation(reason: decision.reason, evidence: decision.evidence,

@@ -556,6 +556,33 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert all("SUMMARY_MUST_STAY_EXCLUDED" not in text for text in all_sent), all_sent
         assert all("DESKTOP_TOOL_MUST_STAY_EXCLUDED" not in text for text in all_sent), all_sent
 
+        # Hide is an explicit user state. A later violation must persist and
+        # update the menu/API without forcing the HUD back onscreen.
+        get_json(API_BASE, "/hide")
+        hidden_before_alert = wait_for(lambda state:
+            state.get("windowVisible") is False and
+            state.get("hiddenByUser") is True)
+        append(claude_path, {
+            "timestamp": record_timestamp(1_400),
+            "type": "assistant",
+            "message": {"content": [{
+                "type": "text",
+                "text": "HIDDEN_ALERT: violation while explicitly hidden",
+            }]},
+        })
+        hidden_violation = wait_for(lambda state:
+            state.get("violationCount") == 2 and
+            state.get("checkerRequestInFlight") is False)
+        assert hidden_violation["windowVisible"] is False, hidden_violation
+        assert hidden_violation["hiddenByUser"] is True, hidden_violation
+        assert hidden_violation["currentViolationVisible"] is True, hidden_violation
+        get_json(API_BASE, "/violations")
+        explicitly_revealed = wait_for(lambda state:
+            state.get("windowVisible") is True and
+            state.get("historyFilter") == "violations")
+        assert explicitly_revealed["hiddenByUser"] is False, explicitly_revealed
+        assert explicitly_revealed["visibleCardCount"] == 2, explicitly_revealed
+
         print(json.dumps({
             "concurrentProviders": ["Claude", "Codex"],
             "simulatedConversations": 5,
@@ -564,6 +591,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "alertAndClean": True,
             "autoFollowedAcrossSessions": True,
             "readerFrozeThenResumed": True,
+            "hiddenViolationStayedHidden": hidden_before_alert["windowVisible"] is False,
             "providerTitles": ["Claude Alpha", "Claude Beta",
                                "Codex Alpha", "Codex Beta",
                                "Claude Desktop Exact Title"],
