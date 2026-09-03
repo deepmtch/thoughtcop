@@ -2,7 +2,22 @@
 set -eu
 
 cd "$(dirname "$0")"
-./build.sh
+
+needs_build=false
+if [ ! -x .build/Thinkpeek.app/Contents/MacOS/thinkpeek ] ||
+   [ ! -f .build/build.stamp ] ||
+   [ build.sh -nt .build/build.stamp ] ||
+   [ Resources/Thinkpeek-Info.plist -nt .build/build.stamp ] ||
+   /usr/bin/find Sources Tests -type f -newer .build/build.stamp -print -quit | /usr/bin/grep -q .; then
+    needs_build=true
+fi
+
+if [ "$needs_build" = true ]; then
+    echo "thinkpeek: building changed sources..."
+    ./build.sh
+else
+    echo "thinkpeek: build is current"
+fi
 
 old_pid=$(/usr/bin/pgrep -x thinkpeek 2>/dev/null | /usr/bin/head -n 1 || true)
 
@@ -10,6 +25,7 @@ old_pid=$(/usr/bin/pgrep -x thinkpeek 2>/dev/null | /usr/bin/head -n 1 || true)
 # The new process uses SingleInstance.swift to terminate the previous Thinkpeek
 # only after the build and launch both succeed.
 /usr/bin/open -n -g "$(pwd)/.build/Thinkpeek.app" "$@"
+echo "thinkpeek: launched replacement; verifying..."
 
 attempt=0
 while [ "$attempt" -lt 100 ]; do

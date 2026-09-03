@@ -1367,4 +1367,24 @@ if CommandLine.arguments.contains("--keyboard-navigation-selftest") {
           "violations=true focusedEditorPreserved=true")
     exit(0)
 }
+
+if CommandLine.arguments.contains("--status-item-foreground-selftest") {
+    let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    guard let button = item.button else {
+        FileHandle.standardError.write(
+            "status item foreground self-test failed: missing button\n".data(using: .utf8)!)
+        exit(1)
+    }
+    button.contentTintColor = .systemRed
+    restoreNativeStatusItemForeground(button)
+    let usesNativeForeground = button.contentTintColor == nil
+    NSStatusBar.system.removeStatusItem(item)
+    guard usesNativeForeground else {
+        FileHandle.standardError.write(
+            "status item foreground self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("status item foreground: native=true customBackground=false")
+    exit(0)
+}
 }

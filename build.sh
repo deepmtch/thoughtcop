@@ -46,6 +46,7 @@ mkdir -p "$app_contents/MacOS"
 cp "$build_dir/thinkpeek" "$app_contents/MacOS/thinkpeek"
 cp "Resources/Thinkpeek-Info.plist" "$app_contents/Info.plist"
 /usr/bin/codesign --force --deep --sign - "$build_dir/Thinkpeek.app"
+/usr/bin/touch "$build_dir/build.stamp"
 
 if /usr/bin/pgrep -x thinkpeek >/dev/null 2>&1; then
     echo "build complete; a running Thinkpeek still uses its old binary"

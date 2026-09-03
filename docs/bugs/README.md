@@ -83,3 +83,5 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-076](BUG-076-release-build-was-ad-hoc-only.md) | The only build artifact was ad-hoc signed and rejected by Gatekeeper | Blocked on Apple credentials |
 | [BUG-077](BUG-077-claude-cache-monitor-busy-loop.md) | Claude cache discovery continuously consumed more than one CPU core | Fixed |
 | [BUG-078](BUG-078-disabled-violation-status-duplicated-menu-action.md) | Disabled violation status duplicated the actionable menu command | Fixed |
+| [BUG-079](BUG-079-violation-status-icon-lost-native-foreground.md) | Custom violation tint rendered the menu-bar icon and count black | Fixed |
+| [BUG-080](BUG-080-restart-rebuilt-unchanged-app.md) | Restart silently rebuilt the unchanged app and appeared frozen | Fixed |

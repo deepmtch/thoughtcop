@@ -36,7 +36,8 @@ for test in \
     --privacy-audit-selftest \
     --violation-store-selftest \
     --ui-command-api-selftest \
-    --keyboard-navigation-selftest
+    --keyboard-navigation-selftest \
+    --status-item-foreground-selftest
 do
     ./.build/thinkpeek "$test"
 done

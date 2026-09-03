@@ -4,6 +4,10 @@ import AppKit
 import Foundation
 import QuartzCore
 
+func restoreNativeStatusItemForeground(_ button: NSStatusBarButton) {
+    button.contentTintColor = nil
+}
+
 enum ViolationAlertsPreference {
     static let defaultsKey = "violationAlertsEnabled"
     static let displayDuration: TimeInterval = 10
@@ -610,6 +614,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 $0.reviewedAt == nil
             },
             "menuBarAvailable": statusItem != nil,
+            "statusItemUsesNativeForeground": statusItem?.button?.contentTintColor == nil,
             "statusMenuItems": statusItem?.menu?.items
                 .filter { !$0.isSeparatorItem }.map(\.title) ?? [],
             "violationCount": violationRecords.count,
@@ -1636,7 +1641,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 ? "Thinkpeek has a new violation" : "Thinkpeek")
         statusItem?.button?.title = newCount == 0 ? "" : " \(newCount > 9 ? "9+" : String(newCount))"
         statusItem?.button?.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
-        statusItem?.button?.contentTintColor = hasUnacknowledged ? .systemRed : nil
+        if let button = statusItem?.button {
+            restoreNativeStatusItemForeground(button)
+        }
         statusItem?.button?.setAccessibilityLabel(count == 0
             ? "Thinkpeek, no recorded violations"
             : "Thinkpeek, \(newCount) new and \(count) recorded violation\(count == 1 ? "" : "s")")

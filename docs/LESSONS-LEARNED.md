@@ -56,6 +56,8 @@ review material under `AGENTS.md`, not historical commentary.
 | Fixing one toolbar broke another control | Review every mode that reuses the changed view: ticker, compact controls, full reader, all-history, violations-history, menu bar, narrow width, keyboard, and accessibility. | `docs/UI-CHECKLIST.md` and mode-specific regression assertions. |
 | Changes were described before being committed and running | Completion means: code and docs committed, full suite green, replacement verified, one process running, and worktree clean. | Commit ID, test output, PID check, and `git status --short`. |
 | Parallel investigation created a risk of unowned changes | Subagents may gather evidence in parallel when requested, but the primary agent owns edits, integration, tests, commit, restart, and final verification. | Clean diff review and one primary-agent commit. |
+| A semantic alert tint made the status icon black | Keep `NSStatusBarButton` on AppKit's native foreground and communicate violations through the symbol and count, never a custom background. | Status-item foreground self-test. |
+| Restart looked frozen for almost 30 seconds | Do not rebuild an unchanged signed bundle; record successful build freshness and print every potentially slow restart phase. | Timed changed and unchanged restart paths. |
 
 ## Release gate
 
