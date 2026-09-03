@@ -52,6 +52,7 @@ Scripts/             # optional command-line watcher
 Benchmarks/          # benchmark utilities
 Tests/               # regression harness, separate from app startup
 docs/bugs/           # one document per user-visible regression
+docs/LESSONS-LEARNED.md # mandatory regression-prevention rules
 .build/              # ignored compiler output
 .local/              # ignored runtime logs/cache
 ```
@@ -82,7 +83,9 @@ records are not sent. Task starts are progress only and never replace readable
 content or enter card history.
 Encrypted-only records are hidden by default. Task names come from
 `~/.codex/session_index.jsonl`. Auto mode follows both Claude and Codex, and the
-picker labels every source explicitly.
+picker labels every source explicitly. When multiple sessions are active, the
+ticker names every working/waiting session instead of hiding all but the most
+recently updated source.
 
 This covers Codex CLI/app agent tasks that create local rollout files. It does
 not claim access to ordinary consumer ChatGPT conversations that do not create

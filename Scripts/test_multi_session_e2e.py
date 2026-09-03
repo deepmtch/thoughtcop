@@ -302,8 +302,12 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         both_active = wait_for(lambda state:
             len(state.get("activeSources", [])) == 2)
         assert both_active["operationPending"] is True, both_active
-        assert both_active["peekSource"] == "Codex · Codex Alpha", both_active
-        assert both_active["peekText"] == "Working…", both_active
+        assert both_active["activityDisplaySource"] == \
+            "Claude + Codex · 2 active", both_active
+        assert both_active["activityDisplayText"] == \
+            "Working: Claude · Claude Alpha • Codex · Codex Alpha", both_active
+        assert both_active["peekSource"] == both_active["activityDisplaySource"], both_active
+        assert both_active["peekText"] == both_active["activityDisplayText"], both_active
 
         append(claude_path, {
             "timestamp": record_timestamp(100),

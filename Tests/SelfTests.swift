@@ -445,6 +445,9 @@ if CommandLine.arguments.contains("--presentation-selftest") {
     state.operationStarted(source: "Claude · cloud chat")
     state.operationUpdated(source: "Codex · local task")
     guard state.activeSources.count == 2,
+          state.activityDisplaySource == "Claude + Codex · 2 active",
+          state.activityDisplayText ==
+            "Working: Claude · cloud chat • Codex · local task",
           state.windowTitle == "● Claude + Codex · working…" else {
         FileHandle.standardError.write("presentation self-test failed concurrent providers\n"
             .data(using: .utf8)!)
@@ -456,6 +459,9 @@ if CommandLine.arguments.contains("--presentation-selftest") {
           state.operationWaiting,
           state.activeSources == ["Codex · local task"],
           state.waitingSources == ["Claude · cloud chat"],
+          state.activityDisplaySource == "Claude + Codex · 2 active",
+          state.activityDisplayText ==
+            "Working: Codex · local task • Waiting: Claude · cloud chat",
           state.windowTitle == "● Codex · local task · working…" else {
         FileHandle.standardError.write("presentation self-test failed waiting isolation\n"
             .data(using: .utf8)!)
@@ -464,6 +470,8 @@ if CommandLine.arguments.contains("--presentation-selftest") {
     state.operationFinished(source: "Codex · local task")
     guard !state.operationPending,
           state.operationWaiting,
+          state.activityDisplaySource == "Claude · cloud chat",
+          state.activityDisplayText == "Waiting for you…",
           state.windowTitle == "◐ Claude · cloud chat · waiting for you" else {
         FileHandle.standardError.write("presentation self-test failed waiting title\n"
             .data(using: .utf8)!)
@@ -493,7 +501,8 @@ if CommandLine.arguments.contains("--presentation-selftest") {
                 .data(using: .utf8)!)
         exit(1)
     }
-    print("presentation: useful summary preserved until readable content arrives")
+    print("presentation: usefulSummary=true concurrentSourcesVisible=true " +
+          "mixedPhasesVisible=true")
     exit(0)
 }
 

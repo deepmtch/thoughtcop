@@ -77,3 +77,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-070](BUG-070-codex-double-uuid-used-wrong-task-title.md) | A second UUID in a Codex rollout filename replaced the owning task title | Fixed |
 | [BUG-071](BUG-071-history-toolbar-mixed-settings-with-filters.md) | History mixed prompt and display settings with its filters | Fixed |
 | [BUG-072](BUG-072-checker-state-briefly-reported-idle.md) | Accepted checks briefly reported idle before their request callback | Fixed |
+| [BUG-073](BUG-073-concurrent-source-hidden-by-latest-activity.md) | Latest activity hid other concurrently active Claude/Codex sessions | Fixed |

@@ -671,6 +671,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "pendingSource": operationState.latestPendingSource ?? NSNull(),
             "activeSources": operationState.activeSources,
             "waitingSources": operationState.waitingSources,
+            "activityDisplaySource": operationState.activityDisplaySource ?? NSNull(),
+            "activityDisplayText": operationState.activityDisplayText ?? NSNull(),
             "hoverDisclosure": false,
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": false,
@@ -1140,10 +1142,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                              text: preview.detailText,
                                              kind: preview.kind,
                                              tone: preview.readerTone)
-        } else if let source = operationState.latestActivitySource {
-            let status = operationState.operationWaiting
-                ? "Waiting for you…"
-                : "Working…\n\nReadable reasoning has not been written by the provider yet."
+        } else if let source = operationState.activityDisplaySource {
+            let status = (operationState.activityDisplayText ?? "Working") +
+                "\n\nReadable reasoning has not been written by the provider yet."
             snapshot = MessageReaderSnapshot(source: source, text: status,
                                              kind: "activity", tone: .normal)
         } else {
@@ -1678,10 +1679,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         panel.title = operationState.windowTitle
-        if let source = operationState.latestActivitySource {
+        if let source = operationState.activityDisplaySource {
             updatePeekHeader(source: source)
-            peekTicker.text = operationState.operationWaiting
-                ? "Waiting for you…" : "Working…"
+            peekTicker.text = operationState.activityDisplayText ?? "Working"
             applyTickerAppearance(alarmActive: false)
         } else if compactIndex >= 0 && compactIndex < eventPreviews.count {
             updatePeekHeader(source: eventPreviews[compactIndex].displaySource)

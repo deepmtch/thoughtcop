@@ -23,3 +23,25 @@ Heuristics are forbidden in this repository.
 
 This rule applies to application code, prompts, UI behavior, tests, scripts,
 fallbacks, and future changes.
+
+## Mandatory regression memory
+
+Before changing monitoring, checker, lifecycle, or UI code, read:
+
+- `docs/LESSONS-LEARNED.md`
+- `docs/UI-CHECKLIST.md` for user-visible changes
+- the relevant records in `docs/bugs/`
+
+Every user-visible regression fix must include all of the following in the same
+commit:
+
+1. Evidence from the real provider record, running `/ui` state, or rendered UI.
+2. A root-cause fix rather than a filename, timing, provider, or UI special case.
+3. An automated regression at the lowest useful layer and, when behavior crosses
+   process/UI boundaries, the isolated black-box suite.
+4. A bug record and any new reusable lesson learned.
+5. `./Scripts/test.sh`, a live `/screenshot` inspection for visual changes, and a
+   verified post-commit replacement with exactly one current process.
+
+Do not declare success from compilation, a unit test, a retry after a flaky
+failure, or UI state flags alone.

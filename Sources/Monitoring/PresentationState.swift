@@ -20,6 +20,31 @@ struct OperationPresentationState {
     var latestActivitySource: String? {
         latestPendingSource ?? latestWaitingSource
     }
+    var activityDisplaySource: String? {
+        let sources = activeSources + waitingSources
+        guard !sources.isEmpty else { return nil }
+        if sources.count == 1 { return sources[0] }
+        let providers = Set(sources.map {
+            $0.split(separator: "·", maxSplits: 1).first
+                .map { String($0).trimmingCharacters(in: .whitespaces) } ?? $0
+        }).sorted()
+        return "\(providers.joined(separator: " + ")) · \(sources.count) active"
+    }
+    var activityDisplayText: String? {
+        let sourceCount = pendingByIdentity.count + waitingByIdentity.count
+        guard sourceCount > 0 else { return nil }
+        if sourceCount == 1 {
+            return pendingByIdentity.isEmpty ? "Waiting for you…" : "Working…"
+        }
+        var groups: [String] = []
+        if !activeSources.isEmpty {
+            groups.append("Working: " + activeSources.joined(separator: " • "))
+        }
+        if !waitingSources.isEmpty {
+            groups.append("Waiting: " + waitingSources.joined(separator: " • "))
+        }
+        return groups.joined(separator: " • ")
+    }
     var windowTitle: String {
         if !pendingByIdentity.isEmpty {
             return activityTitle(sources: Set(pendingByIdentity.values),

@@ -21,6 +21,8 @@ running `/ui` inspection surface. A checked item is not merely planned.
 ## Content and state
 
 - [x] Ticker always identifies the exact source/session.
+- [x] Concurrent activity identifies every working/waiting session; one source
+  cannot visually hide another active Claude or Codex session.
 - [x] Ticker identifies Claude and ChatGPT/Codex with their provider icon.
 - [x] Empty or formatting-only summaries cannot replace readable text.
 - [x] Operation-start placeholders do not replace useful content.
