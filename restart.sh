@@ -20,6 +20,7 @@ else
 fi
 
 old_pid=$(/usr/bin/pgrep -x thinkpeek 2>/dev/null | /usr/bin/head -n 1 || true)
+api_port=${THINKPEEK_API_PORT:-17321}
 
 # LaunchServices owns the GUI process, so this command returns to the shell.
 # The new process uses SingleInstance.swift to terminate the previous Thinkpeek
@@ -33,7 +34,9 @@ while [ "$attempt" -lt 100 ]; do
     count=$(printf '%s\n' "$running" | /usr/bin/awk 'NF { n += 1 } END { print n + 0 }')
     new_pid=$(printf '%s\n' "$running" | /usr/bin/head -n 1)
     if [ "$count" -eq 1 ] && [ -n "$new_pid" ] &&
-       { [ -z "$old_pid" ] || [ "$new_pid" != "$old_pid" ]; }; then
+       { [ -z "$old_pid" ] || [ "$new_pid" != "$old_pid" ]; } &&
+       /usr/bin/curl --fail --silent --max-time 0.2 \
+           "http://127.0.0.1:$api_port/ui" >/dev/null 2>&1; then
         echo "thinkpeek: replacement verified; pid $new_pid"
         exit 0
     fi
