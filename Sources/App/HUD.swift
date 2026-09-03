@@ -634,6 +634,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "quitControlInOverflow": false,
             "tickerSettingsControlVisible": peekMode &&
                 !peekPrimaryActions.displaySettingsButton.isHidden,
+            "detailCheckRulesControlVisible": !detailHeader.isHidden &&
+                !checkRulesButton.isHidden,
+            "detailSettingsControlVisible": !detailHeader.isHidden &&
+                !positionButton.isHidden,
+            "latestControlVisible": !detailHeader.isHidden &&
+                !latestButton.isHidden,
             "peekProvider": peekProviderIcon?.provider.rawValue ?? "unknown",
             "peekSource": peekSourceLabel?.stringValue ?? "",
             "peekText": peekTicker?.text ?? "",
@@ -1347,6 +1353,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         violationEmptyState.isHidden = !showViolationEmptyState
         navigationGroup.isHidden = !compactMode
         historyFilterControl.isHidden = compactMode
+        // History is a reading/filtering surface. Prompt configuration and
+        // display settings belong to the dedicated controls/ticker surfaces;
+        // placing them beside history filters makes their actions ambiguous.
+        checkRulesButton.isHidden = !compactMode
+        positionButton.isHidden = !compactMode
         historyFilterControl.selectedSegment = violationsOnly ? 1 : 0
         historyFilterControl.setLabel("All \(eventCards.count)", forSegment: 0)
         historyFilterControl.setLabel("Violations \(violationRecords.count)", forSegment: 1)
@@ -1850,10 +1861,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "destination": destination, "source": source,
             "evidenceType": block.evaluationRecord.eventType,
         ])
+        // Track the evaluation before scheduling the provider request. A fast UI
+        // poll must never observe idle between accepting evidence and the
+        // requestStarted callback reaching the main queue.
+        checkerRequestTokens.insert(requestToken)
+        checkerActivityDestination = destination
+        checkerActivityIndicator.begin(destination: destination)
         publishAPI()
         checkDrift(block.evaluationRecord, source: source,
                    requestStarted: { [weak self] destination in
-            self?.checkerRequestTokens.insert(requestToken)
             self?.checkerActivityDestination = destination
             self?.checkerActivityIndicator.begin(destination: destination)
             self?.publishAPI()

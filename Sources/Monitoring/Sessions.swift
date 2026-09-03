@@ -15,8 +15,47 @@ func isCodexTranscript(_ path: String) -> Bool {
 }
 
 func codexSessionID(from path: String) -> String {
+    if let metadataID = codexSessionMetadataID(from: path) { return metadataID }
     let stem = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
     return String(stem.suffix(36)).lowercased()
+}
+
+private var codexSessionIDCache: [String: String] = [:]
+private let codexSessionIDCacheLock = NSLock()
+
+/// Codex's first transcript record owns the session identity. Rollout filenames
+/// can contain an additional UUID that is not the task ID shown in Codex, so the
+/// filename is only a compatibility fallback for older/incomplete transcripts.
+private func codexSessionMetadataID(from path: String) -> String? {
+    codexSessionIDCacheLock.lock()
+    let cached = codexSessionIDCache[path]
+    codexSessionIDCacheLock.unlock()
+    if let cached { return cached }
+
+    guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+    defer { try? handle.close() }
+    var firstRecord = Data()
+    while true {
+        let chunk = handle.readData(ofLength: 65_536)
+        guard !chunk.isEmpty else { break }
+        if let newline = chunk.firstIndex(of: 0x0A) {
+            firstRecord.append(chunk.prefix(upTo: newline))
+            break
+        }
+        firstRecord.append(chunk)
+    }
+    guard !firstRecord.isEmpty,
+          let object = (try? JSONSerialization.jsonObject(with: firstRecord))
+            as? [String: Any],
+          object["type"] as? String == "session_meta",
+          let payload = object["payload"] as? [String: Any],
+          let id = payload["id"] as? String,
+          UUID(uuidString: id) != nil else { return nil }
+    let normalized = id.lowercased()
+    codexSessionIDCacheLock.lock()
+    codexSessionIDCache[path] = normalized
+    codexSessionIDCacheLock.unlock()
+    return normalized
 }
 
 private var codexTitleCache: [String: String] = [:]

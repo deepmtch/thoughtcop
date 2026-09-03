@@ -170,6 +170,16 @@ if CommandLine.arguments.contains("--selftest") {
 }
 
 if CommandLine.arguments.contains("--session-discovery-selftest") {
+    let taskID = "01a02dd4-2314-7f30-8313-b23268b2c1ae"
+    let rolloutID = "01a02dee-e313-7d60-8222-ff6e9c8c5c6b"
+    let doubleUUIDTranscript = FileManager.default.temporaryDirectory
+        .appendingPathComponent(
+            "rollout-2026-08-23T11-23-45-\(taskID)_\(rolloutID).jsonl")
+    let sessionMetadata =
+        #"{"timestamp":"2026-08-23T09:23:45Z","type":"session_meta","payload":{"id":"\#(taskID)","session_id":"\#(taskID)"}}"# + "\n"
+    try? sessionMetadata.write(to: doubleUUIDTranscript, atomically: true,
+                               encoding: .utf8)
+    defer { try? FileManager.default.removeItem(at: doubleUUIDTranscript) }
     let discovery = TranscriptDiscovery(fileProvider: {
         Thread.sleep(forTimeInterval: 0.25)
         return []
@@ -185,12 +195,14 @@ if CommandLine.arguments.contains("--session-discovery-selftest") {
     while !completed, Date() < deadline {
         RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    guard accepted, returnedIn < 0.05, overlapRejected, completed else {
+    guard accepted, returnedIn < 0.05, overlapRejected, completed,
+          codexSessionID(from: doubleUUIDTranscript.path) == taskID else {
         FileHandle.standardError.write(
             "session discovery self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("session discovery: mainThreadNonblocking=true overlappingScans=false")
+    print("session discovery: mainThreadNonblocking=true overlappingScans=false " +
+          "codexMetadataIdentity=true")
     exit(0)
 }
 

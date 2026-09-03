@@ -74,3 +74,6 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-067](BUG-067-stale-working-state-and-blocking-restart.md) | Provider display-title changes left stale working state and manual restart blocked the shell | Fixed |
 | [BUG-068](BUG-068-groq-json-mode-exhausted-output-budget.md) | Groq JSON mode exhausted the output budget and returned HTTP 400 | Fixed |
 | [BUG-069](BUG-069-omitted-thinking-bypassed-response-checks.md) | Omitted thinking bypassed response checks | Fixed |
+| [BUG-070](BUG-070-codex-double-uuid-used-wrong-task-title.md) | A second UUID in a Codex rollout filename replaced the owning task title | Fixed |
+| [BUG-071](BUG-071-history-toolbar-mixed-settings-with-filters.md) | History mixed prompt and display settings with its filters | Fixed |
+| [BUG-072](BUG-072-checker-state-briefly-reported-idle.md) | Accepted checks briefly reported idle before their request callback | Fixed |

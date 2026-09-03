@@ -42,6 +42,9 @@ assert controls["cardCount"] > 0, controls["cardCount"]
 assert controls["closeControlVisible"] is True
 assert controls["quitControlVisible"] is False
 assert controls["quitControlInOverflow"] is False
+assert controls["detailCheckRulesControlVisible"] is True
+assert controls["detailSettingsControlVisible"] is True
+assert controls["latestControlVisible"] is False
 selected_index = controls["currentIndex"]
 
 get("/message")
@@ -74,6 +77,9 @@ assert history["uiStyle"] == "expanded-card-feed", history["uiStyle"]
 assert history["compactMode"] is False
 assert history["historyFilter"] == "all"
 assert history["closeControlVisible"] is True
+assert history["detailCheckRulesControlVisible"] is False
+assert history["detailSettingsControlVisible"] is False
+assert history["latestControlVisible"] is True
 
 get("/filter/violations")
 time.sleep(0.15)
