@@ -617,6 +617,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             },
             "menuBarAvailable": statusItem != nil,
             "statusItemUsesNativeForeground": statusItem?.button?.contentTintColor == nil,
+            "statusItemBadgeText": statusItem?.button?.title
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             "statusMenuItems": statusItem?.menu?.items
                 .filter { !$0.isSeparatorItem }.map(\.title) ?? [],
             "violationCount": violationRecords.count,
@@ -1692,7 +1694,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 : "text.bubble.fill",
             accessibilityDescription: hasUnacknowledged
                 ? "Thinkpeek has a new violation" : "Thinkpeek")
-        statusItem?.button?.title = newCount == 0 ? "" : " \(newCount > 9 ? "9+" : String(newCount))"
+        statusItem?.button?.title = violationStatusBadgeTitle(unreviewed: newCount)
         statusItem?.button?.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
         if let button = statusItem?.button {
             restoreNativeStatusItemForeground(button)

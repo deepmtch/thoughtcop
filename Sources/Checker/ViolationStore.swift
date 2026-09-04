@@ -10,6 +10,10 @@ func violationHistoryMenuTitle(recorded: Int, unreviewed: Int,
     return "Open Violation History…"
 }
 
+func violationStatusBadgeTitle(unreviewed: Int) -> String {
+    unreviewed == 0 ? "" : " \(unreviewed)"
+}
+
 let VIOLATIONS_PATH = ProcessInfo.processInfo.environment["THINKPEEK_VIOLATIONS_PATH"]
     ?? ("~/Library/Application Support/Thinkpeek/violations.json" as NSString)
         .expandingTildeInPath

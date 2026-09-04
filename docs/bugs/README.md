@@ -88,3 +88,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-081](BUG-081-ui-api-exposed-local-transcripts.md) | Local UI API exposed transcript state and controls without authentication | Fixed |
 | [BUG-082](BUG-082-installed-build-had-no-credential-store.md) | Installed builds had no supported secure provider-credential path | Fixed |
 | [BUG-083](BUG-083-benchmarks-reused-provider-credentials.md) | Benchmarks reused one credential across unrelated provider endpoints | Fixed |
+| [BUG-084](BUG-084-status-badge-capped-unread-count.md) | Menu-bar badge showed `9+` while its menu showed the exact unread count | Fixed |

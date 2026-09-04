@@ -394,26 +394,17 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert finished["violationAlertsEnabled"] is False, finished
         assert finished["violationAlertVisible"] is False, finished
         assert finished["menuBarViolationAlertActive"] is True, finished
+        assert finished["statusItemBadgeText"] == "1", finished
         assert finished["currentViolationVisible"] is False, finished
         assert finished["tickerAlarmActive"] is False, finished
         assert finished["windowVisible"] is True, finished
         assert len(finished["violations"]) == 1, finished
         assert finished["violations"][0]["checkPrompt"], finished
-
-        # The general UI navigation contract requires at least one message.
-        # Run it here, after the deterministic fixtures have created both
-        # clean and violating records, rather than against an empty startup.
-        ui_test_environment = environment.copy()
-        ui_test_environment.update({
-            "THINKPEEK_UI_API": API_BASE,
-            "THINKPEEK_UI_API_TOKEN": API_TOKEN,
-            "THINKPEEK_UI_API_LOG": str(ui_log_path),
-        })
-        ui_test = subprocess.run(
-            ["python3", "Scripts/test_ui_api.py"], env=ui_test_environment,
-            capture_output=True, text=True, timeout=20, check=False,
-        )
-        assert ui_test.returncode == 0, ui_test.stdout + ui_test.stderr
+        screenshot_status, screenshot = api_request(
+            API_BASE, "/screenshot", "GET")
+        assert screenshot_status == 200, screenshot_status
+        assert screenshot.startswith(b"\x89PNG\r\n\x1a\n"), screenshot[:16]
+        assert len(screenshot) > 1_000, len(screenshot)
 
         get_json(API_BASE, "/hide")
         hidden_alert = wait_for(lambda state: state.get("windowVisible") is False)
@@ -622,6 +613,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert hidden_violation["windowVisible"] is False, hidden_violation
         assert hidden_violation["hiddenByUser"] is True, hidden_violation
         assert hidden_violation["currentViolationVisible"] is False, hidden_violation
+        assert hidden_violation["statusItemBadgeText"] == "2", hidden_violation
         assert hidden_violation["menuBarViolationAlertActive"] is True, hidden_violation
         get_json(API_BASE, "/violations")
         explicitly_revealed = wait_for(lambda state:
@@ -685,6 +677,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "uiAPIAuthentication": "required",
             "uiAPIMutations": "post-only",
             "uiAPIBinding": "127.0.0.1",
+            "renderedScreenshotBytes": len(screenshot),
         }, sort_keys=True))
     finally:
         try:

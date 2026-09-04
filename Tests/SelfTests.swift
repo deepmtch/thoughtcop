@@ -1244,7 +1244,11 @@ if CommandLine.arguments.contains("--violation-store-selftest") {
             "Open Violation History (13 Reviewed)…",
           violationHistoryMenuTitle(recorded: 13, unreviewed: 2,
                                     storageUnavailable: true) ==
-            "Open Violation History (Unavailable)…" else {
+            "Open Violation History (Unavailable)…",
+          violationStatusBadgeTitle(unreviewed: 0) == "",
+          violationStatusBadgeTitle(unreviewed: 9) == " 9",
+          violationStatusBadgeTitle(unreviewed: 10) == " 10",
+          violationStatusBadgeTitle(unreviewed: 27) == " 27" else {
         FileHandle.standardError.write(
             "violation menu title self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -1286,7 +1290,8 @@ if CommandLine.arguments.contains("--violation-store-selftest") {
         exit(1)
     }
     print("violations: persisted=true ordered=true reviewedState=true " +
-          "corruptFilePreserved=true promptSnapshot=true permissions=0600")
+          "exactStatusBadge=true corruptFilePreserved=true promptSnapshot=true " +
+          "permissions=0600")
     exit(0)
 }
 
