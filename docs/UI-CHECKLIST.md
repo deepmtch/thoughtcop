@@ -67,6 +67,8 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Foreground text/icons automatically maintain light/dark contrast.
 - [x] Violation popups are an explicit persisted opt-in, default off, and the
   enabled popup restores the prior ticker item after 10 seconds.
+- [x] Provider credentials use native secure fields, are never prefilled, and
+  distinguish keep, replace, and remove actions without displaying key values.
 
 ## Input, focus, and accessibility
 
@@ -113,3 +115,5 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Escape/no-Collapse self-test plus a real installed Escape event.
 - [x] Exit-control labels, accessibility names, and callback self-test.
 - [x] Running `/ui` state and `/screenshot` visual verification for each mode.
+- [x] The UI API requires bearer authentication, rejects mutating GET requests,
+  and binds only to IPv4 loopback.

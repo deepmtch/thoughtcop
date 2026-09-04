@@ -61,12 +61,18 @@ class DummyChecker(BaseHTTPRequestHandler):
         pass
 
 
-def get_json(base: str, path: str = "/ui") -> dict:
+API_TOKEN = "isolated-e2e-ui-token-0000000000000000"
+
+
+def api_request(base: str, path: str, method: str,
+                token: str | None = API_TOKEN) -> tuple[int, bytes]:
     host_port = base.removeprefix("http://")
     host, port_text = host_port.rsplit(":", 1)
+    authorization = f"Authorization: Bearer {token}\r\n" if token else ""
     with socket.create_connection((host, int(port_text)), timeout=3) as connection:
         connection.sendall(
-            f"GET {path} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\n\r\n"
+            f"{method} {path} HTTP/1.1\r\nHost: {host_port}\r\n"
+            f"{authorization}Connection: close\r\n\r\n"
             .encode("ascii")
         )
         chunks: list[bytes] = []
@@ -77,8 +83,18 @@ def get_json(base: str, path: str = "/ui") -> dict:
             chunks.append(chunk)
     response = b"".join(chunks)
     header, separator, body = response.partition(b"\r\n\r\n")
-    if not separator or b" 200 " not in header.split(b"\r\n", 1)[0]:
+    if not separator:
         raise RuntimeError(f"invalid API response: {response[:200]!r}")
+    status_line = header.split(b"\r\n", 1)[0]
+    status = int(status_line.split(b" ", 2)[1])
+    return status, body
+
+
+def get_json(base: str, path: str = "/ui") -> dict:
+    method = "GET" if path in {"/ui", "/screenshot"} else "POST"
+    status, body = api_request(base, path, method)
+    if status != 200:
+        raise RuntimeError(f"invalid API response: HTTP {status} {body[:200]!r}")
     return json.loads(body)
 
 
@@ -113,6 +129,7 @@ def wait_for(predicate, timeout: float = 12.0,
         for host in ["127.0.0.1", "[::1]"]:
             probe = subprocess.run(
                 ["/usr/bin/curl", "--noproxy", "*", "-sv", "--max-time", "2",
+                 "--header", f"Authorization: Bearer {API_TOKEN}",
                  f"http://{host}:{ui_port}/ui"],
                 capture_output=True, text=True, timeout=4, check=False)
             diagnostic += (f"\ncurl probe {host}:\n" + probe.stderr +
@@ -224,6 +241,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         "THINKPEEK_PRIVACY_AUDIT_PATH": str(audit_path),
         "THINKPEEK_VIOLATIONS_PATH": str(violations_path),
         "THINKPEEK_UI_API_LOG": str(ui_log_path),
+        "THINKPEEK_UI_API_TOKEN": API_TOKEN,
         "THINKPEEK_HISTORY_COUNT": "0",
     })
     process = subprocess.Popen(
@@ -238,6 +256,16 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         initial = wait_for(lambda state: state.get("initialScanComplete") is True,
                            timeout=20, process=process,
                            diagnostic_log=ui_log_path)
+        assert api_request(API_BASE, "/ui", "GET", token=None)[0] == 401
+        assert api_request(API_BASE, "/controls", "GET")[0] == 405
+        assert api_request(API_BASE, "/ui", "POST")[0] == 405
+        assert api_request(API_BASE, "/not-a-route", "GET")[0] == 404
+        listener = subprocess.run(
+            ["/usr/sbin/lsof", "-nP", "-a", "-p", str(process.pid),
+             f"-iTCP:{ui_port}", "-sTCP:LISTEN"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        assert "127.0.0.1:" in listener and "*:" not in listener, listener
         get_json(API_BASE, "/violation-alerts/off")
         initial = wait_for(lambda state:
             state.get("violationAlertsEnabled") is False)
@@ -371,6 +399,21 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert finished["windowVisible"] is True, finished
         assert len(finished["violations"]) == 1, finished
         assert finished["violations"][0]["checkPrompt"], finished
+
+        # The general UI navigation contract requires at least one message.
+        # Run it here, after the deterministic fixtures have created both
+        # clean and violating records, rather than against an empty startup.
+        ui_test_environment = environment.copy()
+        ui_test_environment.update({
+            "THINKPEEK_UI_API": API_BASE,
+            "THINKPEEK_UI_API_TOKEN": API_TOKEN,
+            "THINKPEEK_UI_API_LOG": str(ui_log_path),
+        })
+        ui_test = subprocess.run(
+            ["python3", "Scripts/test_ui_api.py"], env=ui_test_environment,
+            capture_output=True, text=True, timeout=20, check=False,
+        )
+        assert ui_test.returncode == 0, ui_test.stdout + ui_test.stderr
 
         get_json(API_BASE, "/hide")
         hidden_alert = wait_for(lambda state: state.get("windowVisible") is False)
@@ -639,6 +682,9 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "claudeCloudLifecycleObserved": True,
             "claudeWaitingLifecycleObserved": True,
             "auditPairs": len(results),
+            "uiAPIAuthentication": "required",
+            "uiAPIMutations": "post-only",
+            "uiAPIBinding": "127.0.0.1",
         }, sort_keys=True))
     finally:
         try:

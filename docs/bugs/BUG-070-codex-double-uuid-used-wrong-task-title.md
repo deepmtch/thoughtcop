@@ -6,12 +6,12 @@ Status: Fixed
 
 The active rollout filename contained two UUIDs:
 
-`...-01a02dd4-2314-7f30-8313-b23268b2c1ae_01a02dee-e313-7d60-8222-ff6e9c8c5c6b.jsonl`
+`...-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jsonl`
 
 Its first `session_meta` record identified the owning session as
-`01a02dd4-2314-7f30-8313-b23268b2c1ae`, and `session_index.jsonl` mapped that ID
-to the user-visible task title `imrpove process`. Thinkpeek instead displayed
-`task 01a02dee`.
+`aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`, and `session_index.jsonl` mapped that ID
+to the synthetic task title `Primary task`. Thinkpeek instead displayed a short
+form of the non-owning suffix UUID.
 
 ## Root cause
 
@@ -29,5 +29,5 @@ read the transcript.
 
 ## Verification
 
-The session-discovery self-test creates the observed double-UUID filename with a
+The session-discovery self-test creates a synthetic double-UUID filename with a
 first-record task ID and verifies that the metadata ID wins.

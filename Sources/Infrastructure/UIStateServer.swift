@@ -4,6 +4,73 @@
 import Foundation
 import Network
 
+let UI_API_TOKEN_PATH = ProcessInfo.processInfo.environment["THINKPEEK_UI_API_TOKEN_PATH"]
+    ?? ("~/Library/Application Support/Thinkpeek/ui-api-token" as NSString)
+        .expandingTildeInPath
+
+/// Keep browser pages and unrelated local processes from reading transcripts or
+/// driving the app. Tests may inject a token; normal launches persist a random
+/// capability in a user-only file so command-line automation can authenticate.
+func loadUIAPIToken(path: String = UI_API_TOKEN_PATH,
+                    environmentToken: String? = ProcessInfo.processInfo.environment[
+                        "THINKPEEK_UI_API_TOKEN"]) -> String {
+    if let injected = environmentToken,
+       !injected.isEmpty {
+        return injected
+    }
+    if let existing = try? String(contentsOfFile: path, encoding: .utf8)
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+       existing.count >= 32 {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600],
+                                               ofItemAtPath: path)
+        return existing
+    }
+    let token = UUID().uuidString.replacingOccurrences(of: "-", with: "") +
+        UUID().uuidString.replacingOccurrences(of: "-", with: "")
+    let url = URL(fileURLWithPath: path)
+    try? FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o700],
+                                           ofItemAtPath: url.deletingLastPathComponent().path)
+    do {
+        try Data((token + "\n").utf8).write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600],
+                                              ofItemAtPath: path)
+    } catch {
+        // A non-persisted random token fails closed: the UI keeps working, while
+        // no external client can authenticate to the inspection endpoint.
+    }
+    return token
+}
+
+struct UIAPIRequest {
+    let method: String
+    let path: String
+    let authorization: String?
+}
+
+func parseUIAPIRequest(_ text: String) -> UIAPIRequest? {
+    let lines = text.components(separatedBy: "\r\n")
+    let requestParts = lines.first?.split(separator: " ", maxSplits: 2) ?? []
+    guard requestParts.count >= 2 else { return nil }
+    var authorization: String?
+    for line in lines.dropFirst() {
+        let parts = line.split(separator: ":", maxSplits: 1,
+                               omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() == "authorization" else { continue }
+        authorization = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    return UIAPIRequest(method: String(requestParts[0]).uppercased(),
+                        path: String(requestParts[1]),
+                        authorization: authorization)
+}
+
+func isAuthorizedUIAPIRequest(_ request: UIAPIRequest, token: String) -> Bool {
+    request.authorization == "Bearer \(token)"
+}
+
 enum UICommandOrigin: String {
     case appKit
     case http
@@ -27,6 +94,10 @@ enum UICommand {
     case editCheckRules
     case closeCheckRules
     case saveCheckRules(text: String, mode: String)
+    case editProviderCredentials
+    case closeProviderCredentials
+    case applyProviderCredentialEdits([CheckerProvider: CheckerCredentialEdit],
+                                      completion: ([String]) -> Void)
     case selectSession(path: String?)
     case corner(String)
     case speed(String)
@@ -55,6 +126,9 @@ enum UICommand {
         case .editCheckRules: return "check-rules"
         case .closeCheckRules: return "check-rules/close"
         case .saveCheckRules: return "save-check-rules"
+        case .editProviderCredentials: return "provider-credentials"
+        case .closeProviderCredentials: return "provider-credentials/close"
+        case .applyProviderCredentialEdits: return "save-provider-credentials"
         case .selectSession: return "select-session"
         case .corner(let value): return "corner/\(value)"
         case .speed(let value): return "speed/\(value)"
@@ -74,11 +148,13 @@ final class UIStateServer {
     private var body = Data("{\"schemaVersion\":1,\"ready\":false}".utf8)
     private var listener: NWListener?
     private let listenerQueue = DispatchQueue(label: "thinkpeek.ui-api")
+    private let token: String
     var captureHandler: (() -> Data?)?
     var actionHandler: ((UICommand) -> Void)?
     private let logURL: URL
 
-    init(logURL: URL? = nil) {
+    init(logURL: URL? = nil, token: String? = nil) {
+        self.token = token ?? loadUIAPIToken()
         self.logURL = logURL ?? ProcessInfo.processInfo.environment["THINKPEEK_UI_API_LOG"]
             .map { URL(fileURLWithPath: $0) }
             ?? FileManager.default.homeDirectoryForCurrentUser
@@ -111,7 +187,10 @@ final class UIStateServer {
         }
         let listener: NWListener
         do {
-            listener = try NWListener(using: .tcp, on: port)
+            let parameters = NWParameters.tcp
+            parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback),
+                                                         port: port)
+            listener = try NWListener(using: parameters)
         } catch {
             log(event: "api_create_failed", fields: [
                 "port": Int(API_PORT),
@@ -148,19 +227,45 @@ final class UIStateServer {
             connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) {
                 [weak self] request, _, _, _ in
                 guard let self else { connection.cancel(); return }
-                let wantsImage = request.flatMap { String(data: $0, encoding: .utf8) }?
-                    .hasPrefix("GET /screenshot ") == true
-                if wantsImage {
+                guard let requestText = request.flatMap({ String(data: $0, encoding: .utf8) }),
+                      let parsed = parseUIAPIRequest(requestText) else {
+                    self.send(connection, status: 400,
+                              payload: Data("{\"error\":\"bad request\"}".utf8),
+                              type: "application/json")
+                    return
+                }
+                guard isAuthorizedUIAPIRequest(parsed, token: self.token) else {
+                    self.send(connection, status: 401,
+                              payload: Data("{\"error\":\"unauthorized\"}".utf8),
+                              type: "application/json",
+                              extraHeaders: ["WWW-Authenticate": "Bearer"])
+                    return
+                }
+                if parsed.path == "/screenshot" {
+                    guard parsed.method == "GET" else {
+                        self.sendMethodNotAllowed(connection, allow: "GET")
+                        return
+                    }
                     DispatchQueue.main.async {
                         let image = self.captureHandler?() ?? Data()
                         self.send(connection, payload: image, type: "image/png")
                     }
                     return
                 }
-                let requestLine = request.flatMap { String(data: $0, encoding: .utf8) }?
-                    .components(separatedBy: "\r\n").first ?? ""
-                let path = requestLine.split(separator: " ").dropFirst().first.map(String.init) ?? ""
-                if let command = self.command(for: path) {
+                if parsed.path == "/ui" {
+                    guard parsed.method == "GET" else {
+                        self.sendMethodNotAllowed(connection, allow: "GET")
+                        return
+                    }
+                    self.lock.lock(); let payload = self.body; self.lock.unlock()
+                    self.send(connection, payload: payload, type: "application/json")
+                    return
+                }
+                if let command = self.command(for: parsed.path) {
+                    guard parsed.method == "POST" else {
+                        self.sendMethodNotAllowed(connection, allow: "POST")
+                        return
+                    }
                     DispatchQueue.main.async {
                         self.perform(command, origin: .http)
                         let payload = Data("{\"ok\":true,\"action\":\"\(command.name)\"}".utf8)
@@ -168,8 +273,9 @@ final class UIStateServer {
                     }
                     return
                 }
-                self.lock.lock(); let payload = self.body; self.lock.unlock()
-                self.send(connection, payload: payload, type: "application/json")
+                self.send(connection, status: 404,
+                          payload: Data("{\"error\":\"not found\"}".utf8),
+                          type: "application/json")
             }
         }
         listener.start(queue: listenerQueue)
@@ -202,6 +308,8 @@ final class UIStateServer {
         case "/quit": return .quit
         case "/check-rules": return .editCheckRules
         case "/check-rules/close": return .closeCheckRules
+        case "/provider-credentials": return .editProviderCredentials
+        case "/provider-credentials/close": return .closeProviderCredentials
         case "/corner/top-left": return .corner("top-left")
         case "/corner/top-right": return .corner("top-right")
         case "/corner/bottom-left": return .corner("bottom-left")
@@ -253,9 +361,31 @@ final class UIStateServer {
                                                ofItemAtPath: logURL.path)
     }
 
-    private func send(_ connection: NWConnection, payload: Data, type: String) {
-        let header = "HTTP/1.1 200 OK\r\nContent-Type: \(type)\r\n" +
-            "Content-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
+    private func sendMethodNotAllowed(_ connection: NWConnection, allow: String) {
+        send(connection, status: 405,
+             payload: Data("{\"error\":\"method not allowed\"}".utf8),
+             type: "application/json", extraHeaders: ["Allow": allow])
+    }
+
+    private func send(_ connection: NWConnection, status: Int = 200,
+                      payload: Data, type: String,
+                      extraHeaders: [String: String] = [:]) {
+        let reason: String
+        switch status {
+        case 200: reason = "OK"
+        case 400: reason = "Bad Request"
+        case 401: reason = "Unauthorized"
+        case 404: reason = "Not Found"
+        case 405: reason = "Method Not Allowed"
+        default: reason = "Error"
+        }
+        var header = "HTTP/1.1 \(status) \(reason)\r\nContent-Type: \(type)\r\n" +
+            "Content-Length: \(payload.count)\r\nCache-Control: no-store\r\n" +
+            "X-Content-Type-Options: nosniff\r\nConnection: close\r\n"
+        for (name, value) in extraHeaders.sorted(by: { $0.key < $1.key }) {
+            header += "\(name): \(value)\r\n"
+        }
+        header += "\r\n"
         var response = Data(header.utf8); response.append(payload)
         connection.send(content: response, completion: .contentProcessed { _ in
             connection.cancel()

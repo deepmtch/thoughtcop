@@ -35,6 +35,7 @@ for test in \
     --interaction-selftest \
     --privacy-audit-selftest \
     --violation-store-selftest \
+    --checker-credentials-selftest \
     --ui-command-api-selftest \
     --keyboard-navigation-selftest \
     --status-item-foreground-selftest
@@ -49,7 +50,11 @@ PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
 PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
     python3 -m py_compile Scripts/test_release_contract.py
 PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
+    python3 -m py_compile Benchmarks/bench.py Benchmarks/bench2.py
+PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
     python3 Scripts/test_release_contract.py
+PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
+    python3 Scripts/test_benchmark_credentials.py
 PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
     python3 Scripts/test_multi_session_e2e.py
 echo "all Thinkpeek tests passed"

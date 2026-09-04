@@ -2,3 +2,5 @@
 .build/
 .local/
 .env
+.DS_Store
+*.xcuserstate

@@ -1,0 +1,19 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test dependency
+        run: brew install zstd
+      - name: Run complete suite
+        run: ./Scripts/test.sh

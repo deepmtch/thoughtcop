@@ -4,10 +4,10 @@ Status: Fixed
 
 ## Reproduction evidence
 
-Claude session `UCK repo debugging` was visibly running while Thinkpeek showed
-only `Codex · Thought watch · Working…`. The Claude JSONL contained live tool
-records through `2026-09-03T09:17:06Z`, and the privacy audit confirmed that
-Thinkpeek consumed them. Later Codex activity changed the single ticker source.
+One Claude session was visibly running while Thinkpeek showed only a different
+Codex session as `Working…`. The Claude JSONL still contained live tool records,
+and the privacy audit confirmed that Thinkpeek consumed them. Later Codex
+activity changed the single ticker source.
 
 ## Root cause
 

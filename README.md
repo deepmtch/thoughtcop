@@ -47,9 +47,30 @@ for a fresh clone with:
 git config core.hooksPath .githooks
 ```
 
-Swift/AppKit + stdlib Python, no dependencies. **Nothing is ever written under
-`~/.claude/`** — that directory is Claude Code's, and thinkpeek only ever reads
-`~/.claude/projects/`.
+Thinkpeek is a native Swift/AppKit app. Building requires Xcode Command Line
+Tools; Claude Desktop cache monitoring and its tests require `zstd`
+(`brew install zstd`). Python 3 is used only by the test and compatibility
+scripts. **Nothing is ever written under `~/.claude/`** — that directory is
+Claude Code's, and Thinkpeek only reads its supported session data.
+
+## Install from source
+
+```bash
+git clone <repository-url>
+cd thinkpeek
+brew install zstd
+./Scripts/test.sh
+open .build/Thinkpeek.app
+```
+
+The development bundle is ad-hoc signed for the local Mac. It is not the
+notarized distribution artifact. In the running app, choose **Provider
+Credentials…** from the menu bar to save Groq or Cerebras keys in the macOS
+login Keychain. The secure fields are never prefilled; leaving one blank keeps
+its saved value. `--local-only` disables external checking entirely.
+
+See [PRIVACY.md](PRIVACY.md) before enabling external checking and
+[SECURITY.md](SECURITY.md) for the local API and disclosure boundaries.
 
 ## Project layout
 
@@ -263,19 +284,23 @@ Alert when Claude misunderstood the request and is solving a different problem.
 ```
 
 The integrated window calls providers directly: Groq first, then Cerebras as a
-fallback when both are configured. There is no OpenRouter intermediary. Copy the
-example and add one or both keys:
+fallback when both are configured. There is no OpenRouter intermediary. For an
+installed app, use the menu-bar **Provider Credentials…** editor. For a
+development checkout, environment variables or the ignored `.env` file are
+explicit overrides:
 
 ```bash
 cp .env.example .env
+chmod 600 .env
 # edit .env: GROQ_API_KEY=... and/or CEREBRAS_API_KEY=...
 ./.build/thinkpeek --drift-status
 ```
 
 `.env` is ignored by git; `.env.example` contains only empty placeholders and
-model defaults. Normal launches read it and `--local-only` is the explicit
-no-network mode. The status line and `/ui` API report whether external analysis
-is enabled and name the exact direct provider. Every live card changes from
+model defaults. Process environment and a development checkout's `.env` take
+precedence over Keychain values. `--local-only` is the explicit no-network
+mode. The status line and `/ui` API report whether external analysis is enabled
+and name the exact direct provider, but never expose credentials. Every live card changes from
 **Sending…** to either **AI checked**, **Drift detected**, or **AI check failed**.
 
 ## Requirements
@@ -294,9 +319,8 @@ is enabled and name the exact direct provider. Every live card changes from
    reset to 0 rather than seeking past the end.
 5. **Configurable history on attach.** Load the latest three readable summaries
    by default; allow an integer, zero, or the complete history through `.env`.
-6. **Handle sealed blocks explicitly.** Signature-only reasoning is hidden by
-   default and can be displayed as an omitted-summary card through `.env`; it is
-   never presented as if readable analysis existed.
+6. **Handle sealed blocks explicitly.** Signature-only reasoning is excluded;
+   it is never presented as if readable analysis existed.
 7. **Always on top,** across Spaces and over full-screen apps, without stealing focus.
 8. **Read-only.** Never write to, lock, or truncate a transcript, and never
    create anything under `~/.claude/`.
@@ -306,8 +330,9 @@ is enabled and name the exact direct provider. Every live card changes from
 
 ### Non-functional
 
-- **Zero install.** Builds with the `swiftc` in Xcode Command Line Tools; links
-  only AppKit and Foundation. No package manager, no runtime, no app bundle.
+- **Native build.** Builds with the `swiftc` in Xcode Command Line Tools and
+  produces both a command-line test binary and a minimal `.app` bundle. It uses
+  Apple system frameworks; `zstd` is required for Claude Desktop cache support.
 - **Small focused Swift files.** Transcript parsing, session discovery, drift
   checks, API serving, reusable views, HUD coordination, and startup each have a
   separate source file.
@@ -372,8 +397,11 @@ renderer and automated tests consume the same `UIEvent` objects:
 
 The running window publishes the state it actually consumed at the local
 endpoint `http://127.0.0.1:17321/ui` (override with
-`THINKPEEK_API_PORT`). This makes window title, selection, status, analysis,
-omitted blocks, activity, and drift results assertable without screen capture.
+`THINKPEEK_API_PORT`). Every request requires `Authorization: Bearer <token>`;
+the random token is stored with mode `0600` at
+`~/Library/Application Support/Thinkpeek/ui-api-token`. This makes window title,
+selection, status, analysis, omitted blocks, activity, and drift results
+assertable without screen capture.
 The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
 by the running AppKit window, so layout and scrolling can be checked end to end.
 `/message`, `/controls`, `/close`, `/quit`, `/hide`, `/previous`, `/next`,
@@ -385,6 +413,16 @@ by the running AppKit window, so layout and scrolling can be checked end to end.
 `/toggle-expanded` exercise the same reader, settings, and carousel paths as the
 visible UI, allowing every presentation state to be tested through the complete
 running window. `/reveal` remains an alias for `/controls` for compatibility.
+`/ui` and `/screenshot` use `GET`; every action endpoint uses `POST`. The server
+binds only to IPv4 loopback and returns no-store responses.
+
+```bash
+token=$(<"$HOME/Library/Application Support/Thinkpeek/ui-api-token")
+printf 'Authorization: Bearer %s\n' "$token" | \
+  curl --header @- http://127.0.0.1:17321/ui
+printf 'Authorization: Bearer %s\n' "$token" | \
+  curl --header @- -X POST http://127.0.0.1:17321/controls
+```
 Use `./.build/thinkpeek --transcript /absolute/session.jsonl` to pin a deterministic
 input for an end-to-end UI test.
 

@@ -10,8 +10,8 @@ to work.
 
 ## Root cause
 
-The visible process (PID 15097) had started at 10:12, before the fixed executable
-was rebuilt at 11:53. Replacing a Mach-O file on disk does not modify code already
+The visible process had started before the fixed executable was rebuilt.
+Replacing a Mach-O file on disk does not modify code already
 mapped into a running process. The source, tests, and disk binary were correct,
 but the deployment handoff left the stale process running.
 
@@ -25,14 +25,13 @@ but the deployment handoff left the stale process running.
 
 ## Verification
 
-The replacement process started at 11:55 as PID 95074. Its live `/ui` state
-reported:
+The replacement process had a new PID. Its live `/ui` state reported:
 
 ```text
 operationPending: true
 navigableCount: 3
 peekText: Planning termination and relaunch of old processes
-windowTitle: ● Codex · task 019ff546 · working…
+windowTitle: ● Codex · Example task · working…
 ```
 
 The activity event did not appear in `events`, did not consume a history slot,

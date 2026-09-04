@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Time real drift-check calls across fast OpenRouter models/providers. 3 runs each, median."""
-import json, statistics, time, urllib.request, urllib.error
+"""Time OpenRouter model candidates. Three runs each, reporting the median."""
+import json, os, statistics, time, urllib.request, urllib.error
 
-KEY = [l.strip() for l in open("/tmp/key") if l.strip()][0]
+KEY = os.environ.get("OPENROUTER_API_KEY")
+if not KEY:
+    raise SystemExit("set OPENROUTER_API_KEY")
 
 SYS = ('You are a fast drift detector. Given TRIGGERS and REASONING, reply with JSON only: '
        '{"fired":[{"n":<trigger number>,"why":"<max 12 words>"}]} or {"fired":[]}.')

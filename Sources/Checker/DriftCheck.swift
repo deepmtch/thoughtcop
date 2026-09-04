@@ -30,20 +30,20 @@ func loadEvaluationInstructions() -> [String] {
 
 /// Direct providers only. Groq is attempted first; Cerebras is the fallback.
 /// Credentials remain in memory and are never rendered or logged.
-func driftBackends() -> [DriftBackend] {
+func driftBackends(credentials: CheckerCredentials = .shared) -> [DriftBackend] {
     guard !LOCAL_ONLY else { return [] }
     if let url = DUMMY_CHECKER_URL {
         return [DriftBackend(name: "Dummy", url: url, key: "isolated-test-key",
                              model: "deterministic-checker")]
     }
     var result: [DriftBackend] = []
-    if let key = dotenv("GROQ_API_KEY"),
+    if let key = credentials.resolve(.groq),
        let url = URL(string: "https://api.groq.com/openai/v1/chat/completions") {
         result.append(DriftBackend(
             name: "Groq", url: url, key: key,
             model: dotenv("GROQ_MODEL") ?? "llama-3.3-70b-versatile"))
     }
-    if let key = dotenv("CEREBRAS_API_KEY"),
+    if let key = credentials.resolve(.cerebras),
        let url = URL(string: "https://api.cerebras.ai/v1/chat/completions") {
         result.append(DriftBackend(
             name: "Cerebras", url: url, key: key,
@@ -205,7 +205,8 @@ func checkDrift(_ evidence: EvaluationRecord,
     }
     let backends = driftBackends()
     guard !backends.isEmpty else {
-        done(.failed(LOCAL_ONLY ? "local-only mode" : "no Groq or Cerebras key in .env"), 0)
+        done(.failed(LOCAL_ONLY ? "local-only mode" :
+            "no Groq or Cerebras credential configured (environment, development .env, or Keychain)"), 0)
         return
     }
     let envelopeSizes = instructions.compactMap {
@@ -264,7 +265,9 @@ func driftStatus() -> (ready: Bool, detail: String) {
         return (false, "no local evaluation instruction configured")
     }
     if LOCAL_ONLY { return (false, "local-only mode") }
-    if driftBackends().isEmpty { return (false, "GROQ_API_KEY and CEREBRAS_API_KEY missing from .env") }
+    if driftBackends().isEmpty {
+        return (false, "No Groq or Cerebras credential configured")
+    }
     let scope = CheckRulesStore.mode() == .wholeText
         ? "verbatim whole-text instruction"
         : "\(instructions.count) verbatim line instructions"

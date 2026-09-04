@@ -17,11 +17,15 @@
   <string>1</string>
   <key>CFBundleShortVersionString</key>
   <string>1.0</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.developer-tools</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © 2026 Thinkpeek contributors. GPL-3.0.</string>
 </dict>
 </plist>

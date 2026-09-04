@@ -13,10 +13,10 @@ hit the local outbound-size limit.
 
 ## Exact source record
 
-- Transcript: `rollout-2026-08-15T12-25-35-01a004f4-9d6e-7541-b850-b09043619d78.jsonl`
-- Timestamp: `2026-08-15T14:38:18.424Z`
+- Transcript: a redacted Codex rollout fixture
+- Timestamp: redacted
 - Type: `custom_tool_call_output`
-- Call ID: `call_XSIW6OP7R9fM4YmLdPrl5Cfu`
+- Call ID: redacted
 - Stored output size: 41,245 bytes
 
 The corresponding command printed matching entries from `ALL_TOOLS`, including

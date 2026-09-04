@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Probe both keys against both services and time candidate models. No key is printed."""
-import json, time, urllib.request, urllib.error, sys
+"""Time provider models using provider-specific environment credentials."""
+import json, os, time, urllib.request, urllib.error
 
-KEYFILE = "/tmp/key"
-lines = [l.strip() for l in open(KEYFILE) if l.strip() and not l.startswith("#")]
+cbr_key = os.environ.get("CEREBRAS_API_KEY")
+orr_key = os.environ.get("OPENROUTER_API_KEY")
 
 def get(url, key):
     r = urllib.request.Request(url, headers={"Authorization": "Bearer " + key})
@@ -16,20 +16,8 @@ def post(url, key, payload):
     with urllib.request.urlopen(r, timeout=30) as f:
         return json.load(f)
 
-print("=== which key works where ===")
-cbr_key = orr_key = None
-for i, k in enumerate(lines):
-    for svc, url in (("cerebras", "https://api.cerebras.ai/v1/models"),
-                     ("openrouter", "https://openrouter.ai/api/v1/key")):
-        try:
-            get(url, k)
-            print(f"  line{i+1} -> {svc}: OK")
-            if svc == "cerebras": cbr_key = k
-            else: orr_key = k
-        except urllib.error.HTTPError as e:
-            print(f"  line{i+1} -> {svc}: HTTP {e.code}")
-        except Exception as e:
-            print(f"  line{i+1} -> {svc}: {type(e).__name__}")
+if not cbr_key and not orr_key:
+    raise SystemExit("set CEREBRAS_API_KEY and/or OPENROUTER_API_KEY")
 
 MSG = [{"role": "system", "content": "Reply with JSON only."},
        {"role": "user", "content": "Does this reasoning show guessing instead of verifying? "

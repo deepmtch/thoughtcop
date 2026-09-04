@@ -124,6 +124,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var tickerSettingsMenu: TickerSettingsMenu!
     private var peekSettingsMenu: TickerSettingsMenu!
     private var checkRulesEditor: CheckRulesEditor?
+    private var providerCredentialsEditor: ProviderCredentialsEditor?
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
     private var eventPreviews: [MessagePreview] = []
@@ -567,7 +568,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     guard let self,
                           shouldDismissDetails(isShowingDetails: !self.peekMode,
                                                isEditorVisible:
-                                                self.checkRulesEditor?.window?.isVisible == true,
+                                                self.checkRulesEditor?.window?.isVisible == true ||
+                                                self.providerCredentialsEditor?.window?.isVisible == true,
                                                windowFrame: self.panel.frame,
                                                clickLocation: location) else { return }
                     self.api.perform(.close, origin: .appKit)
@@ -724,6 +726,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "checkRulesStorage": "local-app-preferences",
             "checkRulesCustomized": CheckRulesStore.isCustomized(),
             "checkRulesEditorVisible": checkRulesEditor?.window?.isVisible ?? false,
+            "providerCredentialsEditorVisible":
+                providerCredentialsEditor?.window?.isVisible ?? false,
+            "groqCredentialConfigured": CheckerCredentials.shared.isConfigured(.groq),
+            "cerebrasCredentialConfigured": CheckerCredentials.shared.isConfigured(.cerebras),
             "outsideClickDismissesDetails": true,
             "discardedEmptySummaryCount": discardedEmptySummaryCount,
             "userResizableWidth": true,
@@ -862,6 +868,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             CheckRulesStore.saveMode(mode)
             refreshStatus()
             publishAPI()
+        case .editProviderCredentials: showProviderCredentialsEditor()
+        case .closeProviderCredentials:
+            providerCredentialsEditor?.close()
+        case .applyProviderCredentialEdits(let edits, let completion):
+            let failures = CheckerCredentials.shared.apply(edits)
+            refreshStatus()
+            publishAPI()
+            completion(failures)
         case .selectSession(let path): applySessionSelection(path: path)
         case .corner(let name):
             guard let corner = TickerWindowCorner.allCases.first(where: {
@@ -903,6 +917,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                      keyEquivalent: ",")
         checkPrompt.target = self
         menu.addItem(checkPrompt)
+        let credentials = NSMenuItem(title: "Provider Credentials…",
+                                     action: #selector(showProviderCredentialsFromMenu(_:)),
+                                     keyEquivalent: "")
+        credentials.target = self
+        menu.addItem(credentials)
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit Thinkpeek", action: #selector(quitFromMenu(_:)),
                               keyEquivalent: "q")
@@ -932,6 +951,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func showCheckPromptFromMenu(_ sender: Any?) {
         api.perform(.editCheckRules, origin: .appKit)
+    }
+
+    @objc private func showProviderCredentialsFromMenu(_ sender: Any?) {
+        api.perform(.editProviderCredentials, origin: .appKit)
     }
 
     @objc private func quitFromMenu(_ sender: Any?) { quitApplication() }
@@ -986,6 +1009,30 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.publishAPI()
         })
         checkRulesEditor = editor
+        editor.present()
+        publishAPI()
+    }
+
+    private func showProviderCredentialsEditor() {
+        if let providerCredentialsEditor {
+            providerCredentialsEditor.present()
+            return
+        }
+        CheckerCredentials.shared.reload()
+        let statuses = Dictionary(uniqueKeysWithValues: CheckerProvider.allCases.map {
+            ($0, CheckerCredentials.shared.status($0))
+        })
+        let editor = ProviderCredentialsEditor(statuses: statuses,
+            save: { [weak self] edits in
+                var failures = ["Thinkpeek could not save credentials."]
+                self?.api.perform(.applyProviderCredentialEdits(edits,
+                    completion: { failures = $0 }), origin: .appKit)
+                return failures
+            }, closed: { [weak self] in
+                self?.providerCredentialsEditor = nil
+                self?.publishAPI()
+            })
+        providerCredentialsEditor = editor
         editor.present()
         publishAPI()
     }
@@ -1450,8 +1497,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func captureWindowPNG() -> Data? {
-        let captureWindow = checkRulesEditor?.window?.isVisible == true
-            ? checkRulesEditor?.window : panel
+        let captureWindow: NSWindow?
+        if providerCredentialsEditor?.window?.isVisible == true {
+            captureWindow = providerCredentialsEditor?.window
+        } else if checkRulesEditor?.window?.isVisible == true {
+            captureWindow = checkRulesEditor?.window
+        } else {
+            captureWindow = panel
+        }
         guard let window = captureWindow, let view = window.contentView else { return nil }
         let scale = window.backingScaleFactor
         guard let rep = NSBitmapImageRep(

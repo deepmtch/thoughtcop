@@ -7,9 +7,11 @@ target_arch=$(/usr/bin/uname -m)
 mkdir -p "$module_cache"
 
 swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
+    -framework Security \
     -module-cache-path "$module_cache" -o "$build_dir/thinkpeek" \
     Sources/App/Config.swift \
     Sources/Checker/CheckRulesStore.swift \
+    Sources/Checker/CheckerCredentials.swift \
     Sources/Checker/ViolationStore.swift \
     Sources/Monitoring/Transcript.swift \
     Sources/Monitoring/ClaudeCloudActivity.swift \
@@ -29,6 +31,7 @@ swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
     Sources/UI/Ticker/CheckerActivityIndicator.swift \
     Sources/UI/Ticker/TickerSettingsMenu.swift \
     Sources/UI/Controls/CheckRulesEditor.swift \
+    Sources/UI/Controls/ProviderCredentialsEditor.swift \
     Sources/UI/Ticker/ProviderIcon.swift \
     Sources/UI/Ticker/TickerBackground.swift \
     Sources/UI/Ticker/TickerView.swift \

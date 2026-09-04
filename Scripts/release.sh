@@ -3,6 +3,11 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
+if [ -n "$(/usr/bin/git status --porcelain --untracked-files=normal)" ]; then
+    echo "release blocked: commit or remove all worktree changes first" >&2
+    exit 2
+fi
+
 identity=${THINKPEEK_SIGNING_IDENTITY:-}
 notary_profile=${THINKPEEK_NOTARY_PROFILE:-}
 
@@ -38,17 +43,18 @@ if ! /usr/bin/xcrun notarytool history --keychain-profile "$notary_profile" \
     exit 2
 fi
 
-./build.sh
+./Scripts/test.sh
 
 version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
     Resources/Thinkpeek-Info.plist)
+architecture=$(/usr/bin/uname -m)
 release_parent=".build/releases"
 /bin/mkdir -p "$release_parent"
 release_dir=$(/usr/bin/mktemp -d "$release_parent/Thinkpeek-$version.XXXXXX")
 app="$release_dir/Thinkpeek.app"
 submission_zip="$release_dir/Thinkpeek-$version-notarization.zip"
 submission_json="$release_dir/notarization.json"
-final_zip="$release_dir/Thinkpeek-$version-macos.zip"
+final_zip="$release_dir/Thinkpeek-$version-macos-$architecture.zip"
 
 /usr/bin/ditto .build/Thinkpeek.app "$app"
 /usr/bin/codesign --force --options runtime --timestamp \

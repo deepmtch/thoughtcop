@@ -181,8 +181,8 @@ if CommandLine.arguments.contains("--session-discovery-selftest") {
     try? "{}\n".write(to: newlyCreatedTranscript, atomically: false,
                        encoding: .utf8)
     let updatedIndex = pathIndex.files()
-    let taskID = "01a02dd4-2314-7f30-8313-b23268b2c1ae"
-    let rolloutID = "01a02dee-e313-7d60-8222-ff6e9c8c5c6b"
+    let taskID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    let rolloutID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
     let doubleUUIDTranscript = FileManager.default.temporaryDirectory
         .appendingPathComponent(
             "rollout-2026-08-23T11-23-45-\(taskID)_\(rolloutID).jsonl")
@@ -1290,10 +1290,67 @@ if CommandLine.arguments.contains("--violation-store-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--checker-credentials-selftest") {
+    final class MemoryCredentialAccess: CredentialAccess {
+        var values: [String: String] = [:]
+        func read(account: String) throws -> String? { values[account] }
+        func save(_ value: String, account: String) throws { values[account] = value }
+        func remove(account: String) throws { values.removeValue(forKey: account) }
+    }
+    let memory = MemoryCredentialAccess()
+    memory.values["GROQ_API_KEY"] = "keychain-groq"
+    memory.values["CEREBRAS_API_KEY"] = "keychain-cerebras"
+    let credentials = CheckerCredentials(store: memory, overrideLookup: {
+        $0 == "GROQ_API_KEY" ? "environment-groq" : nil
+    })
+    guard credentials.resolve(.groq) == "environment-groq",
+          credentials.resolve(.cerebras) == "keychain-cerebras",
+          credentials.status(.groq).contains("environment"),
+          credentials.status(.cerebras).contains("Keychain") else {
+        FileHandle.standardError.write(
+            "checker credential precedence self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    let failures = credentials.apply([.cerebras: .set("replacement-cerebras")])
+    guard failures.isEmpty, credentials.resolve(.cerebras) == "replacement-cerebras" else {
+        FileHandle.standardError.write(
+            "checker credential save self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    _ = credentials.apply([.cerebras: .remove])
+    guard credentials.resolve(.cerebras) == nil else {
+        FileHandle.standardError.write(
+            "checker credential removal self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    let tokenPath = NSTemporaryDirectory() + "/thinkpeek-api-token-\(UUID().uuidString)"
+    let token = loadUIAPIToken(path: tokenPath, environmentToken: "")
+    let attributes = try? FileManager.default.attributesOfItem(atPath: tokenPath)
+    let permissions = (attributes?[.posixPermissions] as? NSNumber)?.intValue
+    try? FileManager.default.removeItem(atPath: tokenPath)
+    guard token.count == 64, permissions == 0o600 else {
+        FileHandle.standardError.write(
+            "UI API token self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    let editor = ProviderCredentialsEditor(statuses: [
+        .groq: "Not configured", .cerebras: "Active: macOS Keychain",
+    ], save: { _ in [] }, closed: {})
+    guard editor.usesSecureInputs else {
+        FileHandle.standardError.write(
+            "provider credentials editor self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("checker credentials: environmentPrecedence=true keychainFallback=true " +
+          "saveRemove=true secureEditor=true apiTokenPermissions=0600")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--ui-command-api-selftest") {
     let logURL = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("thinkpeek-ui-api-\(UUID().uuidString).jsonl")
-    let api = UIStateServer(logURL: logURL)
+    let api = UIStateServer(logURL: logURL,
+                            token: "selftest-ui-token-0000000000000000")
     var handled: [String] = []
     api.actionHandler = { handled.append($0.name) }
     api.perform(.first, origin: .appKit)
@@ -1307,16 +1364,19 @@ if CommandLine.arguments.contains("--ui-command-api-selftest") {
     api.perform(.next, origin: .http)
     api.perform(.saveCheckRules(text: "SECRET_RULE_CONTENT", mode: "whole-text"),
                 origin: .appKit)
+    api.perform(.applyProviderCredentialEdits([.groq: .set("SECRET_PROVIDER_KEY")],
+        completion: { _ in }), origin: .appKit)
     let log = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
     try? FileManager.default.removeItem(at: logURL)
     guard handled == ["first", "controls", "hide", "show-violations",
                       "check-rules/close",
                       "filter/violations", "violation-alerts/on",
                       "violation-alerts/off", "next",
-                      "save-check-rules"],
+                      "save-check-rules", "save-provider-credentials"],
           log.contains("\"origin\":\"appKit\""),
           log.contains("\"origin\":\"http\""),
-          !log.contains("SECRET_RULE_CONTENT") else {
+          !log.contains("SECRET_RULE_CONTENT"),
+          !log.contains("SECRET_PROVIDER_KEY") else {
         FileHandle.standardError.write(
             "UI command API self-test failed\n".data(using: .utf8)!)
         exit(1)

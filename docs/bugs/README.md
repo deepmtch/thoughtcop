@@ -85,3 +85,6 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-078](BUG-078-disabled-violation-status-duplicated-menu-action.md) | Disabled violation status duplicated the actionable menu command | Fixed |
 | [BUG-079](BUG-079-violation-status-icon-lost-native-foreground.md) | Custom violation tint rendered the menu-bar icon and count black | Fixed |
 | [BUG-080](BUG-080-restart-rebuilt-unchanged-app.md) | Restart silently rebuilt the unchanged app and appeared frozen | Fixed |
+| [BUG-081](BUG-081-ui-api-exposed-local-transcripts.md) | Local UI API exposed transcript state and controls without authentication | Fixed |
+| [BUG-082](BUG-082-installed-build-had-no-credential-store.md) | Installed builds had no supported secure provider-credential path | Fixed |
+| [BUG-083](BUG-083-benchmarks-reused-provider-credentials.md) | Benchmarks reused one credential across unrelated provider endpoints | Fixed |

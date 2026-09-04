@@ -20,10 +20,17 @@ from pathlib import Path
 API_URL = os.environ.get("THINKPEEK_UI_URL", "http://127.0.0.1:17321/ui")
 TIMEOUT = float(os.environ.get("THINKPEEK_LIVE_TEST_TIMEOUT", "60"))
 CLAUDE = os.environ.get("CLAUDE_BIN", str(Path.home() / ".local/bin/claude"))
+API_TOKEN_PATH = Path(os.environ.get(
+    "THINKPEEK_UI_API_TOKEN_PATH",
+    Path.home() / "Library/Application Support/Thinkpeek/ui-api-token",
+))
 
 
 def api_state() -> dict:
-    with urllib.request.urlopen(API_URL, timeout=2) as response:
+    token = os.environ.get("THINKPEEK_UI_API_TOKEN") or API_TOKEN_PATH.read_text().strip()
+    request = urllib.request.Request(
+        API_URL, headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(request, timeout=2) as response:
         return json.load(response)
 
 
