@@ -653,7 +653,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                        feedView.bounds.height > scrollView.contentView.bounds.height)),
             "smartAutoscroll": true,
             "unseenCount": unseenCount,
-            "cardCount": feedStack.arrangedSubviews.count,
+            "cardCount": feedCardCount,
+            "attachedCardCount": feedStack.arrangedSubviews.count,
             "visibleCardCount": (peekMode || messageMode || compactMode)
                 ? 0 : eventCards.filter { !$0.isHidden }.count,
             "compactMode": compactMode,
@@ -1401,6 +1402,40 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let latest = visibleEventIndexes.last { selectExpandedMessage(at: latest) }
     }
 
+    /// Every card, event and system, in insertion order.
+    private var feedOrder: [EventCard] = []
+
+    /// Cards in the feed in the same sense as before BUG-086: every created
+    /// card plus the violation empty state while it is in the stack.
+    private var feedCardCount: Int {
+        feedOrder.count + (violationEmptyState.superview === feedStack ? 1 : 0)
+    }
+
+    /// Only displayed cards stay in the feed stack. A hidden arranged subview
+    /// is detached from stack layout but keeps its subtree and constraints in
+    /// the window's layout engine, so 500 retained violation cards made every
+    /// layout pass take seconds (BUG-086). Detached cards keep their content
+    /// and state; attaching restores insertion order and the width constraint
+    /// that removal from the stack deactivated.
+    private func syncCardAttachment() {
+        for (position, card) in feedOrder.enumerated() {
+            let attached = card.superview === feedStack
+            if card.isHidden, attached {
+                feedStack.removeArrangedSubview(card)
+                card.removeFromSuperview()
+            } else if !card.isHidden, !attached {
+                let attachedAfter = feedOrder[(position + 1)...]
+                    .filter { $0.superview === feedStack }.count
+                feedStack.insertArrangedSubview(
+                    card, at: feedStack.arrangedSubviews.count - attachedAfter)
+                card.widthAnchor.constraint(
+                    equalTo: feedStack.widthAnchor,
+                    constant: -feedStack.edgeInsets.left - feedStack.edgeInsets.right)
+                    .isActive = true
+            }
+        }
+    }
+
     private func updateCardVisibility() {
         if compactMode {
             if !eventCards.isEmpty {
@@ -1410,6 +1445,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 card.isHidden = index != compactIndex
             }
             for card in systemCards { card.isHidden = !eventCards.isEmpty }
+            syncCardAttachment()
             positionLabel.stringValue = eventCards.isEmpty
                 ? "—" : "\(compactIndex + 1) / \(eventCards.count)"
             if compactIndex >= 0 && compactIndex < eventPreviews.count {
@@ -1432,6 +1468,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 card.isHidden = violationsOnly && !eventPreviews[index].alarmActive
             }
             for card in systemCards { card.isHidden = !eventCards.isEmpty }
+            syncCardAttachment()
             let visibleCount = violationsOnly
                 ? eventPreviews.filter(\.alarmActive).count : eventCards.count
             positionLabel.stringValue = violationsOnly
@@ -1575,7 +1612,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                          deferScrollAndLayout: Bool = false,
                          navigable: Bool = true) -> EventCard {
         let follow = !deferScrollAndLayout &&
-            (nearBottom() || feedStack.arrangedSubviews.isEmpty)
+            (nearBottom() || feedCardCount == 0)
         let card = EventCard(source: source, time: displayTime(event.timestamp), event: event)
         card.selectedRequested = { [weak self, weak card] in
             guard let self, let card,
@@ -1592,10 +1629,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self, let card else { return }
             self.cardContentDidChange(card)
         }
-        feedStack.addArrangedSubview(card)
-        card.widthAnchor.constraint(equalTo: feedStack.widthAnchor,
-                                    constant: -feedStack.edgeInsets.left - feedStack.edgeInsets.right)
-            .isActive = true
+        // A new card starts hidden and outside the feed stack;
+        // updateCardVisibility attaches it when it is displayed. A bulk add
+        // (launch restore, initial history) applies visibility once at the end
+        // instead of once per card (BUG-086).
+        card.isHidden = true
+        feedOrder.append(card)
         if navigable {
             let wasFollowingLatest = eventCards.isEmpty || compactIndex == eventCards.count - 1
             eventCards.append(card)
@@ -1608,8 +1647,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             systemCards.append(card)
         }
-        updateCardVisibility()
         if deferScrollAndLayout { return card }
+        updateCardVisibility()
         feedView.layoutSubtreeIfNeeded()
         if follow {
             DispatchQueue.main.async { [weak self] in self?.scrollToLatest() }
@@ -1637,6 +1676,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func cardContentDidChange(_ card: EventCard) {
+        // A detached card is not rendered; its content is laid out and
+        // published when updateCardVisibility attaches it. Per-card publishes
+        // during launch restore cost seconds (BUG-086).
+        guard card.superview === feedStack else { return }
         feedView.layoutSubtreeIfNeeded()
         if compactMode,
            compactIndex >= 0,
@@ -1673,8 +1716,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         if !violationRecords.isEmpty {
             compactIndex = eventCards.count - 1
-            updateCardVisibility()
         }
+        updateCardVisibility()
     }
 
     private func updateViolationMenu() {
@@ -1726,6 +1769,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         unseenCount = 0
         latestButton.title = "Latest ↓"
         apiEvents.removeAll()
+        feedOrder.removeAll()
         eventCards.removeAll()
         eventPreviews.removeAll()
         systemCards.removeAll()
@@ -1911,6 +1955,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         preview.violationID = record.id
         preview.violationReviewed = false
         card.setViolationReviewed(false)
+        // The badge and menu derive from violationRecords. Update them before
+        // updateCardVisibility publishes, so no published state pairs the new
+        // count with the previous badge.
+        updateViolationMenu()
         if shouldRevealTicker {
             NSSound.beep()
             NSAccessibility.post(element: panel as Any,
@@ -2128,7 +2176,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Old operation-start records are neither content nor current status.
             arrived.removeAll { $0.block.backfilled && $0.block.kind == .activity }
         }
-        let isInitialHistoryBatch = arrived.count > 20 && feedStack.arrangedSubviews.count <= 1
+        let isInitialHistoryBatch = arrived.count > 20 && feedCardCount <= 1
         for event in arrived {
             let block = event.block
             let source = event.source
@@ -2194,6 +2242,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             evaluate(block, source: source, card: card, preview: preview)
         }
         if isInitialHistoryBatch {
+            updateCardVisibility()
             feedView.layoutSubtreeIfNeeded()
             scrollToLatest()
         }
