@@ -132,8 +132,10 @@ final class PrivacyAudit {
 
     func recordExternalRequest(source: String, destination: String,
                                recordType: String, envelopeBytes: Int,
-                               requestID: String, userRequest: String? = nil) {
-        let action = recordType == "assistant_response"
+                               requestID: String, userRequest: String? = nil,
+                               purpose: String = "evaluation") {
+        let action = purpose == "verification" ? "external_verification_request"
+            : recordType == "assistant_response"
             ? "external_assistant_response_request" : "external_reasoning_request"
         let requestCut = userRequest.map { $0.count > 2 * USER_REQUEST_KEPT_CHARACTERS }
         append(["action": action,
@@ -148,8 +150,9 @@ final class PrivacyAudit {
     func recordExternalResult(source: String, destination: String,
                               recordType: String, requestID: String,
                               status: String, alert: Bool? = nil,
-                              latencyMs: Int) {
-        let action = recordType == "assistant_response"
+                              latencyMs: Int, purpose: String = "evaluation") {
+        let action = purpose == "verification" ? "external_verification_result"
+            : recordType == "assistant_response"
             ? "external_assistant_response_result" : "external_reasoning_result"
         var event: [String: Any] = [
             "action": action,

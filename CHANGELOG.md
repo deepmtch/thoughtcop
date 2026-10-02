@@ -7,6 +7,11 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- **Confirm with Second Check** (default on): each violation claim and its
+  quoted evidence are checked by a second request to the same model; only
+  confirmed violations are shown and stored.
+- **Violation History** setting: keep the newest 10, 25, 50 (default), 100, 250
+  or 500 violations.
 - Checker requests include the user's latest typed request from the same
   session, cut to its first and last 1,000 characters when longer than 2,000.
 - Canary copies of real Claude Code and Codex transcripts prove exactly which

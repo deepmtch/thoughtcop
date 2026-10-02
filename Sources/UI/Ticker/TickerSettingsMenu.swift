@@ -9,6 +9,8 @@ final class TickerSettingsMenu: NSObject {
     var backgroundRequested: (() -> Void)?
     var defaultAlarmColorRequested: (() -> Void)?
     var violationAlertsRequested: ((Bool) -> Void)?
+    var violationVerificationRequested: ((Bool) -> Void)?
+    var violationHistoryLimitRequested: ((Int) -> Void)?
 
     private(set) var menu = NSMenu()
     private weak var launcherButton: NSButton?
@@ -16,6 +18,8 @@ final class TickerSettingsMenu: NSObject {
     private var widthItems: [String: NSMenuItem] = [:]
     private var defaultAlarmColorItem: NSMenuItem!
     private var violationAlertsItem: NSMenuItem!
+    private var violationVerificationItem: NSMenuItem!
+    private var violationHistoryItems: [Int: NSMenuItem] = [:]
 
     var structure: [String: [String]] {
         Dictionary(uniqueKeysWithValues: menu.items.compactMap { item in
@@ -39,6 +43,8 @@ final class TickerSettingsMenu: NSObject {
                                  submenu: appearanceMenu()))
         menu.addItem(submenuItem(title: "Violation Alerts", symbol: "bell.badge",
                                  submenu: violationAlertsMenu()))
+        menu.addItem(submenuItem(title: "Violation History", symbol: "clock.arrow.circlepath",
+                                 submenu: violationHistoryMenu()))
         launcherButton = button
         button.title = ""
         button.image = NSImage(systemSymbolName: "gearshape",
@@ -59,7 +65,8 @@ final class TickerSettingsMenu: NSObject {
     }
 
     func update(speed: TickerSpeed, width: CGFloat, usesDefaultAlarmColor: Bool,
-                violationAlertsEnabled: Bool) {
+                violationAlertsEnabled: Bool, violationVerificationEnabled: Bool,
+                violationHistoryLimit: Int) {
         for (candidate, item) in speedItems { item.state = candidate == speed ? .on : .off }
         widthItems["narrow"]?.state = abs(width - CompactWindowSizing.narrowWidth) < 1
             ? .on : .off
@@ -67,6 +74,10 @@ final class TickerSettingsMenu: NSObject {
             ? .on : .off
         defaultAlarmColorItem.state = usesDefaultAlarmColor ? .on : .off
         violationAlertsItem.state = violationAlertsEnabled ? .on : .off
+        violationVerificationItem.state = violationVerificationEnabled ? .on : .off
+        for (limit, item) in violationHistoryItems {
+            item.state = limit == violationHistoryLimit ? .on : .off
+        }
     }
 
     private func submenuItem(title: String, symbol: String, submenu: NSMenu) -> NSMenuItem {
@@ -153,6 +164,28 @@ final class TickerSettingsMenu: NSObject {
         violationAlertsItem.target = self
         violationAlertsItem.toolTip = "Temporarily show new violations for 10 seconds"
         submenu.addItem(violationAlertsItem)
+        violationVerificationItem = NSMenuItem(
+            title: "Confirm with Second Check",
+            action: #selector(violationVerificationPicked(_:)), keyEquivalent: "")
+        violationVerificationItem.target = self
+        violationVerificationItem.toolTip = "Ask the same model whether each violation " +
+            "claim and its evidence are true; show only confirmed violations"
+        submenu.addItem(violationVerificationItem)
+        return submenu
+    }
+
+    private func violationHistoryMenu() -> NSMenu {
+        let submenu = NSMenu(title: "Violation History")
+        for limit in ViolationHistoryPreference.choices {
+            let item = NSMenuItem(title: "Keep \(limit) Newest",
+                                  action: #selector(violationHistoryPicked(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.tag = limit
+            item.toolTip = "Keep the newest \(limit) violations; older ones are deleted"
+            submenu.addItem(item)
+            violationHistoryItems[limit] = item
+        }
         return submenu
     }
 
@@ -179,5 +212,11 @@ final class TickerSettingsMenu: NSObject {
     }
     @objc private func violationAlertsPicked(_ sender: NSMenuItem) {
         violationAlertsRequested?(sender.state != .on)
+    }
+    @objc private func violationVerificationPicked(_ sender: NSMenuItem) {
+        violationVerificationRequested?(sender.state != .on)
+    }
+    @objc private func violationHistoryPicked(_ sender: NSMenuItem) {
+        violationHistoryLimitRequested?(sender.tag)
     }
 }

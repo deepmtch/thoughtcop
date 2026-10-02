@@ -44,6 +44,10 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Unseen/history state is labeled instead of silently changing selection.
 - [x] Expanded history has a visible selected row and supports Up/Down, J/K,
   Home/End, Return, and Space without stealing keys from text controls.
+- [x] Violation History offers 10/25/50/100/250/500 newest (default 50) with the
+  current choice checked; lowering it removes deleted violations' cards.
+- [x] Confirm with Second Check is a checked toggle (default on); rejected
+  claims never appear in the ticker, history, badge, or store.
 - [x] Violation history distinguishes **New** from **Reviewed** and has a real
   empty state plus an explicit storage-error state.
 

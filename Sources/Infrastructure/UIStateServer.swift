@@ -106,6 +106,8 @@ enum UICommand {
     case chooseBackground
     case backgroundRGBA([Double]?)
     case violationAlerts(Bool)
+    case violationVerification(Bool)
+    case violationHistoryLimit(Int)
 
     var name: String {
         switch self {
@@ -139,6 +141,9 @@ enum UICommand {
             ? "background/system" : "background/rgba"
         case .violationAlerts(let enabled): return enabled
             ? "violation-alerts/on" : "violation-alerts/off"
+        case .violationVerification(let enabled): return enabled
+            ? "violation-verification/on" : "violation-verification/off"
+        case .violationHistoryLimit(let limit): return "violation-history/\(limit)"
         }
     }
 }
@@ -290,6 +295,12 @@ final class UIStateServer {
     }
 
     private func command(for path: String) -> UICommand? {
+        let historyPrefix = "/violation-history/"
+        if path.hasPrefix(historyPrefix),
+           let limit = Int(path.dropFirst(historyPrefix.count)),
+           ViolationHistoryPreference.choices.contains(limit) {
+            return .violationHistoryLimit(limit)
+        }
         switch path {
         case "/first": return .first
         case "/previous": return .previous
@@ -323,6 +334,8 @@ final class UIStateServer {
         case "/background/system": return .backgroundRGBA(nil)
         case "/violation-alerts/on": return .violationAlerts(true)
         case "/violation-alerts/off": return .violationAlerts(false)
+        case "/violation-verification/on": return .violationVerification(true)
+        case "/violation-verification/off": return .violationVerification(false)
         case "/position/top-left": return .position("top-left")
         case "/position/top-center": return .position("top-center")
         case "/position/top-right": return .position("top-right")

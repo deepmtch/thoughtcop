@@ -243,8 +243,17 @@ restarting Thinkpeek.
 
 ### Violation history
 
-Every evaluator match is appended to the local 0600-permission store at
-`~/Library/Application Support/Thinkpeek/violations.json`. A record preserves
+Every reported violation must quote evidence. With **Violation Alerts → Confirm
+with Second Check** on (the default), Thinkpeek sends the claim, its evidence,
+your instruction, the original record and your request to the same model and
+asks whether the claim is true. Only confirmed violations are shown and stored;
+rejected or evidence-free claims are dropped. Turn the setting off to show the
+first verdict directly.
+
+Each shown violation is appended to the local 0600-permission store at
+`~/Library/Application Support/Thinkpeek/violations.json`. **Violation History**
+in the display settings keeps the newest 10, 25, 50 (default), 100, 250 or 500
+violations; lowering it deletes the oldest immediately. A record preserves
 the source provider/session, time, matched reason, quoted evidence, original
 evidence record, evaluator provider, latency, and the exact check prompt in
 force.

@@ -57,14 +57,53 @@ struct ViolationRecord: Codable, Equatable {
     }
 }
 
+/// How many violations the history keeps, chosen by the user. The newest
+/// records are kept; older ones are deleted from disk.
+enum ViolationHistoryPreference {
+    static let defaultsKey = "violationHistoryLimit"
+    static let choices = [10, 25, 50, 100, 250, 500]
+    static let defaultLimit = 50
+
+    static func load(defaults: UserDefaults = .standard) -> Int {
+        let stored = defaults.integer(forKey: defaultsKey)
+        return choices.contains(stored) ? stored : defaultLimit
+    }
+
+    static func save(_ limit: Int, defaults: UserDefaults = .standard) {
+        guard choices.contains(limit) else { return }
+        defaults.set(limit, forKey: defaultsKey)
+    }
+}
+
 final class ViolationStore {
-    static let maximumRecords = 500
+    /// The largest selectable history limit.
+    static let maximumRecords = ViolationHistoryPreference.choices.max()!
 
     let path: String
     private(set) var lastError: String?
+    private(set) var limit: Int
     private let lock = NSLock()
 
-    init(path: String = VIOLATIONS_PATH) { self.path = path }
+    init(path: String = VIOLATIONS_PATH,
+         limit: Int = ViolationHistoryPreference.load()) {
+        self.path = path
+        self.limit = limit
+    }
+
+    /// Applies a history limit to the stored file: keeps the newest `limit`
+    /// records and deletes the rest. An unreadable file is left untouched.
+    @discardableResult
+    func setLimit(_ newLimit: Int) -> [ViolationRecord] {
+        lock.lock()
+        defer { lock.unlock() }
+        limit = newLimit
+        let records = loadUnlocked()
+        guard lastError == nil else { return records }
+        guard records.count > limit else { return records }
+        let kept = Array(records.suffix(limit))
+        saveUnlocked(kept)
+        return kept
+    }
 
     func load() -> [ViolationRecord] {
         lock.lock()
@@ -85,7 +124,7 @@ final class ViolationStore {
             return records
         }
         records.append(record)
-        records = Array(records.suffix(Self.maximumRecords))
+        records = Array(records.suffix(limit))
         saveUnlocked(records)
         return records
     }

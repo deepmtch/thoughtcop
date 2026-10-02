@@ -23,6 +23,7 @@ def free_port() -> int:
 
 class DummyChecker(BaseHTTPRequestHandler):
     requests: list[str] = []
+    verifications: list[str] = []
     lock = threading.Lock()
 
     def do_POST(self) -> None:  # noqa: N802
@@ -30,6 +31,12 @@ class DummyChecker(BaseHTTPRequestHandler):
         payload = json.loads(self.rfile.read(size))
         envelope = json.loads(payload["messages"][1]["content"])
         content = envelope["EVIDENCE_RECORD"]["content"]
+        if "CLAIM" in envelope:
+            # Second check of a violation claim: this suite confirms every one.
+            with self.lock:
+                self.verifications.append(content)
+            self.respond({"confirmed": True, "reason": "dummy verification"})
+            return
         with self.lock:
             self.requests.append(content)
 
@@ -46,7 +53,9 @@ class DummyChecker(BaseHTTPRequestHandler):
         else:
             self.send_error(500, "unexpected evidence")
             return
+        self.respond(decision)
 
+    def respond(self, decision: dict) -> None:
         response = {
             "choices": [{"message": {"content": json.dumps(decision)}}]
         }
@@ -177,6 +186,11 @@ def record_timestamp(milliseconds: int) -> str:
 ui_port = free_port()
 checker_port = free_port()
 API_BASE = f"http://127.0.0.1:{ui_port}"
+
+# This suite expects the default violation settings of the test binary.
+for key in ["violationHistoryLimit", "violationVerificationEnabled"]:
+    subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek", key],
+                   capture_output=True, check=False)
 
 server = ThreadingHTTPServer(("127.0.0.1", checker_port), DummyChecker)
 server_thread = threading.Thread(target=server.serve_forever, daemon=True)

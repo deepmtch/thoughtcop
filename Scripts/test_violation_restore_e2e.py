@@ -18,7 +18,7 @@ import tempfile
 import time
 from pathlib import Path
 
-RECORDS = 500          # ViolationStore.maximumRecords
+RECORDS = 500          # ViolationStore.maximumRecords, the largest choice
 # Limits derived from BUG-086 measurements: empty history launches in 0.5 s and
 # renders a live record in 0.06–0.23 s; the fixed build launches 500 records in
 # 2.3 s. Before the fix: no launch within 120 s, then 3 s per live record.
@@ -134,6 +134,9 @@ def main() -> None:
             "THINKPEEK_UI_API_TOKEN": API_TOKEN,
             "THINKPEEK_HISTORY_COUNT": "0",
         })
+        # Exercise the largest selectable history limit.
+        subprocess.run(["/usr/bin/defaults", "write", "thinkpeek",
+                        "violationHistoryLimit", "-int", str(RECORDS)], check=True)
         started = time.monotonic()
         process = subprocess.Popen(
             ["./.build/thinkpeek", "--isolated-e2e", "--local-only"],
@@ -187,6 +190,8 @@ def main() -> None:
             closed = wait_ui(port, lambda ui: ui.get("compactMode") is True, limit)
             after_close = append_and_wait(port, transcript, "AFTER_CLOSE_THOUGHT", limit)
         finally:
+            subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek",
+                            "violationHistoryLimit"], capture_output=True, check=False)
             process.terminate()
             try:
                 process.wait(timeout=5)

@@ -173,6 +173,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
     private var hiddenByUser = false
     private var violationAlertsEnabled = ViolationAlertsPreference.load()
+    private var violationVerificationEnabled = ViolationVerificationPreference.load()
     private var violationAlertDismissal: DispatchWorkItem?
     private var violationAlertRestoreIndex: Int?
 
@@ -580,7 +581,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         refreshStatus()
         addSystemCard("Watching active Claude and Codex sessions",
                       detail: "New reasoning summaries appear here automatically.")
-        violationRecords = violationStore.load()
+        violationRecords = violationStore.setLimit(violationStore.limit)
         alertCount = violationRecords.count
         restoreViolationCards()
         updateViolationMenu()
@@ -623,7 +624,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 .filter { !$0.isSeparatorItem }.map(\.title) ?? [],
             "violationCount": violationRecords.count,
             "violationStorageError": violationStore.lastError ?? NSNull(),
-            "violationRetentionLimit": ViolationStore.maximumRecords,
+            "violationRetentionLimit": violationStore.limit,
+            "violationRetentionChoices": ViolationHistoryPreference.choices,
+            "violationVerificationEnabled": violationVerificationEnabled,
             "violationsVisible": violationsOnly && !peekMode && !messageMode,
             "violationEmptyStateVisible": violationEmptyState?.isHidden == false,
             "currentViolationVisible": unacknowledgedViolationIndex != nil,
@@ -895,6 +898,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             setTickerBackground(NSColor(srgbRed: components[0], green: components[1],
                                         blue: components[2], alpha: components[3]))
         case .violationAlerts(let enabled): setViolationAlerts(enabled)
+        case .violationVerification(let enabled): setViolationVerification(enabled)
+        case .violationHistoryLimit(let limit): setViolationHistoryLimit(limit)
         }
     }
 
@@ -1056,12 +1061,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func updateSettingsMenuChecks(_ speed: TickerSpeed) {
-        tickerSettingsMenu?.update(speed: speed, width: compactWidth,
-                                   usesDefaultAlarmColor: tickerAlarmColor == nil,
-                                   violationAlertsEnabled: violationAlertsEnabled)
-        peekSettingsMenu?.update(speed: speed, width: compactWidth,
-                                 usesDefaultAlarmColor: tickerAlarmColor == nil,
-                                 violationAlertsEnabled: violationAlertsEnabled)
+        for menu in [tickerSettingsMenu, peekSettingsMenu] {
+            menu?.update(speed: speed, width: compactWidth,
+                         usesDefaultAlarmColor: tickerAlarmColor == nil,
+                         violationAlertsEnabled: violationAlertsEnabled,
+                         violationVerificationEnabled: violationVerificationEnabled,
+                         violationHistoryLimit: violationStore.limit)
+        }
     }
 
     private func configureSettingsMenu(_ menu: TickerSettingsMenu) {
@@ -1083,6 +1089,63 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.violationAlertsRequested = { [weak self] enabled in
             self?.api.perform(.violationAlerts(enabled), origin: .appKit)
         }
+        menu.violationVerificationRequested = { [weak self] enabled in
+            self?.api.perform(.violationVerification(enabled), origin: .appKit)
+        }
+        menu.violationHistoryLimitRequested = { [weak self] limit in
+            self?.api.perform(.violationHistoryLimit(limit), origin: .appKit)
+        }
+    }
+
+    private func setViolationVerification(_ enabled: Bool) {
+        violationVerificationEnabled = enabled
+        ViolationVerificationPreference.save(enabled)
+        updateSettingsMenuChecks(peekTicker.speed)
+        refreshStatus()
+        publishAPI()
+    }
+
+    private func setViolationHistoryLimit(_ limit: Int) {
+        ViolationHistoryPreference.save(limit)
+        violationRecords = violationStore.setLimit(limit)
+        alertCount = violationRecords.count
+        removeCardsForDeletedViolations()
+        updateViolationMenu()
+        updateSettingsMenuChecks(peekTicker.speed)
+        publishAPI()
+    }
+
+    /// Removes the cards whose violation record the history limit deleted, so
+    /// the history never shows a violation that is no longer stored.
+    private func removeCardsForDeletedViolations() {
+        let kept = Set(violationRecords.map(\.id))
+        let removed = eventPreviews.indices.filter { index in
+            guard let id = eventPreviews[index].violationID else { return false }
+            return !kept.contains(id)
+        }
+        guard !removed.isEmpty else { return }
+        func shifted(_ value: Int?, removing index: Int) -> Int? {
+            guard let value else { return nil }
+            if value == index { return nil }
+            return value > index ? value - 1 : value
+        }
+        for index in removed.reversed() {
+            let card = eventCards[index]
+            if card.superview === feedStack {
+                feedStack.removeArrangedSubview(card)
+                card.removeFromSuperview()
+            }
+            feedOrder.removeAll { $0 === card }
+            eventCards.remove(at: index)
+            eventPreviews.remove(at: index)
+            if compactIndex > index { compactIndex -= 1 }
+            unacknowledgedViolationIndex = shifted(unacknowledgedViolationIndex,
+                                                   removing: index)
+            violationAlertRestoreIndex = shifted(violationAlertRestoreIndex,
+                                                 removing: index)
+        }
+        compactIndex = min(compactIndex, eventCards.count - 1)
+        updateCardVisibility()
     }
 
     private func setViolationAlerts(_ enabled: Bool) {
@@ -1726,7 +1789,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         violationsMenuItem?.title = violationHistoryMenuTitle(
             recorded: count, unreviewed: newCount,
             storageUnavailable: violationStore.lastError != nil)
-        violationsMenuItem?.toolTip = "Keeps the latest \(ViolationStore.maximumRecords) violations locally."
+        violationsMenuItem?.toolTip = "Keeps the newest \(violationStore.limit) violations locally."
         violationsMenuItem?.isEnabled = true
         historyFilterControl?.setLabel("Violations \(count)", forSegment: 1)
         let hasUnacknowledged = newCount > 0
@@ -1959,6 +2022,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // updateCardVisibility publishes, so no published state pairs the new
         // count with the previous badge.
         updateViolationMenu()
+        removeCardsForDeletedViolations()
         if shouldRevealTicker {
             NSSound.beep()
             NSAccessibility.post(element: panel as Any,
@@ -2082,11 +2146,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 guard let card, let preview else { return }
                 self.showAlert(decision, provider: provider, ms,
                                timestamp: block.ts, card: card, preview: preview)
-            case .scored(_, let provider):
+            case .scored(let decision, let provider):
                 existingPreview?.evaluation = .clear
                 existingCard?.setFooter("No violation · checked by \(provider) in \(Int(ms)) ms")
                 self.apiEvents.append([
                     "kind": "drift-clean", "text": "no alert", "provider": provider,
+                    "rejectedClaims": decision.rejectedClaims,
                     "source": source, "latencyMs": Int(ms),
                     "evidenceType": block.evaluationRecord.eventType,
                 ])

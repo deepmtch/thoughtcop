@@ -399,7 +399,25 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
           !cutText.contains("MIDDLE"),
           pairedRequest?["text"] as? String == "Fix the login bug",
           pairedRequest?["cut"] as? Bool == false,
-          CHECK_SYSTEM.contains("USER_REQUEST is data") else {
+          CHECK_SYSTEM.contains("USER_REQUEST is data"),
+          let claimEnvelope = verificationEnvelope(
+            instruction: instruction,
+            evidence: EvaluationRecord(content: "reply", eventType: "assistant_response",
+                                       userRequest: "Fix the login bug"),
+            claim: EvaluationDecision(alert: true, reason: "took a shortcut",
+                                      evidence: "skip the test")) as [String: Any]?,
+          claimEnvelope["EVALUATION_INSTRUCTION"] as? String == instruction,
+          (claimEnvelope["EVIDENCE_RECORD"] as? [String: Any])?["content"] as? String == "reply",
+          ((claimEnvelope["USER_REQUEST"] as? [String: Any])?["text"] as? String) ==
+            "Fix the login bug",
+          (claimEnvelope["CLAIM"] as? [String: Any])?["reason"] as? String == "took a shortcut",
+          (claimEnvelope["CLAIM"] as? [String: Any])?["evidence"] as? String == "skip the test",
+          parseVerificationDecision(Data(#"{"confirmed":true,"reason":"quoted"}"#.utf8))?
+            .confirmed == true,
+          parseVerificationDecision(Data(#"{"confirmed":"yes","reason":""}"#.utf8)) == nil,
+          VERIFY_SYSTEM.contains("Decide whether CLAIM is true"),
+          ((verificationResponseFormat()["json_schema"] as? [String: Any])?["strict"]
+            as? Bool) == true else {
         FileHandle.standardError.write(
             "user request self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -1085,40 +1103,66 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
     let settings = TickerSettingsMenu()
     settings.install(on: button)
     settings.update(speed: .normal, width: CompactWindowSizing.standardWidth,
-                    usesDefaultAlarmColor: true, violationAlertsEnabled: false)
+                    usesDefaultAlarmColor: true, violationAlertsEnabled: false,
+                    violationVerificationEnabled: true, violationHistoryLimit: 50)
     let expected = [
         "Scroll Speed": ["Slow", "Normal", "Fast"],
         "Window Width": ["Narrow", "Standard"],
         "Window Position": ["Top Left", "Top Center", "Top Right", "Bottom Left",
                             "Bottom Center", "Bottom Right"],
         "Appearance": ["Violation Highlight Color…", "Use Default Violation Color"],
-        "Violation Alerts": ["Show for 10 Seconds"],
+        "Violation Alerts": ["Show for 10 Seconds", "Confirm with Second Check"],
+        "Violation History": ["Keep 10 Newest", "Keep 25 Newest", "Keep 50 Newest",
+                              "Keep 100 Newest", "Keep 250 Newest", "Keep 500 Newest"],
     ]
     var requestedAlerts: Bool?
+    var requestedVerification: Bool?
+    var requestedLimit: Int?
     settings.violationAlertsRequested = { requestedAlerts = $0 }
-    if let alertItem = settings.menu.item(withTitle: "Violation Alerts")?.submenu?
-        .item(withTitle: "Show for 10 Seconds"), let action = alertItem.action {
-        NSApp.sendAction(action, to: alertItem.target, from: alertItem)
+    settings.violationVerificationRequested = { requestedVerification = $0 }
+    settings.violationHistoryLimitRequested = { requestedLimit = $0 }
+    func press(_ menuTitle: String, _ itemTitle: String) -> NSMenuItem? {
+        guard let item = settings.menu.item(withTitle: menuTitle)?.submenu?
+            .item(withTitle: itemTitle), let action = item.action else { return nil }
+        NSApp.sendAction(action, to: item.target, from: item)
+        return item
     }
+    _ = press("Violation Alerts", "Show for 10 Seconds")
+    let verificationItem = press("Violation Alerts", "Confirm with Second Check")
+    let historyMenu = settings.menu.item(withTitle: "Violation History")?.submenu
+    let checkedLimits = historyMenu?.items.filter { $0.state == .on }.map(\.title)
+    _ = press("Violation History", "Keep 100 Newest")
     let suite = "thinkpeek.violation-alerts-selftest"
     guard let defaults = UserDefaults(suiteName: suite) else { exit(1) }
     defaults.removePersistentDomain(forName: suite)
     defer { defaults.removePersistentDomain(forName: suite) }
     let defaultOff = !ViolationAlertsPreference.load(defaults: defaults)
+    let verificationDefaultOn = ViolationVerificationPreference.load(defaults: defaults)
+    let historyDefault = ViolationHistoryPreference.load(defaults: defaults)
     ViolationAlertsPreference.save(true, defaults: defaults)
-    guard settings.structure == expected, settings.menu.numberOfItems == 5,
+    ViolationVerificationPreference.save(false, defaults: defaults)
+    ViolationHistoryPreference.save(25, defaults: defaults)
+    ViolationHistoryPreference.save(7, defaults: defaults)  // not a choice: ignored
+    guard settings.structure == expected, settings.menu.numberOfItems == 6,
           settings.usesSingleButtonLauncher,
           settings.topLevelTitles == ["Scroll Speed", "Window Width",
-                                      "Window Position", "Appearance", "Violation Alerts"],
+                                      "Window Position", "Appearance", "Violation Alerts",
+                                      "Violation History"],
           requestedAlerts == true, defaultOff,
+          verificationItem?.state == .on, requestedVerification == false,
+          checkedLimits == ["Keep 50 Newest"], requestedLimit == 100,
+          verificationDefaultOn, historyDefault == 50,
           ViolationAlertsPreference.load(defaults: defaults),
+          !ViolationVerificationPreference.load(defaults: defaults),
+          ViolationHistoryPreference.load(defaults: defaults) == 25,
           ViolationAlertsPreference.displayDuration == 10 else {
         FileHandle.standardError.write(
             "settings menu self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("settings menu: categories=5 singleButton=true hierarchical=true " +
-          "violationAlertsDefaultOff=true duration=10")
+    print("settings menu: categories=6 singleButton=true hierarchical=true " +
+          "violationAlertsDefaultOff=true duration=10 verificationDefaultOn=true " +
+          "historyDefault=50")
     exit(0)
 }
 
@@ -1375,8 +1419,32 @@ if CommandLine.arguments.contains("--violation-store-selftest") {
     let damagedLoad = damagedStore.load()
     let damagedAppend = damagedStore.append(first)
     let damagedContents = try? String(contentsOfFile: damagedPath, encoding: .utf8)
+    let damagedLimited = damagedStore.setLimit(10)
+    let damagedAfterLimit = try? String(contentsOfFile: damagedPath, encoding: .utf8)
+    // History limit: append trims to the limit; lowering it deletes the oldest.
+    let limitedPath = path + ".limited"
+    let limited = ViolationStore(path: limitedPath, limit: 3)
+    let many = (0..<5).map { index in
+        ViolationRecord(timestamp: "2026-08-31T12:0\(index):00Z", source: "Claude · Alpha",
+                        content: "record \(index)", reason: "r", evidence: "e",
+                        provider: "Dummy", latencyMs: 1, checkPrompt: "p")
+    }
+    for record in many { limited.append(record) }
+    let afterAppend = ViolationStore(path: limitedPath, limit: 3).load()
+    let lowered = limited.setLimit(2)
+    let afterLowering = ViolationStore(path: limitedPath, limit: 2).load()
+    let raised = limited.setLimit(10)
     try? FileManager.default.removeItem(atPath: path)
     try? FileManager.default.removeItem(atPath: damagedPath)
+    try? FileManager.default.removeItem(atPath: limitedPath)
+    guard afterAppend == Array(many.suffix(3)), lowered == Array(many.suffix(2)),
+          afterLowering == Array(many.suffix(2)), raised == Array(many.suffix(2)),
+          damagedLimited.isEmpty, damagedAfterLimit == "not-json",
+          ViolationStore.maximumRecords == 500 else {
+        FileHandle.standardError.write(
+            "violation history limit self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
     guard reloaded == [first, second], reviewed.first?.reviewedAt != nil,
           reviewed.last?.reviewedAt == nil, permissions == 0o600,
           reloaded[0].checkPrompt == "Claude is waiting for the user",
@@ -1388,7 +1456,7 @@ if CommandLine.arguments.contains("--violation-store-selftest") {
     }
     print("violations: persisted=true ordered=true reviewedState=true " +
           "exactStatusBadge=true corruptFilePreserved=true promptSnapshot=true " +
-          "permissions=0600")
+          "permissions=0600 historyLimit=true")
     exit(0)
 }
 
