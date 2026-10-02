@@ -26,19 +26,83 @@ func exactFileStamp(_ path: String) -> ExactFileStamp? {
         isDirectory: (info.st_mode & S_IFMT) == S_IFDIR)
 }
 
-/// One complete, provider-authored record eligible for external evaluation.
+/// Characters kept from each end of a user request longer than twice this
+/// value. The user chose this start + end cut and its size explicitly.
+let USER_REQUEST_KEPT_CHARACTERS = 1_000
+
+/// The user's request as sent to the checker: verbatim when it has at most
+/// 2 × USER_REQUEST_KEPT_CHARACTERS characters (Swift `Character`s); otherwise
+/// the first and last USER_REQUEST_KEPT_CHARACTERS joined by a marker stating
+/// how many characters were removed. `nil` means no request was recorded.
+func userRequestEnvelope(_ request: String?) -> Any {
+    guard let request else { return NSNull() }
+    let total = request.count
+    guard total > 2 * USER_REQUEST_KEPT_CHARACTERS else {
+        return ["text": request, "cut": false, "characters": total] as [String: Any]
+    }
+    let removed = total - 2 * USER_REQUEST_KEPT_CHARACTERS
+    let text = String(request.prefix(USER_REQUEST_KEPT_CHARACTERS)) +
+        "\n[… \(removed) characters cut by Thinkpeek …]\n" +
+        String(request.suffix(USER_REQUEST_KEPT_CHARACTERS))
+    return ["text": text, "cut": true, "characters": total] as [String: Any]
+}
+
+/// One complete, provider-authored record eligible for external evaluation,
+/// together with the latest user request recorded before it in the same
+/// transcript.
 struct EvaluationRecord {
     let content: String
     let eventType: String
+    let userRequest: String?
 
-    init(content: String, eventType: String = "reasoning_summary") {
+    init(content: String, eventType: String = "reasoning_summary",
+         userRequest: String? = nil) {
         self.content = content
         self.eventType = eventType
+        self.userRequest = userRequest
     }
 
     var json: [String: Any] {
         ["event_type": eventType, "content": content, "record_complete": true]
     }
+}
+
+/// The text the user typed, from the one record kind each provider marks as a
+/// human-authored message. Every other user-role record (tool results, task
+/// notifications, injected context, meta messages) returns nil.
+/// - Claude Code: `type == "user"` with `origin.kind == "human"`; a string
+///   `message.content`, or its `text` blocks joined by a blank line.
+/// - Codex: `event_msg` → `item_completed` whose `item.type == "UserMessage"`;
+///   its `text` content items joined by a blank line.
+func userRequest(in line: String) -> String? {
+    guard let data = line.data(using: .utf8),
+          let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    else { return nil }
+    var parts: [String] = []
+    if obj["type"] as? String == "user",
+       (obj["origin"] as? [String: Any])?["kind"] as? String == "human",
+       let message = obj["message"] as? [String: Any] {
+        if let text = message["content"] as? String {
+            parts = [text]
+        } else if let content = message["content"] as? [[String: Any]] {
+            parts = content.compactMap {
+                $0["type"] as? String == "text" ? $0["text"] as? String : nil
+            }
+        }
+    } else if obj["type"] as? String == "event_msg",
+              let payload = obj["payload"] as? [String: Any],
+              payload["type"] as? String == "item_completed",
+              let item = payload["item"] as? [String: Any],
+              item["type"] as? String == "UserMessage",
+              let content = item["content"] as? [[String: Any]] {
+        parts = content.compactMap {
+            $0["type"] as? String == "text" ? $0["text"] as? String : nil
+        }
+    } else {
+        return nil
+    }
+    let text = parts.joined(separator: "\n\n")
+    return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
 }
 
 struct Block {
@@ -54,6 +118,7 @@ struct Block {
     let externallyEvaluable: Bool
     let activityPhase: ActivityPhase?
     var backfilled: Bool
+    var userRequest: String? = nil
 
     init(ts: String, text: String, sealed: Bool, signatureChars: Int,
          kind: Kind, evaluationText: String? = nil,
@@ -73,7 +138,8 @@ struct Block {
     }
 
     var evaluationRecord: EvaluationRecord {
-        EvaluationRecord(content: evaluationText, eventType: evaluationEventType)
+        EvaluationRecord(content: evaluationText, eventType: evaluationEventType,
+                         userRequest: userRequest)
     }
 }
 
@@ -383,6 +449,9 @@ final class Tailer {
     private var offset: UInt64 = 0
     private var buf = ""
     private var pending: [Block] = []
+    /// Latest human-authored request read so far; attached to each later
+    /// evaluable block in this transcript.
+    private(set) var lastUserRequest: String?
 
     /// Safe byte position for recreating this tailer. If the last JSONL record
     /// is still partial, rewind over the buffer so it will be joined correctly.
@@ -399,9 +468,11 @@ final class Tailer {
             // A smaller file was truncated/rotated while it was not actively
             // monitored. Start from zero; seeking to its new EOF would drop it.
             offset = size < startOffset ? 0 : startOffset
+            lastUserRequest = latestUserRequest(before: offset)
             return
         }
         offset = size
+        lastUserRequest = latestUserRequest(before: offset)
         guard backfill > 0 else { return }
         let all = backfillBlocks(limit: backfill)
         pending = Array(all.suffix(backfill)).map {
@@ -443,6 +514,37 @@ final class Tailer {
         return found
     }
 
+    /// The request a turn already in progress at `offset` answers: read
+    /// backwards until the latest complete human-authored record is found.
+    private func latestUserRequest(before offset: UInt64) -> String? {
+        guard offset > 0, let fh = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? fh.close() }
+        let chunkSize: UInt64 = 262_144
+        var start = offset
+        var accumulated = Data()
+        repeat {
+            let next = start > chunkSize ? start - chunkSize : 0
+            try? fh.seek(toOffset: next)
+            var chunk = fh.readData(ofLength: Int(start - next))
+            chunk.append(accumulated)
+            start = next
+            // Keep the leading partial line for the next, earlier chunk.
+            let completeFrom: Data.Index
+            if start > 0, let newline = chunk.firstIndex(of: 0x0A) {
+                accumulated = chunk.prefix(upTo: newline)
+                completeFrom = chunk.index(after: newline)
+            } else {
+                accumulated = Data()
+                completeFrom = chunk.startIndex
+            }
+            let text = String(decoding: chunk[completeFrom...], as: UTF8.self)
+            for line in text.components(separatedBy: "\n").reversed() {
+                if let request = userRequest(in: line) { return request }
+            }
+        } while start > 0
+        return nil
+    }
+
     private func fileSize() -> UInt64? {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: path) else { return nil }
         return (attrs[.size] as? NSNumber)?.uint64Value
@@ -463,7 +565,13 @@ final class Tailer {
         buf = lines.removeLast()                     // trailing partial line
         for line in lines {
             PrivacyAudit.shared.recordTranscriptLine(line, sourcePath: path)
-            out += blocks(in: line)
+            if let request = userRequest(in: line) { lastUserRequest = request }
+            out += blocks(in: line).map { block in
+                guard block.externallyEvaluable else { return block }
+                var paired = block
+                paired.userRequest = lastUserRequest
+                return paired
+            }
         }
         return out
     }

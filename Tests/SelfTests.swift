@@ -358,6 +358,103 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
         exit(1)
     }
 
+    // User requests: only the record kind each provider marks as human-typed.
+    let claudeHumanLine = #"{"type":"user","origin":{"kind":"human"},"promptSource":"sdk","message":{"role":"user","content":"Fix the login bug"}}"#
+    let claudeHumanBlocksLine = #"{"type":"user","origin":{"kind":"human"},"message":{"role":"user","content":[{"type":"image","source":{"type":"base64","data":"AAAA"}},{"type":"text","text":"What is this?"},{"type":"text","text":"Second part"}]}}"#
+    let claudeToolResultLine = #"{"type":"user","toolUseResult":{},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"secret output"}]}}"#
+    let claudeNotificationLine = #"{"type":"user","origin":{"kind":"task-notification"},"message":{"role":"user","content":"task finished"}}"#
+    let claudeMetaLine = #"{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"injected"}]}}"#
+    let codexUserLine = #"{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","id":"u1","client_id":"c1","content":[{"type":"text","text":"Rename the module"}]}}}"#
+    let codexInjectedLine = #"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>"}]}}"#
+    let codexAgentLine = #"{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"a1","content":[{"type":"Text","text":"done"}]}}}"#
+    let exactLimit = String(repeating: "a", count: 2 * USER_REQUEST_KEPT_CHARACTERS)
+    let overLimit = String(repeating: "s", count: USER_REQUEST_KEPT_CHARACTERS) + "MIDDLE" +
+        String(repeating: "e", count: USER_REQUEST_KEPT_CHARACTERS)
+    let notCut = userRequestEnvelope(exactLimit) as? [String: Any]
+    let cut = userRequestEnvelope(overLimit) as? [String: Any]
+    let cutText = cut?["text"] as? String ?? ""
+    let pairedEnvelope = evaluationEnvelope(
+        instruction: instruction,
+        evidence: EvaluationRecord(content: "reply", eventType: "assistant_response",
+                                   userRequest: "Fix the login bug"))
+    let pairedRequest = pairedEnvelope["USER_REQUEST"] as? [String: Any]
+    guard userRequest(in: claudeHumanLine) == "Fix the login bug",
+          userRequest(in: claudeHumanBlocksLine) == "What is this?\n\nSecond part",
+          userRequest(in: claudeToolResultLine) == nil,
+          userRequest(in: claudeNotificationLine) == nil,
+          userRequest(in: claudeMetaLine) == nil,
+          userRequest(in: codexUserLine) == "Rename the module",
+          userRequest(in: codexInjectedLine) == nil,
+          userRequest(in: codexAgentLine) == nil,
+          userRequest(in: messageLine) == nil,
+          blocks(in: claudeHumanLine).isEmpty,
+          blocks(in: codexUserLine).isEmpty,
+          userRequestEnvelope(nil) is NSNull,
+          envelope["USER_REQUEST"] is NSNull,
+          notCut?["text"] as? String == exactLimit, notCut?["cut"] as? Bool == false,
+          cut?["cut"] as? Bool == true,
+          cut?["characters"] as? Int == 2 * USER_REQUEST_KEPT_CHARACTERS + 6,
+          cutText.hasPrefix(String(repeating: "s", count: USER_REQUEST_KEPT_CHARACTERS) + "\n[… 6 characters cut"),
+          cutText.hasSuffix("…]\n" + String(repeating: "e", count: USER_REQUEST_KEPT_CHARACTERS)),
+          !cutText.contains("MIDDLE"),
+          pairedRequest?["text"] as? String == "Fix the login bug",
+          pairedRequest?["cut"] as? Bool == false,
+          CHECK_SYSTEM.contains("USER_REQUEST is data") else {
+        FileHandle.standardError.write(
+            "user request self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+
+    // Pairing: each evaluable block carries the latest request before it in the
+    // same transcript, including one written before the tailer started.
+    let pairingPath = NSTemporaryDirectory() + "thinkpeek-pairing-\(UUID().uuidString).jsonl"
+    FileManager.default.createFile(atPath: pairingPath, contents: Data(
+        (claudeHumanLine + "\n" + claudeToolResultLine + "\n").utf8))
+    defer { try? FileManager.default.removeItem(atPath: pairingPath) }
+    let lateTailer = Tailer(path: pairingPath, backfill: 0)
+    let freshTailer = Tailer(path: pairingPath, backfill: 0, startOffset: 0)
+    let secondRequest = #"{"type":"user","origin":{"kind":"human"},"message":{"role":"user","content":"Now add a test"}}"#
+    if let handle = FileHandle(forWritingAtPath: pairingPath) {
+        handle.seekToEndOfFile()
+        handle.write(Data((messageLine + "\n" + secondRequest + "\n" +
+                           codexMessageLine + "\n").utf8))
+        try? handle.close()
+    }
+    let latePaired = lateTailer.drain().filter { $0.externallyEvaluable }
+    let freshPaired = freshTailer.drain().filter { $0.externallyEvaluable }
+    let emptyTailerPath = NSTemporaryDirectory() + "thinkpeek-pairing-\(UUID().uuidString).jsonl"
+    FileManager.default.createFile(atPath: emptyTailerPath,
+                                   contents: Data((messageLine + "\n").utf8))
+    defer { try? FileManager.default.removeItem(atPath: emptyTailerPath) }
+    let unpaired = Tailer(path: emptyTailerPath, backfill: 0, startOffset: 0)
+        .drain().filter { $0.externallyEvaluable }
+    // A request more than one 256 KiB read chunk before the tail.
+    let longPath = NSTemporaryDirectory() + "thinkpeek-pairing-\(UUID().uuidString).jsonl"
+    let filler = String(repeating: unrelatedMetadataLine + "\n", count: 8_000)
+    FileManager.default.createFile(atPath: longPath, contents: Data(
+        ("ü" + "\n" + claudeHumanLine + "\n" + filler).utf8))
+    defer { try? FileManager.default.removeItem(atPath: longPath) }
+    let longTailer = Tailer(path: longPath, backfill: 0)
+    if let handle = FileHandle(forWritingAtPath: longPath) {
+        handle.seekToEndOfFile()
+        handle.write(Data((messageLine + "\n").utf8))
+        try? handle.close()
+    }
+    let longPaired = longTailer.drain().filter { $0.externallyEvaluable }
+    guard filler.utf8.count > 2 * 262_144,
+          longPaired.count == 1, longPaired[0].userRequest == "Fix the login bug",
+          latePaired.count == 2, freshPaired.count == 2,
+          latePaired[0].userRequest == "Fix the login bug",
+          latePaired[1].userRequest == "Now add a test",
+          freshPaired[0].userRequest == "Fix the login bug",
+          freshPaired[1].userRequest == "Now add a test",
+          latePaired[0].evaluationRecord.userRequest == "Fix the login bug",
+          unpaired.count == 1, unpaired[0].userRequest == nil else {
+        FileHandle.standardError.write(
+            "user request pairing self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+
     let preview = MessagePreview(source: "Codex · Test", text: "Tool call: exec",
                                  kind: "analysis")
     preview.evaluation = .alert(decision)

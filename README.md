@@ -115,8 +115,10 @@ ignored. Plaintext reasoning is displayed locally and sent verbatim to the
 configured external checker. Provider summaries are local-display-only and are
 never sent. Complete assistant responses are evaluated but are not presented as
 thoughts; a response appears in Thinkpeek only when it triggers a violation or
-its check fails. Tool calls, tool results, user messages, and encrypted-only
-records are not sent. Task starts are progress only and never replace readable
+its check fails. Each checked record is sent with your latest typed request
+from the same session (cut to its first and last 1,000 characters when longer
+than 2,000). Tool calls, tool results, other user-role records, and
+encrypted-only records are not sent. Task starts are progress only and never replace readable
 content or enter card history.
 Encrypted-only records are hidden by default. Task names come from
 `~/.codex/session_index.jsonl`. Auto mode follows both Claude and Codex, and the
@@ -224,8 +226,8 @@ was sent. Per-record `timestamp` fields advance monotonically within the turn.
 ## The drift alarm
 
 The native Thinkpeek app sends each new complete assistant response and each new
-readable reasoning record, plus your locally saved evaluation instruction, to a
-fast model. Tool calls and tool results are discarded by the transcript parser
+readable reasoning record, plus your locally saved evaluation instruction and the
+latest request you typed before that record, to a fast model. Tool calls and tool results are discarded by the transcript parser
 and never enter the automatic evaluation path. Thinkpeek does not infer actions
 from keywords.
 

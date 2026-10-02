@@ -8,11 +8,17 @@ summaries and monitor assistant responses.
 
 When external checking is configured, Thinkpeek sends the exact check
 instruction together with one eligible plaintext reasoning record or complete
-assistant response to Groq, falling back to Cerebras when configured. Those
-providers process the request under their own terms and privacy policies.
+assistant response to Groq, falling back to Cerebras when configured. Each such
+request also carries the user request that record answers: the latest message
+you typed before it in the same session (Claude Code `user` records with
+`origin.kind` `human`; Codex `UserMessage` items), verbatim up to 2,000
+characters. A longer message is cut to its first and last 1,000 characters with
+a marker stating how many were removed. Those providers process the request
+under their own terms and privacy policies.
 
-Thinkpeek does not send tool calls, tool results, user messages, readable Codex
-provider summaries, or encrypted/signature-only reasoning. Use `--local-only`
+Thinkpeek does not send tool calls, tool results, other user-role records
+(task notifications, injected context, meta messages), readable Codex provider
+summaries, or encrypted/signature-only reasoning. Use `--local-only`
 to prevent all external analysis.
 
 ## Data stored locally

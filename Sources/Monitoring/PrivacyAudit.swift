@@ -11,6 +11,11 @@ func auditMetadata(in line: String) -> [[String: Any]] {
     else { return [] }
 
     let rootType = root["type"] as? String ?? "unknown"
+    if userRequest(in: line) != nil {
+        let provider = rootType == "event_msg" ? "codex" : "claude"
+        return [["record_type": "\(provider).user_request",
+                 "action": "user_request_selected"]]
+    }
     if let payload = root["payload"] as? [String: Any],
        let payloadType = payload["type"] as? String {
         switch (rootType, payloadType) {
@@ -81,7 +86,8 @@ func auditMetadata(in line: String) -> [[String: Any]] {
         case "text":
             let readable = !((item["text"] as? String) ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            guard readable, root["isApiErrorMessage"] as? Bool != true else { return nil }
+            guard readable, rootType == "assistant",
+                  root["isApiErrorMessage"] as? Bool != true else { return nil }
             return ["record_type": "claude.assistant_response",
                     "action": "assistant_response_selected"]
         default:
@@ -126,13 +132,16 @@ final class PrivacyAudit {
 
     func recordExternalRequest(source: String, destination: String,
                                recordType: String, envelopeBytes: Int,
-                               requestID: String) {
+                               requestID: String, userRequest: String? = nil) {
         let action = recordType == "assistant_response"
             ? "external_assistant_response_request" : "external_reasoning_request"
+        let requestCut = userRequest.map { $0.count > 2 * USER_REQUEST_KEPT_CHARACTERS }
         append(["action": action,
                 "record_type": recordType, "source": source,
                 "destination": destination, "envelope_bytes": envelopeBytes,
-                "request_id": requestID])
+                "request_id": requestID,
+                "user_request_included": userRequest != nil,
+                "user_request_cut": requestCut ?? false])
     }
 
     /// Content-free completion record paired to `recordExternalRequest`.

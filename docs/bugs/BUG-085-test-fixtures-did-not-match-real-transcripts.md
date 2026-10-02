@@ -67,3 +67,7 @@ while the real provider still disagreed".
   stayed "Claude · untitled" although the fixture has `customTitle`/`aiTitle`
   records; title canaries were never sent. Whether that label is a display bug
   is unresolved.
+- User-request pairing (added with this test): canaries are short, so the
+  first + last 1,000-character cut never fires in the black-box test; only the
+  `--evaluator-selftest` cut assertions exercise it. Audit totals depend on the
+  moving "most recent files" window; each run prints its source files and sizes.

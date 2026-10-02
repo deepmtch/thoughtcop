@@ -14,8 +14,10 @@ within seven days.
   them.
 - External checking is disabled by `--local-only`. When enabled, only eligible
   plaintext reasoning and complete assistant responses are sent to the named
-  provider; tool calls, tool results, user messages, provider summaries, and
-  encrypted-only records are excluded.
+  provider, each with the user's latest typed request (cut to its first and
+  last 1,000 characters when longer than 2,000); tool calls, tool results,
+  other user-role records, provider summaries, and encrypted-only records are
+  excluded.
 - Provider credentials are stored in the macOS login Keychain. Development
   environment variables and the ignored repository `.env` take precedence.
 - The inspection API binds only to `127.0.0.1`, requires a random bearer token,

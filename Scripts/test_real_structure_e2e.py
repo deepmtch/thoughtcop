@@ -31,8 +31,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from real_structure import (  # noqa: E402
-    FIXTURE_DIRECTORY, CanaryWriter, expected_outbound, read_jsonl,
-    real_claude_files, real_codex_files)
+    FIXTURE_DIRECTORY, CanaryWriter, expected_outbound, expected_pairs,
+    read_jsonl, real_claude_files, real_codex_files)
 
 CANARY = re.compile(r"CANARY_\d{6}")
 API_TOKEN = "real-structure-e2e-ui-token-00000000000"
@@ -109,11 +109,16 @@ def load_sources(audit_real: bool, claude_file_count: int):
                 collect_origins(record, "$", writer_origins)
         return claude, codex, writer_origins
     writer = CanaryWriter()
+    claude_files = real_claude_files()[:claude_file_count]
+    codex_files = real_codex_files()
+    # The most recent files change between runs; totals are only comparable
+    # for the same file list.
+    for path in claude_files + codex_files:
+        print(f"source: {path.name} {path.stat().st_size} bytes")
     claude = [writer.record(record)
-              for path in real_claude_files()[:claude_file_count]
-              for record in read_jsonl(path)]
+              for path in claude_files for record in read_jsonl(path)]
     codex = [writer.record(record)
-             for path in real_codex_files() for record in read_jsonl(path)]
+             for path in codex_files for record in read_jsonl(path)]
     return claude, codex, writer.origins
 
 
@@ -145,6 +150,7 @@ def main() -> None:
                 provider_of[canary] = provider
     expected = expected_outbound("claude", claude) | \
         expected_outbound("codex", codex)
+    pairs = expected_pairs("claude", claude) | expected_pairs("codex", codex)
 
     ui_port, checker_port = free_port(), free_port()
     server = ThreadingHTTPServer(("127.0.0.1", checker_port), DummyChecker)
@@ -237,10 +243,29 @@ def main() -> None:
     print(f"canary paths never sent, shown, or used as title: "
           f"{sum(1 for row in rows.values() if not any(row[1:]))}")
 
+    with DummyChecker.lock:
+        bodies = list(DummyChecker.contents)
+    mispaired = []
+    for body in bodies:
+        envelope = json.loads(json.loads(body)["messages"][1]["content"])
+        evidence = CANARY.findall(envelope["EVIDENCE_RECORD"]["content"])
+        request = envelope.get("USER_REQUEST")
+        sent_request = frozenset(CANARY.findall(request["text"])) if request else frozenset()
+        for canary in evidence:
+            expected_request = pairs.get(canary)
+            # No earlier human request must be sent as null, never as text.
+            if expected_request != sent_request or \
+                    (not expected_request and request is not None):
+                mispaired.append(origins.get(canary, canary))
+    paired = sum(1 for request in pairs.values() if request)
+    print(f"evidence records with an earlier human request in the same file: "
+          f"{paired} of {len(pairs)} (the rest must carry USER_REQUEST null)")
+
     unexpected = outbound - expected
     missing = expected - outbound
     assert not unexpected, "sent outside the allowlist: " + ", ".join(
         sorted(f"{origins.get(c, '?')}" for c in unexpected))
+    assert not mispaired, f"{len(mispaired)} records sent with the wrong user request"
     assert not missing, "allowlisted but never sent: " + ", ".join(
         sorted(f"{origins.get(c, '?')}" for c in missing))
     print(f"real-structure outbound boundary passed: {len(outbound)} sent, "

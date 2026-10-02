@@ -15,6 +15,8 @@ the string values Thinkpeek's parser compares or validates:
   ``payload.content[*].type`` and ``payload.summary[*].type``; Claude
   ``message.content[*].type`` and ``message.content[*].name`` (compared with
   ``AskUserQuestion``).
+- Transcript.swift ``userRequest(in:)``: Claude ``origin.kind``; Codex
+  ``payload.item.type`` and ``payload.item.content[*].type``.
 - ``timestamp`` is replaced with a format-valid synthetic value so ordering and
   ISO-8601 parsing in Sessions.swift still work.
 - Sessions.swift ``codexSessionMetadataID``: ``session_meta`` ``payload.id`` is
@@ -49,6 +51,7 @@ KEEP_PATHS = {
     "$.payload.type", "$.payload.role", "$.payload.phase",
     "$.payload.content[*].type", "$.payload.summary[*].type",
     "$.message.content[*].type", "$.message.content[*].name",
+    "$.origin.kind", "$.payload.item.type", "$.payload.item.content[*].type",
 }
 TIMESTAMP_PATH = "$.timestamp"
 CODEX_SESSION_ID_PATH = "$.payload.id"
@@ -65,6 +68,42 @@ def _message_content(record: dict) -> list:
     message = record.get("message")
     content = message.get("content") if isinstance(message, dict) else None
     return content if isinstance(content, list) else []
+
+
+def _item(record: dict) -> dict:
+    item = _payload(record).get("item")
+    return item if isinstance(item, dict) else {}
+
+
+def is_user_request(provider: str, record: dict) -> bool:
+    """Mirrors Transcript.swift ``userRequest(in:)``."""
+    if provider == "claude":
+        origin = record.get("origin")
+        return record.get("type") == "user" and isinstance(origin, dict) and \
+            origin.get("kind") == "human"
+    return record.get("type") == "event_msg" and \
+        _payload(record).get("type") == "item_completed" and \
+        _item(record).get("type") == "UserMessage"
+
+
+def user_request_canaries(provider: str, record: dict) -> list[str]:
+    if not is_user_request(provider, record):
+        return []
+    if provider == "claude":
+        content = record.get("message", {}).get("content") \
+            if isinstance(record.get("message"), dict) else None
+        if isinstance(content, str):
+            values = [content]
+        elif isinstance(content, list):
+            values = [item.get("text") for item in content
+                      if isinstance(item, dict) and item.get("type") == "text"]
+        else:
+            values = []
+    else:
+        values = [item.get("text") for item in _item(record).get("content") or []
+                  if isinstance(item, dict) and item.get("type") == "text"]
+    return [value for value in values
+            if isinstance(value, str) and value.startswith("CANARY_")]
 
 
 ALLOWLIST = [
@@ -129,19 +168,37 @@ class CanaryWriter:
         return self.token(path)
 
 
-def expected_outbound(provider: str, records: list[dict]) -> set[str]:
-    expected: set[str] = set()
-    for record in records:
-        for entry_provider, applies, items, item_type, field in ALLOWLIST:
-            if entry_provider != provider or not applies(record):
+def evidence_canaries(provider: str, record: dict) -> list[str]:
+    found: list[str] = []
+    for entry_provider, applies, items, item_type, field in ALLOWLIST:
+        if entry_provider != provider or not applies(record):
+            continue
+        for item in items(record):
+            if not isinstance(item, dict) or item.get("type") != item_type:
                 continue
-            for item in items(record):
-                if not isinstance(item, dict) or item.get("type") != item_type:
-                    continue
-                value = item.get(field)
-                if isinstance(value, str) and value.startswith("CANARY_"):
-                    expected.add(value)
-    return expected
+            value = item.get(field)
+            if isinstance(value, str) and value.startswith("CANARY_"):
+                found.append(value)
+    return found
+
+
+def expected_pairs(provider: str, records: list[dict]) -> dict[str, frozenset]:
+    """Each evidence canary → the request canaries that must accompany it: the
+    latest human-authored request before it in the same transcript."""
+    pairs: dict[str, frozenset] = {}
+    latest: frozenset = frozenset()
+    for record in records:
+        request = user_request_canaries(provider, record)
+        if request:
+            latest = frozenset(request)
+        for canary in evidence_canaries(provider, record):
+            pairs[canary] = latest
+    return pairs
+
+
+def expected_outbound(provider: str, records: list[dict]) -> set[str]:
+    pairs = expected_pairs(provider, records)
+    return set(pairs) | {canary for request in pairs.values() for canary in request}
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -173,6 +230,8 @@ def record_signature(record: dict) -> tuple:
                 kind += ":readable" if isinstance(text, str) and text.strip() \
                     else ":empty"
             blocks.append(kind)
+    origin = record.get("origin") if isinstance(record.get("origin"), dict) else {}
+    item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
     payload_items = []
     for key in ["content", "summary"]:
         items = payload.get(key)
@@ -185,7 +244,7 @@ def record_signature(record: dict) -> tuple:
             record.get("isApiErrorMessage") is True,
             type(content).__name__, tuple(sorted(set(blocks))),
             payload.get("type"), payload.get("role"), payload.get("phase"),
-            tuple(sorted(set(payload_items))))
+            tuple(sorted(set(payload_items))), origin.get("kind"), item.get("type"))
 
 
 def real_claude_files() -> list[Path]:

@@ -7,6 +7,10 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- Checker requests include the user's latest typed request from the same
+  session, cut to its first and last 1,000 characters when longer than 2,000.
+- Canary copies of real Claude Code and Codex transcripts prove exactly which
+  fields are sent (`Scripts/test_real_structure_e2e.py`, `--audit-real`).
 - Authenticated, loopback-only UI automation API.
 - macOS Keychain storage and native editor for external checker credentials.
 - Continuous integration and public security, privacy, contribution, and
