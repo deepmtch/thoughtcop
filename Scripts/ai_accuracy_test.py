@@ -300,13 +300,50 @@ def verdict(label: str, count: int) -> str:
     return "ok" if count == 0 else "FALSE"
 
 
+MODES = os.environ.get("THINKPEEK_AI_TEST_MODES", "").split(",") if \
+    os.environ.get("THINKPEEK_AI_TEST_MODES") else [None]
+RULES_SUITE = "com.thinkpeek.app"  # CheckRulesStore.suiteName
+
+
+def set_mode(mode: str | None) -> str | None:
+    """Sets the instruction mode for this run; returns the previous value.
+    Only for disposable test machines: it changes the stored check mode."""
+    previous = subprocess.run(["/usr/bin/defaults", "read", RULES_SUITE,
+                               "runtimeCheckInstructionMode"],
+                              capture_output=True, text=True).stdout.strip() or None
+    if mode:
+        subprocess.run(["/usr/bin/defaults", "write", RULES_SUITE,
+                        "runtimeCheckInstructionMode", mode], check=True)
+    return previous
+
+
 def main() -> None:
     shapes = templates()
+    for mode in MODES:
+        previous = set_mode(mode)
+        try:
+            report(mode, shapes)
+        finally:
+            if mode and previous:
+                set_mode(previous)
+
+
+def report(mode: str | None, shapes: dict[str, dict]) -> None:
+    print(f"\n===== instruction mode: {mode or 'as stored'} =====")
     runs = {False: [], True: []}
+    verification_modes = [False] if os.environ.get(
+        "THINKPEEK_AI_TEST_VERIFICATION") == "off" else [False, True]
     for _ in range(REPEATS):
-        for verification in [False, True]:
+        for verification in verification_modes:
             runs[verification].append(run(verification, shapes))
-    any_state = runs[True][0][0]
+    latencies = [e["latencyMs"] for state, _ in runs[False]
+                 for e in state.get("events", [])
+                 if e.get("kind") in {"drift-clean", "drift-alert"} and "latencyMs" in e]
+    if latencies:
+        latencies.sort()
+        print(f"first-check latency: median {latencies[len(latencies) // 2]} ms, "
+              f"max {latencies[-1]} ms")
+    any_state = (runs[True] or runs[False])[0][0]
     print("Check rule (verbatim):")
     print("  " + any_state.get("checkRulesText", "").strip().replace("\n", "\n  "))
     print(f"Model: {any_state.get('analysisDestination')}; {REPEATS} runs per mode\n")
@@ -316,9 +353,11 @@ def main() -> None:
           f"{'1st check only':16} {'with 2nd check':16}")
     for title, kind, label, text in rows:
         cells = [" ".join(verdict(label, reported.get(text, 0))
-                          for _, reported in runs[mode]) for mode in [False, True]]
+                          for _, reported in runs[mode]) or "-" for mode in [False, True]]
         print(f"{title:24} {kind:8} {label:9} {cells[0]:16} {cells[1]:16}")
     for mode, name in [(False, "first check only"), (True, "with second check")]:
+        if not runs[mode]:
+            continue
         violations = [r for r in rows if r[2] == V]
         cleans = [r for r in rows if r[2] == C]
         caught = sum(1 for _, reported in runs[mode] for r in violations
@@ -335,7 +374,7 @@ def main() -> None:
     print("\nFalse alarms that were shown (model's reason and quoted evidence):")
     labels = {r[3]: r[2] for r in rows}
     for mode in [False, True]:
-        for state, _ in runs[mode]:
+        for state, _ in runs[mode][:1]:
             for violation in state.get("violations", []):
                 if labels.get(violation["content"]) == C:
                     print(f"- [{'2nd check' if mode else '1st only'}] "

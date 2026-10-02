@@ -15,11 +15,49 @@ enum DriftOutcome {
     case failed(String)
 }
 
+/// Groq default, chosen by Scripts/ai_accuracy_test.py on 2026-10-02 (BUG-089):
+/// with each line as its own instruction it caught 15/15 planted violations
+/// and flagged 3/45 clean records at ~1 s median, against 8–10/15 and 5–8/45
+/// for gpt-oss-120b at low effort. Qwen rejects reasoning_effort, so none is sent.
+let DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
+let DEFAULT_GROQ_REASONING_EFFORT = CheckerReasoningEffort.omit
+
+/// Reasoning effort requested from the checker model. Development override
+/// per provider: GROQ_REASONING_EFFORT / CEREBRAS_REASONING_EFFORT = low |
+/// medium | high | omit (omit sends no reasoning_effort, for models that reject
+/// it). Groq default: omit (see DEFAULT_GROQ_MODEL); Cerebras default: low. Hidden reasoning shares the completion budget, so higher
+/// effort gets a larger budget and a longer timeout.
+enum CheckerReasoningEffort: String {
+    case low, medium, high, omit
+
+    static func configured(_ key: String,
+                           default fallback: CheckerReasoningEffort) -> CheckerReasoningEffort {
+        dotenv(key).flatMap { CheckerReasoningEffort(rawValue: $0) } ?? fallback
+    }
+
+    var requestValue: String? { self == .omit ? nil : rawValue }
+    var completionTokenBudget: Int {
+        switch self {
+        case .low, .omit: return 512
+        case .medium: return 2048
+        case .high: return 4096
+        }
+    }
+    var timeout: TimeInterval {
+        switch self {
+        case .low, .omit: return 12
+        case .medium: return 20
+        case .high: return 30
+        }
+    }
+}
+
 struct DriftBackend {
     let name: String
     let url: URL
     let key: String
     let model: String
+    var reasoningEffort: CheckerReasoningEffort = .low
     var label: String { "\(name) · \(model)" }
 }
 
@@ -43,13 +81,16 @@ func driftBackends(credentials: CheckerCredentials = .shared) -> [DriftBackend] 
        let url = URL(string: "https://api.groq.com/openai/v1/chat/completions") {
         result.append(DriftBackend(
             name: "Groq", url: url, key: key,
-            model: dotenv("GROQ_MODEL") ?? "llama-3.3-70b-versatile"))
+            model: dotenv("GROQ_MODEL") ?? DEFAULT_GROQ_MODEL,
+            reasoningEffort: .configured("GROQ_REASONING_EFFORT",
+                                         default: DEFAULT_GROQ_REASONING_EFFORT)))
     }
     if let key = credentials.resolve(.cerebras),
        let url = URL(string: "https://api.cerebras.ai/v1/chat/completions") {
         result.append(DriftBackend(
             name: "Cerebras", url: url, key: key,
-            model: dotenv("CEREBRAS_MODEL") ?? "gpt-oss-120b"))
+            model: dotenv("CEREBRAS_MODEL") ?? "gpt-oss-120b",
+            reasoningEffort: .configured("CEREBRAS_REASONING_EFFORT", default: .low)))
     }
     return result
 }
@@ -123,11 +164,10 @@ private func sendChatRequest(backend: DriftBackend, system: String,
     struct RequestFailure: LocalizedError {
         let errorDescription: String?
     }
-    let payload: [String: Any] = [
+    var payload: [String: Any] = [
         "model": backend.model,
         "temperature": 0,
-        "max_completion_tokens": 512,
-        "reasoning_effort": "low",
+        "max_completion_tokens": backend.reasoningEffort.completionTokenBudget,
         "reasoning_format": "hidden",
         "response_format": responseFormat,
         "messages": [
@@ -135,9 +175,12 @@ private func sendChatRequest(backend: DriftBackend, system: String,
             ["role": "user", "content": envelopeText],
         ],
     ]
+    if let effort = backend.reasoningEffort.requestValue {
+        payload["reasoning_effort"] = effort
+    }
     var request = URLRequest(url: backend.url)
     request.httpMethod = "POST"
-    request.timeoutInterval = 12
+    request.timeoutInterval = backend.reasoningEffort.timeout
     request.setValue("Bearer " + backend.key, forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try? JSONSerialization.data(withJSONObject: payload)

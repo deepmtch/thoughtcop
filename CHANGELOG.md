@@ -7,6 +7,8 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- Groq checks default to `qwen/qwen3.8-27b`; measured 15/15 violations caught and
+  3/45 false alarms on the accuracy test (was 8–10/15 and 5–8/45).
 - Only records written after Thinkpeek starts are checked; copied history in
   resumed chats is no longer re-checked.
 - Violation history is a 380-point list of two-line rows that expand in place.
