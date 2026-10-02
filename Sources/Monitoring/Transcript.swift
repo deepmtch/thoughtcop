@@ -26,6 +26,34 @@ func exactFileStamp(_ path: String) -> ExactFileStamp? {
         isDirectory: (info.st_mode & S_IFMT) == S_IFDIR)
 }
 
+/// Whether a record was written while this Thinkpeek process was running, by
+/// the record's own provider timestamp. Only such records are checked: files
+/// that Claude creates for resumed chats and sub-agents begin with copies of
+/// older messages, and those must not be checked again. A record without a
+/// parseable timestamp cannot be shown to be new and is not checked.
+func writtenSinceLaunch(_ timestamp: String, launchedAt: Date) -> Bool {
+    guard let date = parsedRecordTimestamp(timestamp) else { return false }
+    return date >= launchedAt
+}
+
+/// ISO-8601 with or without fractional seconds (any number of digits) and
+/// with a Z or numeric offset. nil when the provider wrote no such timestamp.
+func parsedRecordTimestamp(_ timestamp: String) -> Date? {
+    let fractional = ISO8601DateFormatter()
+    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = fractional.date(from: timestamp)
+        ?? ISO8601DateFormatter().date(from: timestamp) { return date }
+    // ISO8601DateFormatter accepts at most millisecond fractions; drop the
+    // extra digits (sub-millisecond precision only) and parse again.
+    guard let dot = timestamp.firstIndex(of: "."),
+          let end = timestamp[dot...].firstIndex(where: { !$0.isNumber && $0 != "." })
+    else { return nil }
+    let digits = timestamp[timestamp.index(after: dot)..<end]
+    guard digits.count > 3 else { return nil }
+    let trimmed = String(timestamp[..<dot]) + "." + digits.prefix(3) + timestamp[end...]
+    return fractional.date(from: trimmed)
+}
+
 /// Characters kept from each end of a user request longer than twice this
 /// value. The user chose this start + end cut and its size explicitly.
 let USER_REQUEST_KEPT_CHARACTERS = 1_000

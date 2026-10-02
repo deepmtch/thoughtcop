@@ -43,6 +43,11 @@ final class HistoryEmptyStateView: NSView {
         detail.alignment = .center
         detail.maximumNumberOfLines = 2
         detail.lineBreakMode = .byWordWrapping
+        detail.cell?.wraps = true
+        detail.cell?.truncatesLastVisibleLine = true
+        // Wrap within the window instead of demanding the full text width:
+        // the single-line width (capped at 390 + 2 × 42) held history at 510 pt.
+        detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         edit.target = self
         edit.action = #selector(editPrompt(_:))
@@ -69,6 +74,15 @@ final class HistoryEmptyStateView: NSView {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    override func layout() {
+        super.layout()
+        let width = max(0, min(390, bounds.width - 84))
+        if abs(detail.preferredMaxLayoutWidth - width) > 0.5 {
+            detail.preferredMaxLayoutWidth = width
+            detail.invalidateIntrinsicContentSize()
+        }
+    }
 
     @objc private func editPrompt(_ sender: Any?) { editPromptRequested?() }
 
@@ -294,12 +308,29 @@ final class EventCard: NSView {
     var contentChanged: (() -> Void)?
     var selectedRequested: (() -> Void)?
     var openRequested: (() -> Void)?
+    var violationToggleRequested: (() -> Void)?
     private let footer = NSTextField(labelWithString: "")
     private let body = IntrinsicTextView(frame: .zero)
     private let stack = NSStackView()
     private let violationBadge = NSTextField(labelWithString: "VIOLATION")
     private var violationBadgeWidth: NSLayoutConstraint!
     private let violationAccent = NSView(frame: .zero)
+    /// A violation is a compact two-line row (source and time, then the
+    /// quoted evidence on one line). Clicking it expands the row in place to
+    /// the full quote, a one-line reason, and a link to the full message.
+    private let violationEvidence = NSTextField(wrappingLabelWithString: "")
+    private let violationReason = NSTextField(wrappingLabelWithString: "")
+    private let violationDetail = NSTextField(labelWithString: "")
+    private let violationOpenButton = NSButton(title: "Open full message", target: nil,
+                                               action: nil)
+    private let violationDetailRow = NSStackView()
+    private let violationDot = NSView(frame: .zero)
+    private let violationChevron = NSImageView(frame: .zero)
+    private let rowSeparator = NSView(frame: .zero)
+    private var stackInsets: [NSLayoutConstraint] = []
+    private var stackSpacing: CGFloat = 8
+    private(set) var isViolationRow = false
+    private(set) var violationExpanded = false
     private let providerIcon = ProviderIconView(frame: .zero)
     private var selected = false
 
@@ -376,8 +407,61 @@ final class EventCard: NSView {
         footer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         footer.setContentCompressionResistancePriority(.required, for: .vertical)
 
+        for (label, font, color) in [
+            (violationEvidence, NSFont.systemFont(ofSize: 13), NSColor.labelColor),
+            (violationReason, NSFont.systemFont(ofSize: 12), NSColor.secondaryLabelColor),
+        ] {
+            label.font = font
+            label.textColor = color
+            label.maximumNumberOfLines = 1
+            label.lineBreakMode = .byTruncatingTail
+            label.cell?.truncatesLastVisibleLine = true
+            label.isSelectable = false
+            label.isHidden = true
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            label.setContentCompressionResistancePriority(.required, for: .vertical)
+        }
+        violationDetail.font = .systemFont(ofSize: 11)
+        violationDetail.textColor = .tertiaryLabelColor
+        violationDetail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        violationOpenButton.isBordered = false
+        violationOpenButton.font = .systemFont(ofSize: 11)
+        violationOpenButton.contentTintColor = .linkColor
+        violationOpenButton.target = self
+        violationOpenButton.action = #selector(openFullMessage(_:))
+        violationOpenButton.setAccessibilityLabel("Open full message")
+        violationDetailRow.orientation = .horizontal
+        violationDetailRow.spacing = 4
+        violationDetailRow.addArrangedSubview(violationDetail)
+        violationDetailRow.addArrangedSubview(violationOpenButton)
+        violationDetailRow.isHidden = true
+
+        violationDot.wantsLayer = true
+        violationDot.layer?.cornerRadius = 4
+        violationDot.layer?.backgroundColor = NSColor.systemRed.cgColor
+        violationDot.isHidden = true
+        violationDot.translatesAutoresizingMaskIntoConstraints = false
+        violationDot.widthAnchor.constraint(equalToConstant: 8).isActive = true
+        violationDot.heightAnchor.constraint(equalToConstant: 8).isActive = true
+        header.insertArrangedSubview(violationDot, at: 0)
+        violationChevron.symbolConfiguration = NSImage.SymbolConfiguration(
+            pointSize: 10, weight: .semibold)
+        violationChevron.contentTintColor = .tertiaryLabelColor
+        violationChevron.isHidden = true
+        violationChevron.translatesAutoresizingMaskIntoConstraints = false
+        violationChevron.widthAnchor.constraint(equalToConstant: 12).isActive = true
+        header.addArrangedSubview(violationChevron)
+        rowSeparator.wantsLayer = true
+        rowSeparator.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        rowSeparator.isHidden = true
+        rowSeparator.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(rowSeparator)
+
         stack.addArrangedSubview(header)
         stack.addArrangedSubview(body)
+        stack.addArrangedSubview(violationEvidence)
+        stack.addArrangedSubview(violationReason)
+        stack.addArrangedSubview(violationDetailRow)
         stack.addArrangedSubview(footer)
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -398,14 +482,22 @@ final class EventCard: NSView {
         setAccessibilityRole(.row)
         setAccessibilityLabel("Message from \(source), \(time)")
 
-        NSLayoutConstraint.activate([
+        stackInsets = [
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 14),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
+        ]
+        NSLayoutConstraint.activate(stackInsets + [
+            rowSeparator.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            rowSeparator.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            rowSeparator.bottomAnchor.constraint(equalTo: bottomAnchor),
+            rowSeparator.heightAnchor.constraint(equalToConstant: 0.5),
             header.widthAnchor.constraint(equalTo: stack.widthAnchor),
             body.widthAnchor.constraint(equalTo: stack.widthAnchor),
             footer.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            violationEvidence.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            violationReason.widthAnchor.constraint(equalTo: stack.widthAnchor),
             violationAccent.leadingAnchor.constraint(equalTo: leadingAnchor),
             violationAccent.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             violationAccent.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
@@ -428,12 +520,55 @@ final class EventCard: NSView {
 
     required init?(coder: NSCoder) { nil }
 
+    override func layout() {
+        super.layout()
+        // Only an expanded row wraps; collapsed rows are single truncated
+        // lines and need no width hint. Updating the hint on every row
+        // invalidated all 500 rows on each layout pass (BUG-088 follow-up).
+        guard isViolationRow, violationExpanded else { return }
+        let width = stack.bounds.width
+        for label in [violationEvidence, violationReason]
+            where abs(label.preferredMaxLayoutWidth - width) > 0.5 {
+            label.preferredMaxLayoutWidth = width
+            label.invalidateIntrinsicContentSize()
+        }
+    }
+
     override var acceptsFirstResponder: Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         selectedRequested?()
         if event.clickCount == 2 { openRequested?() }
+        else if isViolationRow { violationToggleRequested?() }
+    }
+
+    @objc private func openFullMessage(_ sender: Any?) { openRequested?() }
+
+    /// Collapsed: one truncated quote line. Expanded: the whole quote, the
+    /// reason, and the check details with a link to the full message.
+    func setViolationExpanded(_ expanded: Bool) {
+        guard isViolationRow else { return }
+        violationExpanded = expanded
+        violationEvidence.maximumNumberOfLines = expanded ? 0 : 1
+        violationEvidence.lineBreakMode = expanded ? .byWordWrapping : .byTruncatingTail
+        violationChevron.image = NSImage(
+            systemSymbolName: expanded ? "chevron.down" : "chevron.right",
+            accessibilityDescription: expanded ? "Collapse" : "Expand")
+        violationChevron.toolTip = expanded ? "Click to collapse" : "Click to show why"
+        // The reason stays short in the list (two wrapped lines, then "…");
+        // the reader shows all of it. A truncating line-break mode would
+        // disable wrapping and cut it to one line.
+        violationReason.maximumNumberOfLines = 2
+        violationReason.lineBreakMode = .byWordWrapping
+        violationReason.isHidden = !expanded || violationReason.stringValue.isEmpty
+        violationDetailRow.isHidden = !expanded
+        setAccessibilityExpanded(expanded)
+        violationEvidence.invalidateIntrinsicContentSize()
+        violationReason.invalidateIntrinsicContentSize()
+        invalidateIntrinsicContentSize()
+        superview?.needsLayout = true
+        DispatchQueue.main.async { [weak self] in self?.contentChanged?() }
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -446,7 +581,12 @@ final class EventCard: NSView {
         self.selected = selected
         setAccessibilitySelected(selected)
         layer?.borderWidth = selected ? 2 : 1
-        if selected {
+        if isViolationRow {
+            layer?.borderWidth = 0
+            layer?.backgroundColor = selected
+                ? NSColor.unemphasizedSelectedContentBackgroundColor.cgColor
+                : NSColor.clear.cgColor
+        } else if selected {
             layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.9).cgColor
         } else if violationBadge.isHidden {
             layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.28).cgColor
@@ -471,39 +611,58 @@ final class EventCard: NSView {
 
     var displayedText: String { body.string }
 
-    func setAlert(_ text: String) {
-        violationBadge.isHidden = false
-        violationAccent.isHidden = false
-        layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.08).cgColor
-        layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.48).cgColor
-        layer?.borderWidth = selected ? 2 : 1
-        setFooter(text, color: .secondaryLabelColor)
-    }
-
     func setViolation(reason: String, evidence: String, provider: String,
                       latencyMs: Int, checkPrompt: String) {
-        let content = NSMutableAttributedString()
-        content.append(NSAttributedString(
-            string: reason,
-            attributes: [.font: NSFont.systemFont(ofSize: 15, weight: .semibold),
-                         .foregroundColor: NSColor.labelColor]))
-        if !evidence.isEmpty {
-            content.append(NSAttributedString(
-                string: "\n\nEvidence\n",
-                attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold),
-                             .foregroundColor: NSColor.secondaryLabelColor]))
-            content.append(NSAttributedString(
-                string: "“\(evidence)”",
-                attributes: [.font: NSFont.systemFont(ofSize: 13),
-                             .foregroundColor: NSColor.labelColor]))
-        }
-        body.textStorage?.setAttributedString(content)
-        setAlert("Checked by \(provider) · \(latencyMs) ms")
-        footer.toolTip = "Check prompt: \(checkPrompt)"
-        setAccessibilityLabel("Violation. \(reason). Source: \(provider).")
+        isViolationRow = true
+        let hasEvidence = !evidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        violationEvidence.stringValue = hasEvidence ? "“\(evidence)”" : reason
+        violationReason.stringValue = hasEvidence ? "Why: \(reason)" : ""
+        violationDetail.stringValue = violationDetailText(provider: provider,
+                                                          latencyMs: latencyMs) + " ·"
+        violationDetail.toolTip = "Checked by \(provider) in \(latencyMs) ms\n" +
+            "Check prompt: \(checkPrompt)"
+        body.isHidden = true
+        footer.isHidden = true
+        violationBadge.isHidden = true
+        violationAccent.isHidden = true
+        providerIcon.isHidden = true
+        violationDot.isHidden = false
+        violationChevron.isHidden = false
+        rowSeparator.isHidden = false
+        violationEvidence.isHidden = false
+        layer?.cornerRadius = 6
+        layer?.borderWidth = 0
+        stack.spacing = 3
+        stackInsets[0].constant = 8
+        stackInsets[1].constant = 12
+        stackInsets[2].constant = -12
+        stackInsets[3].constant = -8
+        setSelected(selected)
+        setViolationExpanded(violationExpanded)
+        setAccessibilityLabel(hasEvidence
+            ? "Violation. \(evidence). Reason: \(reason). Checked by \(provider)."
+            : "Violation. \(reason). Checked by \(provider).")
+    }
+
+    var violationSummary: (evidence: String, reason: String, detail: String,
+                           bodyHidden: Bool, reasonVisible: Bool, detailVisible: Bool,
+                           evidenceLines: Int) {
+        (violationEvidence.stringValue, violationReason.stringValue,
+         violationDetail.stringValue, body.isHidden, !violationReason.isHidden,
+         !violationDetailRow.isHidden, violationEvidence.maximumNumberOfLines)
     }
 
     func setViolationReviewed(_ reviewed: Bool) {
+        // New: filled red dot. Reviewed: hollow red ring. Shape, not only
+        // colour, carries the state; the label and tooltip say it in words.
+        violationDot.layer?.backgroundColor = (reviewed
+            ? NSColor.clear : NSColor.systemRed).cgColor
+        violationDot.layer?.borderColor = NSColor.systemRed.cgColor
+        violationDot.layer?.borderWidth = reviewed ? 1.5 : 0
+        violationDot.toolTip = reviewed ? "Reviewed violation" : "New violation"
+        violationDot.setAccessibilityElement(true)
+        violationDot.setAccessibilityRole(.image)
+        violationDot.setAccessibilityLabel(reviewed ? "Reviewed" : "New")
         violationBadge.stringValue = reviewed ? "Violation" : "New violation"
         violationBadgeWidth.constant = reviewed ? 78 : 96
         violationBadge.layer?.backgroundColor = (reviewed
@@ -516,4 +675,14 @@ final class EventCard: NSView {
         layer?.borderWidth = 1
         setFooter(text, color: .labelColor)
     }
+}
+
+/// Compact check details from the checker label Thinkpeek writes:
+/// "<Provider> · <model>[ · confirmed by second check]".
+func violationDetailText(provider: String, latencyMs: Int) -> String {
+    let parts = provider.components(separatedBy: " · ")
+    let name = parts.first ?? provider
+    let seconds = String(format: "%.1f s", Double(latencyMs) / 1000)
+    return parts.contains("confirmed by second check")
+        ? "Confirmed by second check · \(seconds)" : "\(name) · \(seconds)"
 }

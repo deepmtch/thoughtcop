@@ -215,8 +215,17 @@ def main() -> None:
             time.sleep(2)  # any later, unexpected request must still be caught
             final = get_ui(ui_port)
         finally:
-            process.terminate()
-            process.wait(timeout=10)
+            # Quit through the app's own command; a session may ignore SIGTERM
+            # (the Parallels guest shell does), so kill only as a fallback.
+            try:
+                get_ui_post(ui_port, "/quit")
+            except OSError:
+                pass
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
             server.shutdown()
 
     outbound = sent()

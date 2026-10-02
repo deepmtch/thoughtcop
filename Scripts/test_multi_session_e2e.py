@@ -270,6 +270,9 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         initial = wait_for(lambda state: state.get("initialScanComplete") is True,
                            timeout=20, process=process,
                            diagnostic_log=ui_log_path)
+        # Thinkpeek checks only records written after it started, by their own
+        # timestamp, so every record below is stamped after readiness.
+        test_started_at = datetime.now(timezone.utc)
         assert api_request(API_BASE, "/ui", "GET", token=None)[0] == 401
         assert api_request(API_BASE, "/controls", "GET")[0] == 405
         assert api_request(API_BASE, "/ui", "POST")[0] == 405
@@ -693,6 +696,14 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "uiAPIBinding": "127.0.0.1",
             "renderedScreenshotBytes": len(screenshot),
         }, sort_keys=True))
+    except BaseException:
+        # Keep the command log (with each command's origin: http or appKit)
+        # so a failure can be traced to its cause instead of retried.
+        kept = Path(".local") / "last-failed-e2e-ui-api.jsonl"
+        kept.parent.mkdir(exist_ok=True)
+        if ui_log_path.exists():
+            kept.write_text(ui_log_path.read_text())
+        raise
     finally:
         try:
             get_json(API_BASE, "/violation-alerts/off")

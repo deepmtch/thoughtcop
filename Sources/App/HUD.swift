@@ -139,8 +139,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let peekWidth: CGFloat = 510
     private let peekHeight: CGFloat = 70
     private var compactWidth = CompactWindowSizing.savedWidth()
-    private var expandedHeight: CGFloat = 620
-    private let expandedWidth: CGFloat = 700
+    private var expandedHeight: CGFloat = 480
+    /// History is a list of compact rows. 400 points (the Narrow width) fits
+    /// its header controls and the hidden ticker bar's required 384 points.
+    /// History is a list of compact two-line rows (option C of the approved
+    /// mockup). Hidden views must stay detached for this width to hold.
+    private let expandedWidth: CGFloat = 380
     private var presentationKeys = Set<String>()
     private var unseenCount = 0
     private let transcriptMonitor = TranscriptMonitorWorker()
@@ -174,6 +178,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var hiddenByUser = false
     private var violationAlertsEnabled = ViolationAlertsPreference.load()
     private var violationVerificationEnabled = ViolationVerificationPreference.load()
+    /// Only records written after this moment are checked (see
+    /// writtenSinceLaunch). Saved violations are kept regardless.
+    private let launchedAt = Date()
     private var violationAlertDismissal: DispatchWorkItem?
     private var violationAlertRestoreIndex: Int?
 
@@ -658,6 +665,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "unseenCount": unseenCount,
             "cardCount": feedCardCount,
             "attachedCardCount": feedStack.arrangedSubviews.count,
+            "selectedViolationExpanded": eventCards.indices.contains(compactIndex)
+                ? eventCards[compactIndex].violationExpanded : false,
             "visibleCardCount": (peekMode || messageMode || compactMode)
                 ? 0 : eventCards.filter { !$0.isHidden }.count,
             "compactMode": compactMode,
@@ -900,6 +909,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .violationAlerts(let enabled): setViolationAlerts(enabled)
         case .violationVerification(let enabled): setViolationVerification(enabled)
         case .violationHistoryLimit(let limit): setViolationHistoryLimit(limit)
+        case .toggleSelectedViolation:
+            guard !compactMode, eventCards.indices.contains(compactIndex) else { break }
+            let card = eventCards[compactIndex]
+            card.setViolationExpanded(!card.violationExpanded)
+            publishAPI()
         }
     }
 
@@ -1223,7 +1237,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let minSize = compactMode
                 ? NSSize(width: CompactWindowSizing.minimumWidth,
                          height: controlsHeight)
-                : NSSize(width: 520, height: 360)
+                : NSSize(width: expandedWidth, height: 300)
             let maxSize: NSSize
             if compactMode {
                 maxSize = NSSize(width: CompactWindowSizing.maximumWidth,
@@ -1235,7 +1249,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 maxSize = NSSize(width: expandedWidth, height: expandedHeight)
             }
             transitionPanel(to: compactMode ? controlsHeight
-                                            : max(520, expandedHeight),
+                                            : max(360, expandedHeight),
                             width: compactMode ? compactWidth : expandedWidth,
                             minSize: minSize, maxSize: maxSize, animated: animated)
             focusDetails()
@@ -1456,8 +1470,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             maxSize = NSSize(width: expandedWidth, height: expandedHeight)
         }
-        transitionPanel(to: max(520, expandedHeight), width: expandedWidth,
-                        minSize: NSSize(width: 520, height: 360),
+        transitionPanel(to: max(360, expandedHeight), width: expandedWidth,
+                        minSize: NSSize(width: expandedWidth, height: 300),
                         maxSize: maxSize)
         updateCardVisibility()
         unseenCount = 0
@@ -1491,11 +1505,29 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     .filter { $0.superview === feedStack }.count
                 feedStack.insertArrangedSubview(
                     card, at: feedStack.arrangedSubviews.count - attachedAfter)
+                // Violation rows form one list with hairline separators.
+                if card.isViolationRow { feedStack.setCustomSpacing(2, after: card) }
                 card.widthAnchor.constraint(
                     equalTo: feedStack.widthAnchor,
                     constant: -feedStack.edgeInsets.left - feedStack.edgeInsets.right)
                     .isActive = true
             }
+        }
+    }
+
+    /// Like cards, the empty state leaves the stack when hidden: its hidden
+    /// width chain (text cap + margins) otherwise held the history at 510 pt.
+    private func setViolationEmptyStateAttached(_ attached: Bool) {
+        let isAttached = violationEmptyState.superview === feedStack
+        if attached, !isAttached {
+            feedStack.insertArrangedSubview(violationEmptyState, at: 0)
+            violationEmptyState.widthAnchor.constraint(
+                equalTo: feedStack.widthAnchor,
+                constant: -feedStack.edgeInsets.left - feedStack.edgeInsets.right)
+                .isActive = true
+        } else if !attached, isAttached {
+            feedStack.removeArrangedSubview(violationEmptyState)
+            violationEmptyState.removeFromSuperview()
         }
     }
 
@@ -1550,6 +1582,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let showViolationEmptyState = !compactMode && violationsOnly &&
             (violationRecords.isEmpty || violationStore.lastError != nil)
         violationEmptyState.isHidden = !showViolationEmptyState
+        setViolationEmptyStateAttached(showViolationEmptyState)
         navigationGroup.isHidden = !compactMode
         historyFilterControl.isHidden = compactMode
         // History is a reading/filtering surface. Prompt configuration and
@@ -1681,6 +1714,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self, let card,
                   let index = self.eventCards.firstIndex(where: { $0 === card }) else { return }
             self.selectExpandedMessage(at: index)
+        }
+        card.violationToggleRequested = { [weak self] in
+            self?.api.perform(.toggleSelectedViolation, origin: .appKit)
         }
         card.openRequested = { [weak self, weak card] in
             guard let self, let card,
@@ -2262,6 +2298,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 // as thought cards. An alert or checker failure creates a card.
                 guard !block.backfilled else { continue }
                 guard block.externallyEvaluable else { continue }
+                guard writtenSinceLaunch(block.ts, launchedAt: launchedAt) else {
+                    apiEvents.append([
+                        "kind": "drift-skipped-old", "source": source,
+                        "reason": parsedRecordTimestamp(block.ts) == nil
+                            ? "no readable timestamp" : "written before launch",
+                        "evidenceType": block.evaluationRecord.eventType,
+                    ])
+                    continue
+                }
                 let state = driftStatus()
                 guard state.ready else {
                     apiEvents.append([
@@ -2296,6 +2341,18 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             guard block.externallyEvaluable else {
                 card.setFooter("Not evaluated · provider supplied no checkable summary")
+                continue
+            }
+            guard writtenSinceLaunch(block.ts, launchedAt: launchedAt) else {
+                let unreadable = parsedRecordTimestamp(block.ts) == nil
+                card.setFooter(unreadable
+                    ? "Not checked · the record has no readable timestamp"
+                    : "Not checked · written before Thinkpeek started")
+                apiEvents.append([
+                    "kind": "drift-skipped-old", "source": source,
+                    "reason": unreadable ? "no readable timestamp" : "written before launch",
+                    "evidenceType": block.evaluationRecord.eventType,
+                ])
                 continue
             }
 

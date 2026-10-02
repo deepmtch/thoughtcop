@@ -203,7 +203,22 @@ def main() -> None:
             assert not any("FALSE_ALARM" in v["content"] or "NO_EVIDENCE" in v["content"]
                            for v in json.loads(violations_path.read_text()))
 
-            # 4. Second check switched off: the first verdict is shown as before.
+            # 4. A resumed chat's new file begins with a copy of an old message:
+            # written before launch, so it is not checked.
+            resumed = transcript.parent / "99999999-9999-4999-8999-999999999999.jsonl"
+            with resumed.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({
+                    "type": "assistant", "timestamp": "2026-09-28T09:00:00.000Z",
+                    "message": {"content": [{"type": "thinking", "signature": "s",
+                                             "thinking": "OLD_COPY_ALERT: copied."}]},
+                }) + "\n")
+            append_thinking(resumed, "RESUMED_NEW: continuing the resumed chat.")
+            skipped = wait_ui(ui_port, lambda ui: any(
+                e.get("kind") == "drift-skipped-old" for e in ui.get("events", [])) and
+                any("RESUMED_NEW" in str(e.get("text")) for e in ui.get("events", [])))
+            assert skipped["violationCount"] == 11, skipped["violationCount"]
+
+            # 5. Second check switched off: the first verdict is shown as before.
             request(ui_port, "POST", "/violation-verification/off")
             wait_ui(ui_port, lambda ui: ui.get("violationVerificationEnabled") is False)
             append_thinking(transcript, "FALSE_ALARM_UNVERIFIED_ALERT: shown without check.")
@@ -228,6 +243,11 @@ def main() -> None:
 
     with DummyChecker.lock:
         verifications = list(DummyChecker.verifications)
+    with DummyChecker.lock:
+        evaluated = [item["envelope"]["EVIDENCE_RECORD"]["content"]
+                     for item in DummyChecker.evaluations]
+    assert not any("OLD_COPY" in text for text in evaluated), evaluated
+    assert any("RESUMED_NEW" in text for text in evaluated), evaluated
     verified = [item["envelope"]["EVIDENCE_RECORD"]["content"] for item in verifications]
     assert verified == ["TRUE_ALERT: I will skip the test.",
                         "FALSE_ALARM_ALERT: harmless text."], verified

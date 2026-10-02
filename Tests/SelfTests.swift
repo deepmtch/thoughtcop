@@ -52,6 +52,13 @@ if let flagIndex = CommandLine.arguments.firstIndex(of: "--inspect-claude-deskto
     exit(events.isEmpty ? 1 : 0)
 }
 
+// AppKit self-tests send menu actions through NSApp. On macOS 26 NSApp stays
+// nil until the shared application exists (macOS 27 creates it earlier), so
+// create it before any self-test runs.
+if CommandLine.arguments.contains(where: { $0.hasSuffix("-selftest") }) {
+    _ = NSApplication.shared
+}
+
 if CommandLine.arguments.contains("--claude-desktop-conversation-selftest") {
     let fixture = #"{"uuid":"conversation-1","name":"Exact Claude Desktop title","updated_at":"2026-08-16T19:31:20Z","chat_messages":[{"uuid":"user-1","sender":"human","content":[{"type":"text","text":"private user message"}]},{"uuid":"assistant-1","sender":"assistant","updated_at":"2026-08-16T19:31:20Z","content":[{"type":"text","text":"ordinary assistant message"},{"type":"thinking","thinking":"Exact first paragraph.\n\nExact second paragraph.","summaries":[{"summary":"must stay excluded"}],"signature":"sealed"},{"type":"tool_use","name":"Read","input":{"path":"secret"}},{"type":"tool_result","content":"secret result"}]},{"uuid":"assistant-2","sender":"assistant","content":[{"type":"thinking","thinking":"","signature":"encrypted-only"}]}]}"#
     guard let json = fixture.data(using: .utf8),
@@ -420,6 +427,23 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
             as? Bool) == true else {
         FileHandle.standardError.write(
             "user request self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+
+    // Only records written since launch are checked, by their own timestamp.
+    let launch = ISO8601DateFormatter().date(from: "2026-10-02T18:00:00Z")!
+    guard writtenSinceLaunch("2026-10-02T18:00:00.000Z", launchedAt: launch),
+          writtenSinceLaunch("2026-10-02T18:00:01Z", launchedAt: launch),
+          writtenSinceLaunch("2026-10-02T18:00:01.123456Z", launchedAt: launch),
+          writtenSinceLaunch("2026-10-02T18:00:01+00:00", launchedAt: launch),
+          writtenSinceLaunch("2026-10-02T20:00:01.5+02:00", launchedAt: launch),
+          parsedRecordTimestamp("not a time") == nil,
+          !writtenSinceLaunch("2026-10-02T17:59:59.999Z", launchedAt: launch),
+          !writtenSinceLaunch("2026-09-28T09:00:00.000Z", launchedAt: launch),
+          !writtenSinceLaunch("", launchedAt: launch),
+          !writtenSinceLaunch("not a time", launchedAt: launch) else {
+        FileHandle.standardError.write(
+            "launch-time check self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
 
@@ -889,6 +913,51 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
 }
 
 if CommandLine.arguments.contains("--message-view-selftest") {
+    // BUG-088: the violation empty state and an expanded violation row must
+    // fit the 380-point history; an expanded reason wraps to two lines.
+    let emptyState = HistoryEmptyStateView(frame: .zero)
+    let emptyHost = NSView(frame: NSRect(x: 0, y: 0, width: 364, height: 300))
+    emptyHost.addSubview(emptyState)
+    NSLayoutConstraint.activate([
+        emptyState.leadingAnchor.constraint(equalTo: emptyHost.leadingAnchor),
+        emptyState.widthAnchor.constraint(equalToConstant: 364),
+    ])
+    emptyHost.layoutSubtreeIfNeeded()
+    let row = EventCard(source: "Claude · video recap", time: "20:24",
+                        event: UIEvent(timestamp: "", kind: "analysis",
+                                       text: "x", readableAnalysis: true))
+    let rowHost = NSView(frame: NSRect(x: 0, y: 0, width: 364, height: 400))
+    rowHost.addSubview(row)
+    NSLayoutConstraint.activate([
+        row.leadingAnchor.constraint(equalTo: rowHost.leadingAnchor),
+        row.topAnchor.constraint(equalTo: rowHost.topAnchor),
+        row.widthAnchor.constraint(equalToConstant: 364),
+    ])
+    row.setViolation(
+        reason: String(repeating: "The assistant adds a missing parameter on its own. ",
+                       count: 6),
+        evidence: "Manual dubs need dubbing_studio=true.",
+        provider: "Groq · openai/gpt-oss-120b · confirmed by second check",
+        latencyMs: 1246, checkPrompt: "rule")
+    row.setViolationReviewed(true)
+    rowHost.layoutSubtreeIfNeeded()
+    let collapsedHeight = row.fittingSize.height
+    row.setViolationExpanded(true)
+    rowHost.layoutSubtreeIfNeeded()
+    let expandedHeight = row.fittingSize.height
+    let summary = row.violationSummary
+    guard emptyState.fittingSize.width <= 364,
+          row.fittingSize.width <= 364,
+          summary.reasonVisible, summary.detailVisible, summary.bodyHidden,
+          summary.detail == "Confirmed by second check · 1.2 s ·",
+          expandedHeight - collapsedHeight > 40,   // quote + 2 reason lines + detail
+          expandedHeight < 160 else {              // reason is clamped, not unlimited
+        FileHandle.standardError.write(("violation row self-test failed: empty=" +
+            "\(emptyState.fittingSize.width) row=\(row.fittingSize.width) " +
+            "collapsed=\(collapsedHeight) expanded=\(expandedHeight)\n")
+            .data(using: .utf8)!)
+        exit(1)
+    }
     let message = FullMessageView(frame: NSRect(x: 0, y: 0, width: 560, height: 300))
     message.show(source: "Codex · Message test",
                  text: "**Complete rendered summary** with `inline code`.",

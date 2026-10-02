@@ -7,6 +7,9 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- Only records written after Thinkpeek starts are checked; copied history in
+  resumed chats is no longer re-checked.
+- Violation history is a 380-point list of two-line rows that expand in place.
 - **Confirm with Second Check** (default on): each violation claim and its
   quoted evidence are checked by a second request to the same model; only
   confirmed violations are shown and stored.

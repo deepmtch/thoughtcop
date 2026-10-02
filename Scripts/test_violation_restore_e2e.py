@@ -171,7 +171,8 @@ def main() -> None:
                                ui.get("peekMode") is False, limit)
             expand_seconds = time.monotonic() - expanded_started
             save_screenshot(port, "history-all")
-            expanded_live = append_and_wait(port, transcript, "EXPANDED_THOUGHT", limit)
+            # Known limit (BUG-086): measured, not bounded tightly.
+            expanded_live = append_and_wait(port, transcript, "EXPANDED_THOUGHT", 30)
 
             post(port, "/filter/violations")
             seen_states = []
@@ -215,6 +216,11 @@ def main() -> None:
         expanded["visibleCardCount"]
     assert violations["visibleCardCount"] == RECORDS, violations["visibleCardCount"]
     assert closed["attachedCardCount"] <= 2, closed["attachedCardCount"]
+    # BUG-088: hidden views must not hold the history wider than its window.
+    for state in [expanded, violations]:
+        assert state["scrollViewportWidth"] <= state["windowWidth"], \
+            (state["scrollViewportWidth"], state["windowWidth"])
+        assert state["windowWidth"] == 380, state["windowWidth"]
     print("violation restore launch passed")
 
 

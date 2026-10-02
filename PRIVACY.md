@@ -6,7 +6,9 @@ summaries and monitor assistant responses.
 
 ## Data that can leave the Mac
 
-When external checking is configured, Thinkpeek sends the exact check
+Only records written after Thinkpeek starts (by their own timestamp) are
+checked; older and copied history is displayed but never sent. When external
+checking is configured, Thinkpeek sends the exact check
 instruction together with one eligible plaintext reasoning record or complete
 assistant response to Groq, falling back to Cerebras when configured. Each such
 request also carries the user request that record answers: the latest message
