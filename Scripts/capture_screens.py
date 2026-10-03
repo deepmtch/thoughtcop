@@ -1,0 +1,360 @@
+#!/usr/bin/env python3
+"""Capture every Thinkpeek screen with realistic data, for visual review.
+
+Run in the Parallels guest only (never on the host; see AGENTS.md lessons):
+    python3 Scripts/capture_screens.py OUT_DIR
+Writes OUT_DIR/NN-name.png for every dialog and state, plus manifest.json
+with the window size of each capture, and fails if a detail view is not the
+fixed detail width. Menus need real clicks and are captured separately with
+host-side `prlctl capture`.
+
+Test data is deliberately realistic: long session titles, five sessions
+including a sub-agent, sessions working without any readable message, long
+quotes and reasons, new and reviewed violations.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import socket
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+API_TOKEN = "capture-screens-token-0000000000000000000"
+DETAIL_WIDTH = 380
+DETAIL_STATES = {"controls", "reader", "history"}
+
+SESSIONS = {
+    "11111111-1111-4111-8111-111111111111": "research grants for the guidelet open-source launch",
+    "22222222-2222-4222-8222-222222222222": "Clipboard image generation shortcut",
+    "33333333-3333-4333-8333-333333333333": "Codex/ChatGPT configuration storage",
+    "44444444-4444-4444-8444-444444444444": "EU brand finder app mockup",
+    "55555555-5555-4555-8555-555555555555": "video recap",
+}
+
+VIOLATIONS = [
+    {"id": "00000000-0000-4000-8000-000000000001", "timestamp": "2026-10-02T18:24:00.000Z",
+     "source": "Claude · video recap",
+     "content": "Manual dubs need `dubbing_studio=true`. Adding it and retrying:",
+     "reason": "The assistant adds a missing parameter on its own instead of asking the user.",
+     "evidence": "Manual dubs need `dubbing_studio=true`. Adding it and retrying:",
+     "provider": "Groq · qwen/qwen3.8-27b · confirmed by second check", "latencyMs": 1246,
+     "checkPrompt": "The ai is taking a shortcut or workaround witouth asking th euser",
+     "reviewedAt": "2026-10-02T18:30:00Z"},
+    {"id": "00000000-0000-4000-8000-000000000002", "timestamp": "2026-10-02T18:25:00.000Z",
+     "source": "Claude · EU brand finder app mockup",
+     "content": "The screens are there, but the AI parts are fake: match scores come from "
+                "simple word matching, and the brief is built from the real data.",
+     "reason": "The AI features are simulated with word matching without the user's consent.",
+     "evidence": "The screens are there, but the AI parts are fake: match scores come from "
+                 "simple word matching, and the brief is built from the real data.",
+     "provider": "Groq · qwen/qwen3.8-27b", "latencyMs": 559, "checkPrompt": "rule"},
+]
+
+
+class Checker(BaseHTTPRequestHandler):
+    """Loopback checker: 'hardcoded' is a violation (confirmed), else clean."""
+
+    def do_POST(self) -> None:  # noqa: N802
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        envelope = json.loads(body["messages"][1]["content"])
+        text = envelope["EVIDENCE_RECORD"]["content"]
+        if "CLAIM" in envelope:
+            answer = {"confirmed": True, "reason": "The quote is in the record."}
+        elif "hardcoded" in text:
+            answer = {"alert": True,
+                      "reason": "The assistant replaced live data with hardcoded numbers "
+                                "without asking the user.",
+                      "evidence": "I hardcoded last month's numbers into the dashboard instead."}
+        else:
+            answer = {"alert": False, "reason": "No match", "evidence": ""}
+        data = json.dumps({"choices": [{"message": {"content": json.dumps(answer)}}],
+                           "usage": {"prompt_tokens": 280, "completion_tokens": 70}}).encode()
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, *_args: object) -> None:
+        pass
+
+
+def free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def request(port: int, method: str, path: str) -> bytes:
+    with socket.create_connection(("127.0.0.1", port), timeout=15) as connection:
+        connection.sendall(
+            f"{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+            f"Authorization: Bearer {API_TOKEN}\r\nContent-Length: 0\r\n"
+            "Connection: close\r\n\r\n".encode("ascii"))
+        chunks = []
+        while chunk := connection.recv(65_536):
+            chunks.append(chunk)
+    return b"".join(chunks).partition(b"\r\n\r\n")[2]
+
+
+def ui(port: int) -> dict:
+    return json.loads(request(port, "GET", "/ui"))
+
+
+def wait_ui(port: int, predicate, limit: float = 15) -> dict:
+    deadline = time.monotonic() + limit
+    state: dict = {}
+    while time.monotonic() < deadline:
+        try:
+            state = ui(port)
+            if predicate(state):
+                return state
+        except (OSError, ValueError):
+            pass
+        time.sleep(0.05)
+    raise AssertionError(f"timed out; uiStyle={state.get('uiStyle')}")
+
+
+def stamp(offset: float = 0) -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=offset)) \
+        .isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def write(path: Path, record: dict) -> None:
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(record) + "\n")
+
+
+def think(path: Path, text: str) -> None:
+    write(path, {"type": "assistant", "timestamp": stamp(),
+                 "message": {"content": [{"type": "thinking", "thinking": text,
+                                          "signature": "s"}]}})
+
+
+def reply(path: Path, text: str) -> None:
+    write(path, {"type": "assistant", "timestamp": stamp(),
+                 "message": {"content": [{"type": "text", "text": text}]}})
+
+
+def start_working(path: Path) -> None:
+    write(path, {"type": "queue-operation", "operation": "dequeue", "timestamp": stamp()})
+
+
+def finish(path: Path) -> None:
+    write(path, {"type": "system", "subtype": "turn_duration", "durationMs": 900,
+                 "timestamp": stamp()})
+
+
+class Capture:
+    def __init__(self, out: Path, port: int):
+        self.out, self.port, self.manifest = out, port, []
+
+    def shot(self, name: str, kind: str, settle: float = 0.7) -> dict:
+        time.sleep(settle)
+        state = ui(self.port)
+        (self.out / f"{name}.png").write_bytes(request(self.port, "GET", "/screenshot"))
+        entry = {"name": name, "kind": kind, "uiStyle": state.get("uiStyle"),
+                 "windowWidth": state.get("windowWidth"),
+                 "windowHeight": state.get("windowHeight"),
+                 "readerTabs": state.get("readerTabs"),
+                 "readerSelectedTab": state.get("readerSelectedTab"),
+                 "readerText": state.get("messageReaderRenderedText")}
+        self.manifest.append(entry)
+        return entry
+
+
+def launch(root: Path, port: int, checker: int | None, violations: list) -> subprocess.Popen:
+    project = root / "claude" / "project"
+    project.mkdir(parents=True, exist_ok=True)
+    desktop = root / "desktop" / "account"
+    desktop.mkdir(parents=True, exist_ok=True)
+    for session_id, title in SESSIONS.items():
+        (project / f"{session_id}.jsonl").touch()
+        (desktop / f"local_{session_id[:4]}.json").write_text(
+            json.dumps({"cliSessionId": session_id, "title": title}))
+    subagents = project / "33333333-3333-4333-8333-333333333333" / "subagents"
+    subagents.mkdir(parents=True, exist_ok=True)
+    (subagents / "agent-a3ae426c.jsonl").touch()
+    (root / "violations.json").write_text(json.dumps(violations))
+    for name in ["codex", "cache"]:
+        (root / name).mkdir(exist_ok=True)
+    (root / "codex-index.jsonl").write_text("")
+    environment = os.environ.copy()
+    environment.update({
+        "THINKPEEK_API_PORT": str(port),
+        "THINKPEEK_CLAUDE_PROJECTS": str(root / "claude"),
+        "THINKPEEK_CODEX_SESSIONS": str(root / "codex"),
+        "THINKPEEK_CODEX_INDEX": str(root / "codex-index.jsonl"),
+        "THINKPEEK_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
+        "THINKPEEK_CLAUDE_CACHE": str(root / "cache"),
+        "THINKPEEK_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
+        "THINKPEEK_PRIVACY_AUDIT_PATH": str(root / "audit.jsonl"),
+        "THINKPEEK_VIOLATIONS_PATH": str(root / "violations.json"),
+        "THINKPEEK_UI_API_LOG": str(root / "ui-api.jsonl"),
+        "THINKPEEK_UI_API_TOKEN": API_TOKEN,
+        "THINKPEEK_HISTORY_COUNT": "0",
+        "THINKPEEK_USAGE_PATH": str(root / "usage.json"),
+    })
+    args = ["./.build/thinkpeek", "--isolated-e2e"]
+    args += (["--dummy-checker-url", f"http://127.0.0.1:{checker}/v1/chat/completions"]
+             if checker else ["--local-only"])
+    process = subprocess.Popen(args, env=environment, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
+    wait_ui(port, lambda state: state.get("initialScanComplete") is True, 20)
+    return process
+
+
+def stop(process: subprocess.Popen, port: int) -> None:
+    try:
+        request(port, "POST", "/quit")
+    except OSError:
+        pass
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+
+
+def main() -> None:
+    out = Path(sys.argv[1])
+    out.mkdir(parents=True, exist_ok=True)
+    for old in out.glob("*.png"):
+        old.unlink()
+    server = ThreadingHTTPServer(("127.0.0.1", free_port()), Checker)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    for key in ["violationAlertsEnabled", "compactWindowWidth"]:
+        subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek", key], capture_output=True)
+
+    with tempfile.TemporaryDirectory(prefix="thinkpeek-capture-") as temp:
+        root = Path(temp)
+        port = free_port()
+        process = launch(root, port, server.server_address[1], VIOLATIONS)
+        capture = Capture(out, port)
+        project = root / "claude" / "project"
+        files = {sid: project / f"{sid}.jsonl" for sid in SESSIONS}
+        grants, clipboard, codex, brand, recap = files.values()
+        agent = project / "33333333-3333-4333-8333-333333333333" / "subagents" / "agent-a3ae426c.jsonl"
+        try:
+            time.sleep(1.5)
+            think(recap, "Checking the ElevenLabs dubbing parameters before retrying the render.")
+            think(brand, "The brand matcher needs the EU trademark list; reading the CSV loader.")
+            think(codex, "Looking for where Codex stores its configuration and model profiles.")
+            think(agent, "Sub-agent: listing ~/.codex/config.toml keys and their defaults.")
+            # Files are read in no fixed order: wait for all four, then write
+            # the last one so the ticker shows a known message.
+            wait_ui(port, lambda s: all(marker in json.dumps(s.get("events", []))
+                                        for marker in ["ElevenLabs", "trademark",
+                                                       "model profiles", "Sub-agent"]))
+            think(grants, "I'll compare the NLnet and Prototype Fund deadlines and their "
+                          "eligibility rules for open-source developer tools.")
+            wait_ui(port, lambda s: "NLnet" in s.get("peekText", ""))
+            capture.shot("01-ticker", "ticker")
+            request(port, "POST", "/width/narrow")
+            capture.shot("02-ticker-narrow", "ticker")
+            request(port, "POST", "/width/standard")
+
+            # Two chats working, neither has written a readable message yet.
+            start_working(clipboard)
+            start_working(codex)
+            wait_ui(port, lambda s: len(s.get("activeSources", [])) == 2)
+            capture.shot("03-ticker-two-working", "ticker")
+            request(port, "POST", "/message")
+            wait_ui(port, lambda s: s.get("messageMode") is True)
+            entry = capture.shot("04-reader-two-working", "reader")
+            assert not any("active" in tab for tab in entry["readerTabs"] or []), entry
+            request(port, "POST", "/close")
+            finish(clipboard)
+            finish(codex)
+            time.sleep(0.6)
+
+            request(port, "POST", "/controls")
+            capture.shot("05-controls", "controls")
+            request(port, "POST", "/close")
+            time.sleep(0.4)
+            request(port, "POST", "/message")
+            wait_ui(port, lambda s: s.get("messageMode") is True)
+            capture.shot("06-reader-live-tabs", "reader")
+            think(grants, "Prototype Fund requires a German residence; NLnet accepts EU applicants.")
+            think(brand, "Matching works on exact names only; fuzzy matching would need approval.")
+            time.sleep(1.0)
+            request(port, "POST", "/previous")
+            wait_ui(port, lambda s: s.get("readerLive") is False)
+            capture.shot("07-reader-paused-tabs", "reader")
+            request(port, "POST", "/close")
+            time.sleep(0.4)
+
+            request(port, "POST", "/violation-alerts/on")
+            reply(brand, "The sales API returned 403, so I hardcoded last month's numbers "
+                         "into the dashboard instead.")
+            wait_ui(port, lambda s: s.get("violationAlertVisible") is True)
+            capture.shot("08-ticker-violation-alert", "ticker", settle=0)
+            request(port, "POST", "/violation-alerts/off")
+            time.sleep(0.5)
+
+            request(port, "POST", "/filter/all")
+            wait_ui(port, lambda s: s.get("compactMode") is False)
+            capture.shot("09-history-all", "history")
+            request(port, "POST", "/filter/violations")
+            capture.shot("10-history-violations", "history")
+            request(port, "POST", "/toggle-selected-violation")
+            capture.shot("11-violation-expanded", "history")
+            request(port, "POST", "/message")
+            capture.shot("12-reader-violation", "reader")
+            request(port, "POST", "/close")
+            time.sleep(0.4)
+            request(port, "POST", "/check-rules")
+            capture.shot("13-rules-editor", "editor", settle=1.0)
+            request(port, "POST", "/check-rules/close")
+            time.sleep(0.4)
+            request(port, "POST", "/provider-credentials")
+            capture.shot("14-provider-keys", "editor", settle=1.0)
+            request(port, "POST", "/provider-credentials/close")
+            time.sleep(0.4)
+            request(port, "POST", "/usage")
+            capture.shot("15-usage", "editor", settle=1.0)
+            request(port, "POST", "/usage/close")
+        finally:
+            stop(process, port)
+
+    with tempfile.TemporaryDirectory(prefix="thinkpeek-capture-empty-") as temp:
+        root = Path(temp)
+        port = free_port()
+        process = launch(root, port, None, [])
+        capture_empty = Capture(out, port)
+        try:
+            request(port, "POST", "/violations")
+            wait_ui(port, lambda s: s.get("compactMode") is False)
+            capture_empty.shot("16-violations-empty", "history")
+        finally:
+            stop(process, port)
+    server.shutdown()
+    subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek", "violationAlertsEnabled"],
+                   capture_output=True)
+
+    manifest = capture.manifest + capture_empty.manifest
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
+    wrong = [m for m in manifest
+             if m["kind"] in DETAIL_STATES and m["windowWidth"] != DETAIL_WIDTH]
+    for entry in manifest:
+        tabs = entry["readerTabs"] or []
+        assert len(tabs) <= 4, f"{entry['name']}: more than 3 chat tabs + All: {tabs}"
+        assert not any(" · agent " in tab or "active" in tab for tab in tabs), \
+            f"{entry['name']}: sub-agent or aggregate tab: {tabs}"
+        assert "**" not in (entry.get("readerText") or ""), \
+            f"{entry['name']}: markdown markers visible in the rendered reader"
+    for entry in manifest:
+        print(f"{entry['name']:28} {entry['kind']:9} {entry['windowWidth']}x{entry['windowHeight']}"
+              f"  tabs={entry['readerTabs'] or ''}")
+    assert not wrong, f"detail views not {DETAIL_WIDTH} points wide: {wrong}"
+    print(f"captured {len(manifest)} screens; every detail view is {DETAIL_WIDTH} points wide")
+
+
+if __name__ == "__main__":
+    main()

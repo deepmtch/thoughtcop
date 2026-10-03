@@ -95,3 +95,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-088](BUG-088-violation-history-was-overloaded.md) | Violation history cards and window were overloaded | Fixed |
 | [BUG-089](BUG-089-checker-missed-blocks-and-flagged-ordinary-actions.md) | Checker missed blocked replies and flagged ordinary actions | Fixed |
 | [BUG-090](BUG-090-ui-was-not-one-coherent-app.md) | The UI was not one coherent app; cost was not visible | Fixed |
+| [BUG-091](BUG-091-reader-tabs-broke-with-real-session-names.md) | Reader tabs widened the window, showed "2 active" and sub-agent tabs | Fixed |

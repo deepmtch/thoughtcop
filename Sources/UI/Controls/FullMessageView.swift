@@ -96,6 +96,10 @@ final class FullMessageView: NSVisualEffectView {
         tabs.action = #selector(tabChanged(_:))
         tabs.controlSize = .small
         tabs.segmentDistribution = .fillEqually
+        // Tabs share the reader's width and truncate their labels; their full
+        // names must never widen the window.
+        tabs.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        tabs.setContentHuggingPriority(.defaultLow, for: .horizontal)
         tabs.setAccessibilityLabel("Sessions")
         tabs.translatesAutoresizingMaskIntoConstraints = false
         tabs.isHidden = true
@@ -181,12 +185,21 @@ final class FullMessageView: NSVisualEffectView {
     /// Session tabs (titles already include any "N new" count) and the
     /// Live / Paused status line. Empty titles hide both rows.
     func setSessions(_ titles: [String], selected: Int, status: String,
-                     live: Bool, showJump: Bool) {
+                     live: Bool, showJump: Bool, width: CGFloat,
+                     toolTips: [String] = [], working: [Bool] = []) {
         let visible = !titles.isEmpty
         tabs.segmentCount = titles.count
+        let segmentWidth = titles.isEmpty ? 0
+            : floor((width - 24) / CGFloat(titles.count)) - 2
         for (index, title) in titles.enumerated() {
             tabs.setLabel(title, forSegment: index)
-            tabs.setToolTip(title, forSegment: index)
+            tabs.setToolTip(toolTips.indices.contains(index) ? toolTips[index] : title,
+                            forSegment: index)
+            tabs.setWidth(segmentWidth, forSegment: index)
+            // A green dot (an image, so it keeps its colour) marks a working chat.
+            let isWorking = working.indices.contains(index) && working[index]
+            tabs.setImage(isWorking ? Self.workingDot : nil, forSegment: index)
+            tabs.setImageScaling(.scaleNone, forSegment: index)
         }
         if titles.indices.contains(selected) { tabs.selectedSegment = selected }
         tabs.isHidden = !visible
@@ -200,6 +213,17 @@ final class FullMessageView: NSVisualEffectView {
         providerIcon.isHidden = visible
         sourceLabel.isHidden = visible
     }
+
+    private static let workingDot: NSImage = {
+        let image = NSImage(size: NSSize(width: 8, height: 8), flipped: false) { rect in
+            NSColor.systemGreen.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            return true
+        }
+        image.isTemplate = false
+        image.accessibilityDescription = "Working"
+        return image
+    }()
 
     @objc private func tabChanged(_ sender: NSSegmentedControl) {
         tabSelected?(sender.selectedSegment)

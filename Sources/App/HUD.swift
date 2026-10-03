@@ -61,6 +61,15 @@ final class MessagePreview {
         source
     }
 
+    /// A violation or check failure is composed with headings, so the reader
+    /// renders it as formatted text whatever kind the original record was.
+    var readerKind: String {
+        switch evaluation {
+        case .alert, .failed: return "analysis"
+        default: return kind
+        }
+    }
+
     var readerTone: MessageReaderTone {
         switch evaluation {
         case .alert: return .error
@@ -284,7 +293,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekSourceLabel = NSTextField(labelWithString: "Thinkpeek")
         peekSourceLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         peekSourceLabel.textColor = .secondaryLabelColor
-        peekSourceLabel.lineBreakMode = .byTruncatingMiddle
+        // Cut at the end so the chat name stays readable (middle truncation
+        // showed only a sub-agent ID at narrow width).
+        peekSourceLabel.lineBreakMode = .byTruncatingTail
         peekSourceLabel.maximumNumberOfLines = 1
         peekSourceLabel.translatesAutoresizingMaskIntoConstraints = false
         peekSourceLabel.setContentCompressionResistancePriority(.defaultLow,
@@ -724,6 +735,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "messageReaderIndex": messageMode ? compactIndex : NSNull(),
             "messageReaderSource": messageReaderSnapshot?.source ?? NSNull(),
             "messageReaderText": messageReaderSnapshot?.text ?? NSNull(),
+            "messageReaderRenderedText": messageMode ? fullMessageView.text : NSNull(),
             "closeControlVisible": messageMode || (!detailHeader.isHidden &&
                 !detailExitControls.isHidden),
             "quitControlVisible": false,
@@ -1362,25 +1374,38 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// Recent sessions for the reader tabs: working ones first, then by the
     /// newest message; at most four, then All.
+    /// The chat a source belongs to: sub-agent sources ("<chat> · agent <id>",
+    /// built by sourceName(for:)) belong to their parent chat's tab.
+    private func readerSessionKey(_ source: String) -> String {
+        source.components(separatedBy: " · agent ").first ?? source
+    }
+
+    private static let readerTabLimit = 3
+
+    /// Chats for the reader tabs: the open one and working ones first, then by
+    /// newest message; at most three (they must stay readable at 380 points),
+    /// in a stable order so a tab never moves under the pointer.
     private func readerSessions() -> [String] {
-        var ordered = operationState.activeSources
-        for preview in eventPreviews.reversed() where !ordered.contains(preview.source) {
-            ordered.append(preview.source)
-        }
-        if let readerSession, !ordered.prefix(4).contains(readerSession) {
-            ordered.insert(readerSession, at: 0)
-        }
-        // Which four is decided by recency; their order is stable (first
-        // appearance), so a tab never moves under the pointer.
-        let chosen = Array(ordered.prefix(4))
-        func firstSeen(_ source: String) -> Int {
-            eventPreviews.firstIndex { $0.source == source } ?? Int.max
+        var ordered: [String] = []
+        func add(_ key: String) { if !ordered.contains(key) { ordered.append(key) } }
+        if let readerSession { add(readerSession) }
+        operationState.activeSources.map(readerSessionKey).forEach(add)
+        eventPreviews.reversed().map { readerSessionKey($0.source) }.forEach(add)
+        let chosen = Array(ordered.prefix(Self.readerTabLimit))
+        func firstSeen(_ key: String) -> Int {
+            eventPreviews.firstIndex { readerSessionKey($0.source) == key } ?? Int.max
         }
         return chosen.sorted { firstSeen($0) < firstSeen($1) }
     }
 
+    private func readerSessionWorking(_ key: String) -> Bool {
+        operationState.activeSources.contains { readerSessionKey($0) == key }
+    }
+
     private func readerIndexes(_ session: String?) -> [Int] {
-        eventPreviews.indices.filter { session == nil || eventPreviews[$0].source == session }
+        eventPreviews.indices.filter {
+            session == nil || readerSessionKey(eventPreviews[$0].source) == session
+        }
     }
 
     private func refreshReaderChrome() {
@@ -1389,15 +1414,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         func title(_ source: String) -> String {
             let name = source.components(separatedBy: " · ").dropFirst().joined(separator: " · ")
             let unseen = readerUnseen[source, default: 0]
-            let working = operationState.activeSources.contains(source) ? "● " : ""
-            return working + (name.isEmpty ? source : name) + (unseen > 0 ? " (\(unseen) new)" : "")
+            return (name.isEmpty ? source : name) + (unseen > 0 ? " (\(unseen) new)" : "")
         }
         let titles = sessions.map(title) + ["All"]
         let selected = readerSession.flatMap { sessions.firstIndex(of: $0) } ?? sessions.count
         let indexes = readerIndexes(readerSession)
         let status: String
         if readerLive {
-            let working = readerSession.map { operationState.activeSources.contains($0) } ?? false
+            let working = readerSession.map(readerSessionWorking) ?? false
             status = "● Live" + (working ? " · working now" : "")
         } else if let position = indexes.firstIndex(of: compactIndex) {
             status = "❚❚ Paused · message \(position + 1) of \(indexes.count)"
@@ -1405,7 +1429,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             status = "❚❚ Paused"
         }
         fullMessageView.setSessions(titles, selected: selected, status: status,
-                                    live: readerLive, showJump: !readerLive)
+                                    live: readerLive, showJump: !readerLive,
+                                    width: detailWidth,
+                                    toolTips: sessions + ["All sessions"],
+                                    working: sessions.map(readerSessionWorking) + [false])
     }
 
     /// Shows the newest message of the reader's session (or its activity when
@@ -1427,7 +1454,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func readerActivitySnapshot(_ source: String) -> MessageReaderSnapshot {
-        let working = operationState.activeSources.contains(source)
+        let working = readerSessionWorking(readerSessionKey(source))
         let text = working
             ? "Working…\n\nThe provider hides its thinking for this turn. Replies are still checked."
             : "No readable message from this session yet."
@@ -1450,7 +1477,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             openedIndex = index
             snapshot = MessageReaderSnapshot(source: preview.displaySource,
                                              text: preview.detailText,
-                                             kind: preview.kind,
+                                             kind: preview.readerKind,
                                              tone: preview.readerTone)
         } else if !compactMode, compactIndex >= 0,
                   compactIndex < eventPreviews.count {
@@ -1458,23 +1485,33 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             openedIndex = compactIndex
             snapshot = MessageReaderSnapshot(source: preview.displaySource,
                                              text: preview.detailText,
-                                             kind: preview.kind,
+                                             kind: preview.readerKind,
                                              tone: preview.readerTone)
         } else if let source = operationState.activityDisplaySource {
-            snapshot = readerActivitySnapshot(source)
+            snapshot = operationState.activeSources.contains(source)
+                ? readerActivitySnapshot(source)
+                : MessageReaderSnapshot(
+                    source: source,
+                    text: "Working: " + operationState.activeSources.joined(separator: " • ") +
+                        "\n\nThe providers hide their thinking for these turns. Replies are still checked.",
+                    kind: "activity", tone: .normal)
         } else {
             guard compactIndex >= 0, compactIndex < eventPreviews.count else { return }
             let preview = eventPreviews[compactIndex]
             openedIndex = compactIndex
             snapshot = MessageReaderSnapshot(source: preview.displaySource,
                                              text: preview.detailText,
-                                             kind: preview.kind,
+                                             kind: preview.readerKind,
                                              tone: preview.readerTone)
         }
         if let openedIndex { markViolationReviewed(at: openedIndex) }
         // The reader opens on this message's session; it follows that session
         // live only when this is its newest message.
-        readerSession = openedIndex.map { eventPreviews[$0].source } ?? snapshot.source
+        // An aggregate status ("Claude · 2 active") is not a session: with no
+        // single readable message the reader opens on All.
+        readerSession = openedIndex.map { readerSessionKey(eventPreviews[$0].source) }
+            ?? (operationState.activeSources.contains(snapshot.source)
+                ? readerSessionKey(snapshot.source) : nil)
         readerLive = openedIndex == nil || openedIndex == readerIndexes(readerSession).last
         readerUnseen = [:]
         messageReaderSnapshot = snapshot
@@ -1583,7 +1620,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let preview = eventPreviews[compactIndex]
             let snapshot = MessageReaderSnapshot(source: preview.displaySource,
                                                  text: preview.detailText,
-                                                 kind: preview.kind,
+                                                 kind: preview.readerKind,
                                                  tone: preview.readerTone)
             messageReaderSnapshot = snapshot
             fullMessageView.show(source: snapshot.source, text: snapshot.text,
@@ -1788,7 +1825,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func updatePeekHeader(source: String) {
         peekProviderIcon.update(source: source)
-        peekSourceLabel.stringValue = source
+        // A sub-agent shows as its chat; the full source stays in the tooltip.
+        peekSourceLabel.stringValue = readerSessionKey(source)
         peekSourceLabel.toolTip = source
         peekBar.layoutSubtreeIfNeeded()
         peekToolbar.needsDisplay = true
@@ -1924,12 +1962,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             } else if messageMode {
                 // A live reader follows only its own session; anything else is
                 // counted on its tab and never replaces what is being read.
-                if readerLive, readerSession == nil || readerSession == source {
+                if readerLive, readerSession == nil || readerSession == readerSessionKey(source) {
                     compactIndex = eventCards.count - 1
                     DispatchQueue.main.async { [weak self] in self?.selectedMessageChanged() }
                 } else {
-                    readerUnseen[source, default: 0] += 1
-                    DispatchQueue.main.async { [weak self] in self?.refreshReaderChrome() }
+                    // Updated before the next publish, so the count is never stale.
+                    readerUnseen[readerSessionKey(source), default: 0] += 1
+                    refreshReaderChrome()
                 }
             }
         } else {
