@@ -44,7 +44,7 @@ review material under `AGENTS.md`, not historical commentary.
 | The menu repeated violation state as a disabled gray row above the real action | Status belongs in the actionable menu title and status-item badge. Do not add disabled duplicate labels that resemble unavailable commands. | Menu-title state tests for clear, new, reviewed, and storage-unavailable states plus a rendered menu inspection. |
 | A long settings list and monochrome debug toolbar were hard to scan | Use native hierarchy, semantic colors, provider icons, spacing, and destructive/alert emphasis. Visual polish is verified from an actual rendered PNG, not object existence. | `/screenshot` inspection at standard and narrow widths. |
 | Users could not navigate recorded messages efficiently | Preserve Previous/Next, Home/End, arrows/J/K, Return/Space, and a fixed Latest action without stealing keys from editors. | Keyboard event tests and history API flow. |
-| New messages replaced a message being read | Freeze the reader snapshot while open; closing resumes the latest stream. | Reader-freeze black-box test. |
+| New messages replaced a message being read | The reader has one tab per recent session. It follows only its own session, and only while on that session's newest message ("● Live"); on an older message it pauses and other sessions' messages only raise "(N new)" on their tabs. Tab order is stable. | `Scripts/test_reader_tabs_e2e.py` and the multi-session reader step. |
 | Always-on-top or position behavior regressed during resizing | The panel remains floating and anchored inside the visible screen across ticker/detail transitions. | Window-level and geometry tests against the running app. |
 
 ## Architecture, testing, and delivery

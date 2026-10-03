@@ -64,4 +64,6 @@ PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
     python3 Scripts/test_violation_restore_e2e.py
 PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
     python3 Scripts/test_violation_verification_e2e.py
+PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
+    python3 Scripts/test_reader_tabs_e2e.py
 echo "all Thinkpeek tests passed"

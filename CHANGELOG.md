@@ -7,6 +7,8 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- Reader tabs: one per recent session plus All, live on the newest message,
+  paused on older ones, with "(N new)" counts and "Jump to latest".
 - History lists the newest item first; "Latest ↓" is replaced by "↑ N new",
   shown only when newer items arrived above.
 - Usage and cost: "Usage Today" in the menu-bar menu and a Usage window, from

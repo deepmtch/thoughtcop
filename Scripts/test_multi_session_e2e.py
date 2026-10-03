@@ -512,7 +512,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         # Codex conversation may arrive and be checked, but must not replace
         # the record under the reader until Close resumes the latest ticker.
         get_json(API_BASE, "/message")
-        reader = wait_for(lambda state: state.get("messageReaderFrozen") is True)
+        reader = wait_for(lambda state: state.get("messageMode") is True)
+        reader_text = reader["messageReaderText"]
         frozen_index = reader["currentIndex"]
         append(codex_second, {
             "timestamp": record_timestamp(1_100),
@@ -525,8 +526,13 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         frozen = wait_for(lambda state:
             state.get("navigableCount") == 5 and
             state.get("checkerRequestInFlight") is False)
-        assert frozen["messageReaderFrozen"] is True, frozen
+        # Opened on its session's newest message, the reader is live for that
+        # session only; another session's message is counted on its tab.
+        assert frozen["readerLive"] is True, frozen
         assert frozen["currentIndex"] == frozen_index, frozen
+        assert frozen["messageReaderText"] == reader_text, frozen
+        assert any("Codex Beta" in tab and "(1 new)" in tab
+                   for tab in frozen["readerTabs"]), frozen["readerTabs"]
 
         get_json(API_BASE, "/close")
         resumed = wait_for(lambda state:

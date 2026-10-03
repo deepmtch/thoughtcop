@@ -16,6 +16,19 @@ final class FullMessageView: NSVisualEffectView {
     private let exitControls = DetailExitControls(frame: .zero)
     var closeRequested: (() -> Void)?
     var controlsRequested: (() -> Void)?
+    var tabSelected: ((Int) -> Void)?
+    var jumpToLatestRequested: (() -> Void)?
+    /// One tab per recent session plus All; empty hides the row.
+    private let tabs = NSSegmentedControl(labels: [], trackingMode: .selectOne,
+                                          target: nil, action: nil)
+    private let statusLabel = NSTextField(labelWithString: "")
+    private let jumpButton = NSButton(title: "Jump to latest ↑", target: nil, action: nil)
+    private var scrollTopToHeader: NSLayoutConstraint!
+    private var scrollTopToStatus: NSLayoutConstraint!
+    var tabTitles: [String] { (0..<tabs.segmentCount).map { tabs.label(forSegment: $0) ?? "" } }
+    var selectedTab: Int { tabs.selectedSegment }
+    var statusText: String { statusLabel.stringValue }
+    var jumpVisible: Bool { !jumpButton.isHidden }
 
     var source: String { sourceLabel.stringValue }
     var text: String { textView.string }
@@ -79,6 +92,28 @@ final class FullMessageView: NSVisualEffectView {
         textView.textContainer?.containerSize = NSSize(
             width: 0, height: CGFloat.greatestFiniteMagnitude)
 
+        tabs.target = self
+        tabs.action = #selector(tabChanged(_:))
+        tabs.controlSize = .small
+        tabs.segmentDistribution = .fillEqually
+        tabs.setAccessibilityLabel("Sessions")
+        tabs.translatesAutoresizingMaskIntoConstraints = false
+        tabs.isHidden = true
+        addSubview(tabs)
+        statusLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.isHidden = true
+        addSubview(statusLabel)
+        jumpButton.target = self
+        jumpButton.action = #selector(jumpToLatest(_:))
+        jumpButton.isBordered = false
+        jumpButton.font = .systemFont(ofSize: 11)
+        jumpButton.contentTintColor = .linkColor
+        jumpButton.setAccessibilityLabel("Jump to the latest message of this session")
+        jumpButton.translatesAutoresizingMaskIntoConstraints = false
+        jumpButton.isHidden = true
+        addSubview(jumpButton)
+
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -110,11 +145,24 @@ final class FullMessageView: NSVisualEffectView {
             controlsButton.centerYAnchor.constraint(equalTo: exitControls.centerYAnchor),
             controlsButton.trailingAnchor.constraint(equalTo: exitControls.leadingAnchor,
                                                       constant: -6),
-            scrollView.topAnchor.constraint(equalTo: exitControls.bottomAnchor, constant: 10),
+            tabs.topAnchor.constraint(equalTo: exitControls.bottomAnchor, constant: 8),
+            tabs.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            tabs.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            statusLabel.topAnchor.constraint(equalTo: tabs.bottomAnchor, constant: 7),
+            statusLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            jumpButton.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
+            jumpButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            statusLabel.trailingAnchor.constraint(lessThanOrEqualTo: jumpButton.leadingAnchor,
+                                                  constant: -8),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        scrollTopToHeader = scrollView.topAnchor.constraint(
+            equalTo: exitControls.bottomAnchor, constant: 10)
+        scrollTopToStatus = scrollView.topAnchor.constraint(
+            equalTo: statusLabel.bottomAnchor, constant: 4)
+        scrollTopToHeader.isActive = true
         applyTone(.normal)
     }
 
@@ -130,6 +178,35 @@ final class FullMessageView: NSVisualEffectView {
         applyTone(tone)
     }
 
+    /// Session tabs (titles already include any "N new" count) and the
+    /// Live / Paused status line. Empty titles hide both rows.
+    func setSessions(_ titles: [String], selected: Int, status: String,
+                     live: Bool, showJump: Bool) {
+        let visible = !titles.isEmpty
+        tabs.segmentCount = titles.count
+        for (index, title) in titles.enumerated() {
+            tabs.setLabel(title, forSegment: index)
+            tabs.setToolTip(title, forSegment: index)
+        }
+        if titles.indices.contains(selected) { tabs.selectedSegment = selected }
+        tabs.isHidden = !visible
+        statusLabel.stringValue = status
+        statusLabel.textColor = live ? .systemGreen : .secondaryLabelColor
+        statusLabel.isHidden = !visible
+        jumpButton.isHidden = !visible || !showJump
+        scrollTopToHeader.isActive = !visible
+        scrollTopToStatus.isActive = visible
+        // The tabs replace the single source line.
+        providerIcon.isHidden = visible
+        sourceLabel.isHidden = visible
+    }
+
+    @objc private func tabChanged(_ sender: NSSegmentedControl) {
+        tabSelected?(sender.selectedSegment)
+    }
+
+    @objc private func jumpToLatest(_ sender: Any?) { jumpToLatestRequested?() }
+
     func preferredHeight(forWidth width: CGFloat) -> CGFloat {
         let storage = NSTextStorage(attributedString:
             textView.textStorage ?? NSAttributedString())
@@ -142,9 +219,10 @@ final class FullMessageView: NSVisualEffectView {
         storage.addLayoutManager(layout)
         layout.ensureLayout(for: container)
         let renderedHeight = ceil(layout.usedRect(for: container).height)
+        let sessionRows: CGFloat = tabs.isHidden ? 0 : 50
         return min(Self.maximumReaderHeight,
                    max(Self.minimumReaderHeight,
-                       Self.headerAndMarginsHeight + renderedHeight))
+                       Self.headerAndMarginsHeight + sessionRows + renderedHeight))
     }
 
     private func applyTone(_ tone: MessageReaderTone) {

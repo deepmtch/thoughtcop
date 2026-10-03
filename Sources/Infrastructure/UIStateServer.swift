@@ -110,6 +110,8 @@ enum UICommand {
     case violationHistoryLimit(Int)
     case toggleSelectedViolation
     case showUsage
+    case readerTab(Int)
+    case readerLatest
     case closeUsage
 
     var name: String {
@@ -149,6 +151,8 @@ enum UICommand {
         case .violationHistoryLimit(let limit): return "violation-history/\(limit)"
         case .toggleSelectedViolation: return "toggle-selected-violation"
         case .showUsage: return "usage"
+        case .readerTab(let index): return "reader-tab/\(index)"
+        case .readerLatest: return "reader-latest"
         case .closeUsage: return "usage/close"
         }
     }
@@ -301,6 +305,12 @@ final class UIStateServer {
     }
 
     private func command(for path: String) -> UICommand? {
+        let tabPrefix = "/reader-tab/"
+        if path.hasPrefix(tabPrefix), let index = Int(path.dropFirst(tabPrefix.count)),
+           (0...4).contains(index) {
+            return .readerTab(index)
+        }
+        if path == "/reader-latest" { return .readerLatest }
         let historyPrefix = "/violation-history/"
         if path.hasPrefix(historyPrefix),
            let limit = Int(path.dropFirst(historyPrefix.count)),

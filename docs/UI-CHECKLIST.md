@@ -44,6 +44,9 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Unseen/history state is labeled instead of silently changing selection.
 - [x] Expanded history has a visible selected row and supports Up/Down, J/K,
   Home/End, Return, and Space without stealing keys from text controls.
+- [x] The reader has one tab per recent session plus All, a Live / Paused line
+  and "Jump to latest"; other sessions show "(N new)" and never replace the
+  message being read.
 - [x] History is newest first; "↑ N new" appears only when unseen items are
   above, and Up/k/Home move toward newer items there.
 - [x] Controls, reader and history share one 380-point width; the Window Width

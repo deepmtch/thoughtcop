@@ -188,6 +188,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var violationAlertsEnabled = ViolationAlertsPreference.load()
     private var violationVerificationEnabled = ViolationVerificationPreference.load()
     private var usageMenuItem: NSMenuItem?
+    /// Reader session tab (nil = All), whether it follows that session's
+    /// newest message, and per-session counts of messages that arrived while
+    /// the reader showed something else.
+    private var readerSession: String?
+    private var readerLive = true
+    private var readerUnseen: [String: Int] = [:]
     private var usageWindow: UsageWindow?
     /// Only records written after this moment are checked (see
     /// writtenSinceLaunch). Saved violations are kept regardless.
@@ -328,6 +334,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekBar.addSubview(peekToolbar)
 
         fullMessageView = FullMessageView(frame: .zero)
+        fullMessageView.tabSelected = { [weak self] index in
+            self?.api.perform(.readerTab(index), origin: .appKit)
+        }
+        fullMessageView.jumpToLatestRequested = { [weak self] in
+            self?.api.perform(.readerLatest, origin: .appKit)
+        }
         fullMessageView.closeRequested = { [weak self] in
             self?.api.perform(.close, origin: .appKit)
         }
@@ -702,7 +714,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "compactMode": compactMode,
             "peekMode": peekMode,
             "messageMode": messageMode,
-            "messageReaderFrozen": messageMode && messageReaderSnapshot != nil,
+            "messageReaderFrozen": messageMode && messageReaderSnapshot != nil && !readerLive,
+            "readerLive": messageMode && readerLive,
+            "readerTabs": messageMode ? fullMessageView.tabTitles : [],
+            "readerSelectedTab": messageMode && fullMessageView.tabTitles.indices
+                .contains(fullMessageView.selectedTab)
+                ? fullMessageView.tabTitles[fullMessageView.selectedTab] : NSNull(),
+            "readerStatus": messageMode ? fullMessageView.statusText : "",
             "messageReaderIndex": messageMode ? compactIndex : NSNull(),
             "messageReaderSource": messageReaderSnapshot?.source ?? NSNull(),
             "messageReaderText": messageReaderSnapshot?.text ?? NSNull(),
@@ -937,6 +955,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .violationAlerts(let enabled): setViolationAlerts(enabled)
         case .violationVerification(let enabled): setViolationVerification(enabled)
         case .violationHistoryLimit(let limit): setViolationHistoryLimit(limit)
+        case .readerTab(let index): if messageMode { selectReaderTab(index) }
+        case .readerLatest: if messageMode { showReaderLatest() }
         case .showUsage: showUsage()
         case .closeUsage: usageWindow?.close()
         case .toggleSelectedViolation:
@@ -1340,6 +1360,86 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updateCardVisibility()
     }
 
+    /// Recent sessions for the reader tabs: working ones first, then by the
+    /// newest message; at most four, then All.
+    private func readerSessions() -> [String] {
+        var ordered = operationState.activeSources
+        for preview in eventPreviews.reversed() where !ordered.contains(preview.source) {
+            ordered.append(preview.source)
+        }
+        if let readerSession, !ordered.prefix(4).contains(readerSession) {
+            ordered.insert(readerSession, at: 0)
+        }
+        // Which four is decided by recency; their order is stable (first
+        // appearance), so a tab never moves under the pointer.
+        let chosen = Array(ordered.prefix(4))
+        func firstSeen(_ source: String) -> Int {
+            eventPreviews.firstIndex { $0.source == source } ?? Int.max
+        }
+        return chosen.sorted { firstSeen($0) < firstSeen($1) }
+    }
+
+    private func readerIndexes(_ session: String?) -> [Int] {
+        eventPreviews.indices.filter { session == nil || eventPreviews[$0].source == session }
+    }
+
+    private func refreshReaderChrome() {
+        guard messageMode else { return }
+        let sessions = readerSessions()
+        func title(_ source: String) -> String {
+            let name = source.components(separatedBy: " · ").dropFirst().joined(separator: " · ")
+            let unseen = readerUnseen[source, default: 0]
+            let working = operationState.activeSources.contains(source) ? "● " : ""
+            return working + (name.isEmpty ? source : name) + (unseen > 0 ? " (\(unseen) new)" : "")
+        }
+        let titles = sessions.map(title) + ["All"]
+        let selected = readerSession.flatMap { sessions.firstIndex(of: $0) } ?? sessions.count
+        let indexes = readerIndexes(readerSession)
+        let status: String
+        if readerLive {
+            let working = readerSession.map { operationState.activeSources.contains($0) } ?? false
+            status = "● Live" + (working ? " · working now" : "")
+        } else if let position = indexes.firstIndex(of: compactIndex) {
+            status = "❚❚ Paused · message \(position + 1) of \(indexes.count)"
+        } else {
+            status = "❚❚ Paused"
+        }
+        fullMessageView.setSessions(titles, selected: selected, status: status,
+                                    live: readerLive, showJump: !readerLive)
+    }
+
+    /// Shows the newest message of the reader's session (or its activity when
+    /// it has none yet) and follows it live.
+    private func showReaderLatest() {
+        readerLive = true
+        if let session = readerSession { readerUnseen[session] = 0 } else { readerUnseen = [:] }
+        if let latest = readerIndexes(readerSession).last {
+            compactIndex = latest
+            selectedMessageChanged()
+        } else if let session = readerSession {
+            let snapshot = readerActivitySnapshot(session)
+            messageReaderSnapshot = snapshot
+            fullMessageView.show(source: snapshot.source, text: snapshot.text,
+                                 kind: snapshot.kind, tone: snapshot.tone)
+            refreshReaderChrome()
+            publishAPI()
+        }
+    }
+
+    private func readerActivitySnapshot(_ source: String) -> MessageReaderSnapshot {
+        let working = operationState.activeSources.contains(source)
+        let text = working
+            ? "Working…\n\nThe provider hides its thinking for this turn. Replies are still checked."
+            : "No readable message from this session yet."
+        return MessageReaderSnapshot(source: source, text: text, kind: "activity", tone: .normal)
+    }
+
+    private func selectReaderTab(_ index: Int) {
+        let sessions = readerSessions()
+        readerSession = sessions.indices.contains(index) ? sessions[index] : nil
+        showReaderLatest()
+    }
+
     private func showCurrentMessage() {
         let snapshot: MessageReaderSnapshot
         var openedIndex: Int?
@@ -1361,10 +1461,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                              kind: preview.kind,
                                              tone: preview.readerTone)
         } else if let source = operationState.activityDisplaySource {
-            let status = (operationState.activityDisplayText ?? "Working") +
-                "\n\nReadable reasoning has not been written by the provider yet."
-            snapshot = MessageReaderSnapshot(source: source, text: status,
-                                             kind: "activity", tone: .normal)
+            snapshot = readerActivitySnapshot(source)
         } else {
             guard compactIndex >= 0, compactIndex < eventPreviews.count else { return }
             let preview = eventPreviews[compactIndex]
@@ -1375,11 +1472,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                              tone: preview.readerTone)
         }
         if let openedIndex { markViolationReviewed(at: openedIndex) }
+        // The reader opens on this message's session; it follows that session
+        // live only when this is its newest message.
+        readerSession = openedIndex.map { eventPreviews[$0].source } ?? snapshot.source
+        readerLive = openedIndex == nil || openedIndex == readerIndexes(readerSession).last
+        readerUnseen = [:]
         messageReaderSnapshot = snapshot
         fullMessageView.show(source: snapshot.source, text: snapshot.text,
                              kind: snapshot.kind, tone: snapshot.tone)
         peekMode = false
         messageMode = true
+        refreshReaderChrome()
         (panel.contentView as? CompactInteractionView)?.dragOnly = false
         peekBar.isHidden = true
         fullMessageView.isHidden = false
@@ -1428,6 +1531,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             selectExpandedMessage(at: indexes[position - 1])
             return
         }
+        if messageMode {
+            let indexes = readerIndexes(readerSession)
+            guard let position = indexes.firstIndex(of: compactIndex), position > 0 else { return }
+            compactIndex = indexes[position - 1]
+            selectedMessageChanged()
+            return
+        }
         guard compactIndex > 0 else { return }
         unacknowledgedViolationIndex = nil
         compactIndex -= 1
@@ -1440,6 +1550,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let position = indexes.firstIndex(of: compactIndex),
                   position + 1 < indexes.count else { return }
             selectExpandedMessage(at: indexes[position + 1])
+            return
+        }
+        if messageMode {
+            let indexes = readerIndexes(readerSession)
+            guard let position = indexes.firstIndex(of: compactIndex),
+                  position + 1 < indexes.count else { return }
+            compactIndex = indexes[position + 1]
+            selectedMessageChanged()
             return
         }
         guard compactIndex + 1 < eventCards.count else { return }
@@ -1470,6 +1588,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             messageReaderSnapshot = snapshot
             fullMessageView.show(source: snapshot.source, text: snapshot.text,
                                  kind: snapshot.kind, tone: snapshot.tone)
+            readerLive = compactIndex == readerIndexes(readerSession).last
+            if readerLive, let session = readerSession { readerUnseen[session] = 0 }
+            refreshReaderChrome()
             publishAPI()
         } else {
             updateCardVisibility()
@@ -1800,6 +1921,16 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if MessageReaderSelection.shouldAdvanceForNewMessage(
                 isReaderOpen: messageMode, wasFollowingLatest: wasFollowingLatest) {
                 compactIndex = eventCards.count - 1
+            } else if messageMode {
+                // A live reader follows only its own session; anything else is
+                // counted on its tab and never replaces what is being read.
+                if readerLive, readerSession == nil || readerSession == source {
+                    compactIndex = eventCards.count - 1
+                    DispatchQueue.main.async { [weak self] in self?.selectedMessageChanged() }
+                } else {
+                    readerUnseen[source, default: 0] += 1
+                    DispatchQueue.main.async { [weak self] in self?.refreshReaderChrome() }
+                }
             }
         } else {
             systemCards.append(card)
@@ -2300,6 +2431,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .waiting: operationWaitingForUser(source: source, identity: identity)
         case .finished: operationFinished(source: source, identity: identity)
         }
+        refreshReaderChrome()
     }
 
     private func processArrived(_ incoming: [(path: String, block: Block)]) {

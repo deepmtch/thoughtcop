@@ -90,7 +90,7 @@ selected_index = controls["currentIndex"]
 post("/message")
 reader = wait_state(lambda value: value.get("uiStyle") == "full-message")
 assert reader["uiStyle"] == "full-message", reader["uiStyle"]
-assert reader["messageReaderFrozen"] is True
+assert reader["messageMode"] is True
 assert 118 <= reader["windowHeight"] <= 420, reader["windowHeight"]
 assert reader["closeControlVisible"] is True
 assert reader["quitControlVisible"] is False
