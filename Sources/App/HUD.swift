@@ -705,6 +705,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "windowY": Int(panel.frame.minY),
             "fullyOnScreen": visibleFrame.map { NSContainsRect($0, panel.frame) } ?? false,
             "contentViewWidth": Int(panel.contentView?.bounds.width ?? 0),
+            "contentViewHeight": Int(panel.contentView?.bounds.height ?? 0),
             "scrollViewportWidth": Int(scrollView.contentView.frame.width),
             "scrollable": scrollView.hasVerticalScroller,
             "contentHeight": Int(feedView.bounds.height),
@@ -1290,6 +1291,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func applyPeekMode(_ peek: Bool, animated: Bool = false) {
         peekMode = peek
         messageMode = false
+        // A hidden reader must not constrain the window: its tab and status
+        // rows made the 70-point ticker lay out 82 points tall (header cut).
+        fullMessageView.setSessions([], selected: 0, status: "", live: false,
+                                    showJump: false, width: detailWidth)
         messageReaderSnapshot = nil
         panel.becomesKeyOnlyIfNeeded = peek
         (panel.contentView as? CompactInteractionView)?.dragOnly = peek

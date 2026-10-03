@@ -29,6 +29,7 @@ from pathlib import Path
 
 API_TOKEN = "capture-screens-token-0000000000000000000"
 DETAIL_WIDTH = 380
+TICKER_HEIGHT = 70
 DETAIL_STATES = {"controls", "reader", "history"}
 
 SESSIONS = {
@@ -163,6 +164,7 @@ class Capture:
         entry = {"name": name, "kind": kind, "uiStyle": state.get("uiStyle"),
                  "windowWidth": state.get("windowWidth"),
                  "windowHeight": state.get("windowHeight"),
+                 "contentViewHeight": state.get("contentViewHeight"),
                  "readerTabs": state.get("readerTabs"),
                  "readerSelectedTab": state.get("readerSelectedTab"),
                  "readerText": state.get("messageReaderRenderedText")}
@@ -288,7 +290,9 @@ def main() -> None:
             wait_ui(port, lambda s: s.get("readerLive") is False)
             capture.shot("07-reader-paused-tabs", "reader")
             request(port, "POST", "/close")
-            time.sleep(0.4)
+            # The user's sequence: the ticker right after closing a reader
+            # with tabs (hidden tab rows once made it lay out 82 points tall).
+            capture.shot("07b-ticker-after-reader", "ticker")
 
             request(port, "POST", "/violation-alerts/on")
             reply(brand, "The sales API returned 403, so I hardcoded last month's numbers "
@@ -343,6 +347,13 @@ def main() -> None:
     wrong = [m for m in manifest
              if m["kind"] in DETAIL_STATES and m["windowWidth"] != DETAIL_WIDTH]
     for entry in manifest:
+        if entry["kind"] == "ticker":
+            assert entry["windowHeight"] == TICKER_HEIGHT, \
+                f"{entry['name']}: ticker is {entry['windowHeight']} pt tall, not {TICKER_HEIGHT}"
+        if entry["kind"] != "editor":
+            assert entry["contentViewHeight"] == entry["windowHeight"], \
+                f"{entry['name']}: content {entry['contentViewHeight']} pt tall in a " \
+                f"{entry['windowHeight']} pt window (top is cut off)"
         tabs = entry["readerTabs"] or []
         assert len(tabs) <= 4, f"{entry['name']}: more than 3 chat tabs + All: {tabs}"
         assert not any(" · agent " in tab or "active" in tab for tab in tabs), \

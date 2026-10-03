@@ -135,11 +135,11 @@ def main() -> None:
             assert paused["readerStatus"].startswith("❚❚ Paused · message 1 of 2"), \
                 paused["readerStatus"]
             think(alpha, "ALPHA_THREE: third alpha thought.")
-            time.sleep(1.0)
-            still = wait_ui(port, lambda ui: True)
+            # Wait until the new message is processed (counted), then check
+            # that the paused reader did not move.
+            still = wait_ui(port, lambda ui: any(
+                "Alpha" in tab and "(1 new)" in tab for tab in ui.get("readerTabs", [])))
             assert "ALPHA_ONE" in still["messageReaderText"], still["messageReaderText"]
-            assert any("Alpha" in tab and "(1 new)" in tab for tab in still["readerTabs"]), \
-                still["readerTabs"]
 
             # Jump to latest resumes live; a tab switches session.
             request(port, "POST", "/reader-latest")
