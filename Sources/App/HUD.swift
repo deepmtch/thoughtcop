@@ -733,6 +733,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 .contains(fullMessageView.selectedTab)
                 ? fullMessageView.tabTitles[fullMessageView.selectedTab] : NSNull(),
             "readerStatus": messageMode ? fullMessageView.statusText : "",
+            "readerTabFrames": messageMode ? zip(fullMessageView.tabFrames,
+                                                 fullMessageView.tabContentFrames).map {
+                ["x": Int($0.minX), "y": Int($0.minY), "width": Int($0.width),
+                 "contentX": Int($1.minX), "contentWidth": Int($1.width)] } : [],
+            "readerTabAreaWidth": messageMode ? Int(fullMessageView.tabAreaWidth) : 0,
             "messageReaderIndex": messageMode ? compactIndex : NSNull(),
             "messageReaderSource": messageReaderSnapshot?.source ?? NSNull(),
             "messageReaderText": messageReaderSnapshot?.text ?? NSNull(),

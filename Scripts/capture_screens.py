@@ -167,7 +167,9 @@ class Capture:
                  "contentViewHeight": state.get("contentViewHeight"),
                  "readerTabs": state.get("readerTabs"),
                  "readerSelectedTab": state.get("readerSelectedTab"),
-                 "readerText": state.get("messageReaderRenderedText")}
+                 "readerText": state.get("messageReaderRenderedText"),
+                 "readerTabFrames": state.get("readerTabFrames"),
+                 "readerTabAreaWidth": state.get("readerTabAreaWidth")}
         self.manifest.append(entry)
         return entry
 
@@ -355,6 +357,21 @@ def main() -> None:
                 f"{entry['name']}: content {entry['contentViewHeight']} pt tall in a " \
                 f"{entry['windowHeight']} pt window (top is cut off)"
         tabs = entry["readerTabs"] or []
+        frames = entry.get("readerTabFrames") or []
+        area = entry.get("readerTabAreaWidth") or 0
+        for frame in frames:
+            assert frame["x"] + frame["width"] <= area, \
+                f"{entry['name']}: tab chip runs past the reader: {frame} > {area}"
+            assert frame["width"] <= (area - 6) // 2 + 1, \
+                f"{entry['name']}: tab chip wider than half the row: {frame}"
+            # Dot and title keep 10 pt to each chip edge (BUG-093).
+            assert frame["contentX"] >= 10 and \
+                frame["contentX"] + frame["contentWidth"] <= frame["width"] - 10, \
+                f"{entry['name']}: tab chip text touches its edge: {frame}"
+        for a_, b_ in zip(frames, frames[1:]):
+            if a_["y"] == b_["y"]:
+                assert a_["x"] + a_["width"] < b_["x"], \
+                    f"{entry['name']}: tab chips overlap: {a_} {b_}"
         assert len(tabs) <= 4, f"{entry['name']}: more than 3 chat tabs + All: {tabs}"
         assert not any(" · agent " in tab or "active" in tab for tab in tabs), \
             f"{entry['name']}: sub-agent or aggregate tab: {tabs}"
