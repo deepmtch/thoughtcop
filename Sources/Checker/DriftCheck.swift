@@ -160,7 +160,7 @@ func evaluationResponseFormat() -> [String: Any] {
 /// URLSession queue with the message content, or a failure description.
 private func sendChatRequest(backend: DriftBackend, system: String,
                              envelopeText: String, responseFormat: [String: Any],
-                             completion: @escaping (Result<String, Error>) -> Void) {
+                             completion: @escaping (Result<(String, TokenUsage?), Error>) -> Void) {
     struct RequestFailure: LocalizedError {
         let errorDescription: String?
     }
@@ -200,7 +200,7 @@ private func sendChatRequest(backend: DriftBackend, system: String,
               let text = message["content"] as? String else {
             fail("invalid response"); return
         }
-        completion(.success(text))
+        completion(.success((text, TokenUsage(response: root))))
     }.resume()
 }
 
@@ -253,7 +253,11 @@ private func checkOneInstruction(_ instruction: String,
             switch result {
             case .failure(let error):
                 fail(error.localizedDescription)
-            case .success(let text):
+            case .success(let (text, usage)):
+                if let usage {
+                    UsageStore.shared.record(model: backend.label, usage: usage,
+                                             secondCheck: false)
+                }
                 guard let decision = parseEvaluationDecision(Data(text.utf8)) else {
                     fail("checker returned invalid decision JSON"); return
                 }
@@ -374,7 +378,11 @@ private func verifyClaim(_ claim: EvaluationDecision, instruction: String,
                 recordType: evidence.eventType, requestID: requestID,
                 status: "error", latencyMs: latency, purpose: "verification")
             DispatchQueue.main.async { done(.failure(error)) }
-        case .success(let text):
+        case .success(let (text, usage)):
+            if let usage {
+                UsageStore.shared.record(model: backend.label, usage: usage,
+                                         secondCheck: true)
+            }
             guard let decision = parseVerificationDecision(Data(text.utf8)) else {
                 PrivacyAudit.shared.recordExternalResult(
                     source: source, destination: backend.label,
@@ -424,6 +432,7 @@ func checkDrift(_ evidence: EvaluationRecord,
         return
     }
     let started = Date()
+    for backend in backends { fetchModelPrice(for: backend) }
     let verify = ViolationVerificationPreference.load()
     var failures: [String] = []
     var rejectedClaims = 0

@@ -27,7 +27,7 @@ final class ProviderCredentialsEditor: NSWindowController, NSWindowDelegate,
         let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 350),
                              styleMask: [.titled, .closable],
                              backing: .buffered, defer: false)
-        window.title = "Provider Credentials"
+        window.title = "Provider Keys"
         window.level = .floating
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -64,39 +64,58 @@ final class ProviderCredentialsEditor: NSWindowController, NSWindowDelegate,
         content.wantsLayer = true
         content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
-        let title = NSTextField(labelWithString: "Configure external checking")
+        let title = NSTextField(labelWithString: "Provider keys")
         title.font = .systemFont(ofSize: 15, weight: .semibold)
         let help = wrappingLabel(
-            "Keys are stored in your macOS Keychain. Thinkpeek sends the check instruction and each eligible reasoning or assistant-response record directly to Groq, with Cerebras as fallback.")
-        let precedence = wrappingLabel(
-            "Process environment and a development checkout's .env override Keychain values. Leave a field blank to keep its saved key.")
+            "Stored in your macOS Keychain. Your rules and each message are sent to Groq for checking, with Cerebras as fallback.")
+        let precedence = wrappingLabel("")
+        precedence.isHidden = true
 
-        let groqStatus = statusLabel(statuses[.groq] ?? "Not configured")
-        let cerebrasStatus = statusLabel(statuses[.cerebras] ?? "Not configured")
+        func providerSection(_ name: String, field: NSSecureTextField,
+                             remove: NSButton, status: String) -> NSStackView {
+            let label = NSTextField(labelWithString: "\(name) API key")
+            label.font = .systemFont(ofSize: 12, weight: .semibold)
+            let saved = status == "Active: macOS Keychain"
+            let override = status.hasPrefix("Active: environment")
+            // The hint matches the real state: keep a saved key, or paste one.
+            field.placeholderString = saved ? "Saved — leave blank to keep" : "Paste API key"
+            let shown = override ? "Using the key from your environment or .env"
+                : saved ? "Saved in Keychain" : "Not set"
+            let statusText = statusLabel(shown)
+            // Removing is offered only when there is a saved key to remove.
+            remove.isHidden = !saved
+            let section = NSStackView(views: [label, field, statusText, remove])
+            section.orientation = .vertical
+            section.alignment = .leading
+            section.spacing = 5
+            field.translatesAutoresizingMaskIntoConstraints = false
+            field.widthAnchor.constraint(equalTo: section.widthAnchor).isActive = true
+            return section
+        }
         configureSecureField(groqField, provider: "Groq")
         configureSecureField(cerebrasField, provider: "Cerebras")
         removeGroq.setAccessibilityLabel("Remove saved Groq key from Keychain")
         removeCerebras.setAccessibilityLabel("Remove saved Cerebras key from Keychain")
-
-        let grid = NSGridView(views: [
-            [NSTextField(labelWithString: "Groq API key"), groqField],
-            [NSTextField(labelWithString: ""), groqStatus],
-            [NSTextField(labelWithString: ""), removeGroq],
-            [NSTextField(labelWithString: "Cerebras API key"), cerebrasField],
-            [NSTextField(labelWithString: ""), cerebrasStatus],
-            [NSTextField(labelWithString: ""), removeCerebras],
+        let grid = NSStackView(views: [
+            providerSection("Groq", field: groqField, remove: removeGroq,
+                            status: statuses[.groq] ?? "Not configured"),
+            providerSection("Cerebras", field: cerebrasField, remove: removeCerebras,
+                            status: statuses[.cerebras] ?? "Not configured"),
         ])
-        grid.rowSpacing = 6
-        grid.columnSpacing = 12
-        grid.column(at: 0).xPlacement = .trailing
-        grid.column(at: 1).xPlacement = .fill
+        grid.orientation = .vertical
+        grid.alignment = .leading
+        grid.spacing = 18
+        for section in grid.arrangedSubviews {
+            section.widthAnchor.constraint(equalTo: grid.widthAnchor).isActive = true
+        }
 
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel(_:)))
         cancel.bezelStyle = .rounded
         cancel.keyEquivalent = "\u{1b}"
-        let save = NSButton(title: "Save to Keychain", target: self,
+        let save = NSButton(title: "Save", target: self,
                             action: #selector(save(_:)))
         save.bezelStyle = .rounded
+        save.bezelColor = .controlAccentColor
         save.keyEquivalent = "s"
         save.keyEquivalentModifierMask = [.command]
         save.setAccessibilityLabel("Save provider credentials to macOS Keychain")
@@ -115,10 +134,10 @@ final class ProviderCredentialsEditor: NSWindowController, NSWindowDelegate,
             help.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 7),
             help.leadingAnchor.constraint(equalTo: title.leadingAnchor),
             help.trailingAnchor.constraint(equalTo: title.trailingAnchor),
-            precedence.topAnchor.constraint(equalTo: help.bottomAnchor, constant: 7),
+            precedence.topAnchor.constraint(equalTo: help.bottomAnchor),
             precedence.leadingAnchor.constraint(equalTo: title.leadingAnchor),
             precedence.trailingAnchor.constraint(equalTo: title.trailingAnchor),
-            grid.topAnchor.constraint(equalTo: precedence.bottomAnchor, constant: 16),
+            grid.topAnchor.constraint(equalTo: help.bottomAnchor, constant: 16),
             grid.leadingAnchor.constraint(equalTo: title.leadingAnchor),
             grid.trailingAnchor.constraint(equalTo: title.trailingAnchor),
             buttons.trailingAnchor.constraint(equalTo: title.trailingAnchor),
@@ -127,7 +146,6 @@ final class ProviderCredentialsEditor: NSWindowController, NSWindowDelegate,
     }
 
     private func configureSecureField(_ field: NSSecureTextField, provider: String) {
-        field.placeholderString = "Leave blank to keep the saved key"
         field.delegate = self
         field.setAccessibilityLabel("\(provider) API key")
         field.setAccessibilityHelp("Stored only in the macOS login Keychain")

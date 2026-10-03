@@ -1251,7 +1251,7 @@ if CommandLine.arguments.contains("--check-rules-editor-selftest") ||
         CheckRulesStore.saveMode(mode, defaults: defaults)
     }, closed: {})
     guard editor.currentText == CheckRulesStore.defaultValue,
-          editor.actionTitles == ["Cancel", "Save Check Instructions"],
+          editor.actionTitles == ["Cancel", "Save Rules"],
           editor.actionsAreHorizontal,
           editor.currentMode == .eachLine,
           CheckRulesStore.instruction(defaults: defaults) ==
@@ -1262,7 +1262,7 @@ if CommandLine.arguments.contains("--check-rules-editor-selftest") ||
         .compactMap({ $0 as? NSStackView })
         .flatMap(\.arrangedSubviews)
         .compactMap({ $0 as? NSButton })
-        .first(where: { $0.title == "Save Check Instructions" }) else { exit(1) }
+        .first(where: { $0.title == "Save Rules" }) else { exit(1) }
     saveButton.performClick(nil)
     guard saveActionRan,
           CheckRulesStore.loadRaw(defaults: defaults) == CheckRulesStore.defaultValue,
@@ -1526,6 +1526,54 @@ if CommandLine.arguments.contains("--violation-store-selftest") {
     print("violations: persisted=true ordered=true reviewedState=true " +
           "exactStatusBadge=true corruptFilePreserved=true promptSnapshot=true " +
           "permissions=0600 historyLimit=true")
+    exit(0)
+}
+
+if CommandLine.arguments.contains("--usage-selftest") {
+    let path = NSTemporaryDirectory() + "thinkpeek-usage-\(UUID().uuidString).json"
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    let store = UsageStore(path: path)
+    let day = ISO8601DateFormatter().date(from: "2026-10-02T12:00:00Z")!
+    let lastMonth = ISO8601DateFormatter().date(from: "2026-09-15T12:00:00Z")!
+    let groqModel: [String: Any] = ["id": "qwen/qwen3.8-27b",
+        "pricing": ["prompt": "0.0000008", "completion": "0.000004"]]
+    let price = ModelPrice(modelResponse: groqModel)
+    let usage = TokenUsage(response: ["usage": ["prompt_tokens": 280, "completion_tokens": 70]])
+    store.record(model: "Groq · qwen", usage: TokenUsage(input: 280, output: 70),
+                 secondCheck: false, at: day)
+    store.record(model: "Groq · qwen", usage: TokenUsage(input: 300, output: 60),
+                 secondCheck: true, at: day)
+    store.record(model: "Groq · qwen", usage: TokenUsage(input: 1000, output: 100),
+                 secondCheck: false, at: lastMonth)
+    let unpriced = store.summary(today: day)
+    if let price { store.setPrice(price, for: "Groq · qwen") }
+    let priced = store.summary(today: day)
+    let reloaded = UsageStore(path: path).summary(today: day)
+    let expectedToday = 580 * 0.0000008 + 130 * 0.000004
+    let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+    guard price == ModelPrice(input: 0.0000008, output: 0.000004),
+          usage == TokenUsage(input: 280, output: 70),
+          TokenUsage(response: [:]) == nil,
+          ModelPrice(modelResponse: ["id": "x"]) == nil,
+          unpriced.today.costUSD == nil,                       // never guessed
+          formattedCost(nil) == "price not published",
+          priced.today.totals == UsageTotals(checks: 1, secondChecks: 1,
+                                             inputTokens: 580, outputTokens: 130),
+          abs((priced.today.costUSD ?? 0) - expectedToday) < 1e-12,
+          priced.month.totals.checks == 1,                     // September excluded
+          reloaded.today.totals == priced.today.totals,
+          (attributes?[.posixPermissions] as? NSNumber)?.intValue == 0o600,
+          usageMenuTitle(priced.today) == "Usage Today: $0.0010 · 1 checks…" else {
+        FileHandle.standardError.write(("usage self-test failed: price=\(String(describing: price)) " +
+            "usage=\(String(describing: usage)) unpriced=\(String(describing: unpriced.today.costUSD)) " +
+            "today=\(priced.today.totals) cost=\(String(describing: priced.today.costUSD)) " +
+            "month=\(priced.month.totals.checks) reloaded=\(reloaded.today.totals) " +
+            "perm=\(String(describing: attributes?[.posixPermissions])) " +
+            "title=\(usageMenuTitle(priced.today))\n").data(using: .utf8)!)
+        exit(1)
+    }
+    print("usage: providerTokens=true publishedPrice=true unpricedNotGuessed=true " +
+          "perDay=true monthScope=true persisted=0600")
     exit(0)
 }
 

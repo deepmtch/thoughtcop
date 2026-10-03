@@ -13,63 +13,24 @@ final class FlippedView: NSView {
 
 final class HistoryEmptyStateView: NSView {
     var editPromptRequested: (() -> Void)?
-    private let icon: NSImageView
-    private let title: NSTextField
-    private let detail: NSTextField
-    private let edit: NSButton
+    private let detail = NSTextField(wrappingLabelWithString: "")
 
     override init(frame frameRect: NSRect) {
-        icon = NSImageView(image: NSImage())
-        title = NSTextField(labelWithString: "")
-        detail = NSTextField(labelWithString: "")
-        edit = NSButton(title: "Edit Check Prompt…", target: nil, action: nil)
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
-
-        icon.image = NSImage(
-            systemSymbolName: "checkmark.shield",
-            accessibilityDescription: "No violations") ?? NSImage()
-        icon.contentTintColor = .systemGreen
-        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 30, weight: .medium)
-
-        title.stringValue = "No violations recorded"
-        title.font = .systemFont(ofSize: 16, weight: .semibold)
-        title.alignment = .center
-
-        detail.stringValue =
-            "Matches to your check prompt will appear here and remain available after restart."
         detail.font = .systemFont(ofSize: 12)
         detail.textColor = .secondaryLabelColor
         detail.alignment = .center
-        detail.maximumNumberOfLines = 2
-        detail.lineBreakMode = .byWordWrapping
-        detail.cell?.wraps = true
-        detail.cell?.truncatesLastVisibleLine = true
-        // Wrap within the window instead of demanding the full text width:
-        // the single-line width (capped at 390 + 2 × 42) held history at 510 pt.
+        detail.maximumNumberOfLines = 3
         detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        edit.target = self
-        edit.action = #selector(editPrompt(_:))
-        edit.bezelStyle = .rounded
-        edit.controlSize = .regular
-        edit.setAccessibilityLabel("Edit the prompt used to detect violations")
-
-        let stack = NSStackView(views: [icon, title, detail, edit])
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 10
-        stack.setCustomSpacing(14, after: detail)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-
+        detail.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(detail)
+        showStorageError(nil)
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 230),
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 42),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -42),
-            detail.widthAnchor.constraint(lessThanOrEqualToConstant: 390),
+            detail.topAnchor.constraint(equalTo: topAnchor, constant: 18),
+            detail.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -18),
+            detail.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            detail.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
         ])
     }
 
@@ -77,33 +38,22 @@ final class HistoryEmptyStateView: NSView {
 
     override func layout() {
         super.layout()
-        let width = max(0, min(390, bounds.width - 84))
+        let width = max(0, bounds.width - 24)
         if abs(detail.preferredMaxLayoutWidth - width) > 0.5 {
             detail.preferredMaxLayoutWidth = width
             detail.invalidateIntrinsicContentSize()
         }
     }
 
-    @objc private func editPrompt(_ sender: Any?) { editPromptRequested?() }
-
+    /// One quiet line; a storage problem is stated in words, never hidden.
     func showStorageError(_ message: String?) {
-        let hasError = message != nil
-        icon.image = NSImage(systemSymbolName: hasError
-            ? "exclamationmark.shield" : "checkmark.shield",
-            accessibilityDescription: hasError ? "Violation history unavailable"
-                                               : "No violations")
-        icon.contentTintColor = hasError ? .systemOrange : .systemGreen
-        title.stringValue = hasError ? "Violation history unavailable"
-                                     : "No violations recorded"
-        detail.stringValue = message ??
-            "Matches to your check prompt will appear here and remain available after restart."
-        edit.isHidden = hasError
+        detail.stringValue = message.map { "Violation history is unavailable. \($0)" }
+            ?? "No violations yet."
+        detail.textColor = message == nil ? .secondaryLabelColor : .systemOrange
+        setAccessibilityLabel(detail.stringValue)
     }
 }
 
-/// A wrapping label whose intrinsic width never pushes its container wider.
-/// AppKit's stock wrapping label can report the unwrapped text width before
-/// Auto Layout assigns its real width, which stretches or collapses card rows.
 final class WrappingTextField: NSTextField {
     private var measuredWidth: CGFloat = 0
 
@@ -330,6 +280,9 @@ final class EventCard: NSView {
     private var stackInsets: [NSLayoutConstraint] = []
     private var stackSpacing: CGFloat = 8
     private(set) var isViolationRow = false
+    /// Every history item (thought or violation) is a compact list row.
+    private(set) var isListRow = false
+    private var rowText = ""
     private(set) var violationExpanded = false
     private let providerIcon = ProviderIconView(frame: .zero)
     private var selected = false
@@ -397,6 +350,7 @@ final class EventCard: NSView {
         body.setContentCompressionResistancePriority(.required, for: .vertical)
         body.setContentHuggingPriority(.required, for: .vertical)
         body.textStorage?.setAttributedString(renderedBody(event.text, kind: event.kind))
+        rowText = event.text
 
         footer.font = .systemFont(ofSize: 11, weight: .medium)
         footer.textColor = .secondaryLabelColor
@@ -525,7 +479,7 @@ final class EventCard: NSView {
         // Only an expanded row wraps; collapsed rows are single truncated
         // lines and need no width hint. Updating the hint on every row
         // invalidated all 500 rows on each layout pass (BUG-088 follow-up).
-        guard isViolationRow, violationExpanded else { return }
+        guard isListRow, violationExpanded else { return }
         let width = stack.bounds.width
         for label in [violationEvidence, violationReason]
             where abs(label.preferredMaxLayoutWidth - width) > 0.5 {
@@ -540,7 +494,7 @@ final class EventCard: NSView {
         window?.makeFirstResponder(self)
         selectedRequested?()
         if event.clickCount == 2 { openRequested?() }
-        else if isViolationRow { violationToggleRequested?() }
+        else if isListRow { violationToggleRequested?() }
     }
 
     @objc private func openFullMessage(_ sender: Any?) { openRequested?() }
@@ -548,7 +502,7 @@ final class EventCard: NSView {
     /// Collapsed: one truncated quote line. Expanded: the whole quote, the
     /// reason, and the check details with a link to the full message.
     func setViolationExpanded(_ expanded: Bool) {
-        guard isViolationRow else { return }
+        guard isListRow else { return }
         violationExpanded = expanded
         violationEvidence.maximumNumberOfLines = expanded ? 0 : 1
         violationEvidence.lineBreakMode = expanded ? .byWordWrapping : .byTruncatingTail
@@ -581,7 +535,7 @@ final class EventCard: NSView {
         self.selected = selected
         setAccessibilitySelected(selected)
         layer?.borderWidth = selected ? 2 : 1
-        if isViolationRow {
+        if isListRow {
             layer?.borderWidth = 0
             layer?.backgroundColor = selected
                 ? NSColor.unemphasizedSelectedContentBackgroundColor.cgColor
@@ -595,7 +549,16 @@ final class EventCard: NSView {
         }
     }
 
-    func setFooter(_ text: String, color: NSColor = .secondaryLabelColor) {
+    func setFooter(_ text: String, color: NSColor = .secondaryLabelColor,
+                   detail: String? = nil) {
+        if isListRow, !isViolationRow {
+            // A thought row shows its check status in the expanded details.
+            violationDetail.stringValue = text + " ·"
+            violationDetail.toolTip = detail
+            DispatchQueue.main.async { [weak self] in self?.contentChanged?() }
+            return
+        }
+        footer.toolTip = detail
         footer.stringValue = text
         footer.textColor = color
         footer.isHidden = false
@@ -611,6 +574,44 @@ final class EventCard: NSView {
 
     var displayedText: String { body.string }
 
+    /// A thought, response or omitted-analysis item as a two-line row: grey
+    /// dot, source and time, then one truncated line of its text.
+    func setThoughtRow() {
+        guard !isViolationRow else { return }
+        violationEvidence.stringValue = rowText
+            .replacingOccurrences(of: "\n", with: " ")
+        violationReason.stringValue = ""
+        if violationDetail.stringValue.isEmpty { violationDetail.stringValue = "" }
+        violationDot.layer?.backgroundColor = NSColor.tertiaryLabelColor.cgColor
+        violationDot.layer?.borderWidth = 0
+        violationDot.toolTip = "Message"
+        violationDot.setAccessibilityLabel("Message")
+        applyRowLayout()
+    }
+
+    private func applyRowLayout() {
+        isListRow = true
+        body.isHidden = true
+        footer.isHidden = true
+        violationBadge.isHidden = true
+        violationAccent.isHidden = true
+        providerIcon.isHidden = true
+        violationDot.isHidden = false
+        violationChevron.isHidden = false
+        rowSeparator.isHidden = false
+        violationEvidence.isHidden = false
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.cornerRadius = 6
+        layer?.borderWidth = 0
+        stack.spacing = 3
+        stackInsets[0].constant = 8
+        stackInsets[1].constant = 12
+        stackInsets[2].constant = -12
+        stackInsets[3].constant = -8
+        setSelected(selected)
+        setViolationExpanded(violationExpanded)
+    }
+
     func setViolation(reason: String, evidence: String, provider: String,
                       latencyMs: Int, checkPrompt: String) {
         isViolationRow = true
@@ -621,24 +622,8 @@ final class EventCard: NSView {
                                                           latencyMs: latencyMs) + " ·"
         violationDetail.toolTip = "Checked by \(provider) in \(latencyMs) ms\n" +
             "Check prompt: \(checkPrompt)"
-        body.isHidden = true
-        footer.isHidden = true
-        violationBadge.isHidden = true
-        violationAccent.isHidden = true
-        providerIcon.isHidden = true
-        violationDot.isHidden = false
-        violationChevron.isHidden = false
-        rowSeparator.isHidden = false
-        violationEvidence.isHidden = false
-        layer?.cornerRadius = 6
-        layer?.borderWidth = 0
-        stack.spacing = 3
-        stackInsets[0].constant = 8
-        stackInsets[1].constant = 12
-        stackInsets[2].constant = -12
-        stackInsets[3].constant = -8
-        setSelected(selected)
-        setViolationExpanded(violationExpanded)
+        violationDot.layer?.backgroundColor = NSColor.systemRed.cgColor
+        applyRowLayout()
         setAccessibilityLabel(hasEvidence
             ? "Violation. \(evidence). Reason: \(reason). Checked by \(provider)."
             : "Violation. \(reason). Checked by \(provider).")

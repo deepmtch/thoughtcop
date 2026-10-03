@@ -7,6 +7,10 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- Usage and cost: "Usage Today" in the menu-bar menu and a Usage window, from
+  provider-reported tokens and provider-published prices.
+- One coherent UI: one detail width, every history item a row, a calmer reader,
+  editors and keys window, and consistent "rules / check / violation" wording.
 - Groq checks default to `qwen/qwen3.8-27b`; measured 15/15 violations caught and
   3/45 false alarms on the accuracy test (was 8–10/15 and 5–8/45).
 - Only records written after Thinkpeek starts are checked; copied history in

@@ -160,8 +160,9 @@ final class FullMessageView: NSVisualEffectView {
             toneStripe.layer?.backgroundColor = NSColor.systemOrange.cgColor
             sourceLabel.textColor = .secondaryLabelColor
         case .error:
-            toneWash.layer?.backgroundColor = NSColor.systemRed
-                .withAlphaComponent(0.12).cgColor
+            // A thin red stripe marks a violation; the surface stays the
+            // normal window background like every other view.
+            toneWash.layer?.backgroundColor = NSColor.clear.cgColor
             toneStripe.layer?.backgroundColor = NSColor.systemRed.cgColor
             sourceLabel.textColor = .secondaryLabelColor
         }

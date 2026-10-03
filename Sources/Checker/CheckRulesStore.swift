@@ -8,8 +8,8 @@ enum CheckInstructionMode: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .wholeText: return "Whole text is one instruction"
-        case .eachLine: return "Each non-empty line is independent"
+        case .wholeText: return "All text is one rule"
+        case .eachLine: return "Each line is its own rule"
         }
     }
 }

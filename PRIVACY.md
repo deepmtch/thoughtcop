@@ -35,6 +35,9 @@ to prevent all external analysis.
   permissions. It keeps the newest 50 violations by default (selectable: 10, 25,
   50, 100, 250, 500); older ones are deleted. Violations the second check
   rejects are never stored.
+- Usage totals (checks and token counts per day and model, no content) are stored
+  at `~/Library/Application Support/Thinkpeek/usage.json` with user-only
+  permissions; prices are read from the provider's model list.
 - Content-free audit and UI API logs are stored under
   `~/Library/Logs/Thinkpeek/` with user-only permissions.
 - The UI API capability is stored at

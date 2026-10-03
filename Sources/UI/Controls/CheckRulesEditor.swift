@@ -29,10 +29,10 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
         closeHandler = closed
         originalText = contents
         originalMode = mode
-        let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 560, height: 380),
+        let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 340),
                              styleMask: [.titled, .closable, .resizable],
                              backing: .buffered, defer: false)
-        window.title = "Check Prompt"
+        window.title = "Rules"
         window.level = .floating
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 440, height: 300)
@@ -69,19 +69,22 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
         content.wantsLayer = true
         content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
-        let title = NSTextField(labelWithString: "What should Thinkpeek flag?")
+        let title = NSTextField(labelWithString: "What should Thinkpeek check?")
         title.font = .systemFont(ofSize: 15, weight: .semibold)
         title.translatesAutoresizingMaskIntoConstraints = false
 
-        let help = NSTextField(labelWithString:
-            "Thinkpeek checks provider reasoning when available and every assistant response against this instruction exactly as shown.")
+        // Wrapping: a single-line label demanded its full text width and made
+        // the window about 740 points wide.
+        let help = NSTextField(wrappingLabelWithString:
+            "Each AI reply and readable thought is checked against your rules, exactly as written.")
+        help.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         help.font = .systemFont(ofSize: 12)
         help.textColor = .secondaryLabelColor
         help.translatesAutoresizingMaskIntoConstraints = false
         help.maximumNumberOfLines = 2
         help.lineBreakMode = .byWordWrapping
 
-        let modeLabel = NSTextField(labelWithString: "Evaluate as:")
+        let modeLabel = NSTextField(labelWithString: "Check as:")
         modeLabel.font = .systemFont(ofSize: 12, weight: .medium)
         modeLabel.textColor = .labelColor
         modeLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -94,10 +97,10 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
         modeButton.target = self
         modeButton.action = #selector(modeChanged(_:))
         modeButton.translatesAutoresizingMaskIntoConstraints = false
-        modeButton.setAccessibilityLabel("Evaluation mode")
-        modeButton.setAccessibilityHelp("Choose whether the entire prompt or each non-empty line is evaluated as one instruction.")
+        modeButton.setAccessibilityLabel("Check mode")
+        modeButton.setAccessibilityHelp("Choose whether all text is one rule or each non-empty line is its own rule.")
 
-        let promptLabel = NSTextField(labelWithString: "Check instructions")
+        let promptLabel = NSTextField(labelWithString: "Rules")
         promptLabel.font = .systemFont(ofSize: 12, weight: .medium)
         promptLabel.textColor = .labelColor
         promptLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -122,12 +125,13 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
         textView.textContainer?.containerSize = NSSize(
             width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
         textView.delegate = self
-        textView.setAccessibilityLabel("Check instructions")
-        textView.setAccessibilityHelp("Enter the exact instruction Thinkpeek should use to flag provider reasoning and assistant responses.")
+        textView.setAccessibilityLabel("Rules")
+        textView.setAccessibilityHelp("Enter the exact rules Thinkpeek checks AI replies and thoughts against.")
         scrollView.documentView = textView
 
-        let privacy = NSTextField(labelWithString:
-            "Stored locally. Reasoning and responses are sent only when checking is enabled.")
+        let privacy = NSTextField(wrappingLabelWithString:
+            "Stored on this Mac. Messages are sent for checking only while checks are on.")
+        privacy.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         privacy.font = .systemFont(ofSize: 11)
         privacy.textColor = .secondaryLabelColor
         privacy.translatesAutoresizingMaskIntoConstraints = false
@@ -135,12 +139,14 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel(_:)))
         cancel.bezelStyle = .rounded
         cancel.keyEquivalent = "\u{1b}"
-        let save = NSButton(title: "Save Check Instructions", target: self,
+        let save = NSButton(title: "Save Rules", target: self,
                             action: #selector(save(_:)))
         save.bezelStyle = .rounded
+        // Visibly the primary action; Return stays a newline in the editor.
+        save.bezelColor = .controlAccentColor
         save.keyEquivalent = "s"
         save.keyEquivalentModifierMask = [.command]
-        save.setAccessibilityLabel("Save check rules locally in Thinkpeek")
+        save.setAccessibilityLabel("Save rules on this Mac")
         buttonRow.orientation = .horizontal
         buttonRow.alignment = .centerY
         buttonRow.spacing = 8
@@ -197,8 +203,8 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
     private func presentUnsavedChangesAlert() {
         guard let window else { return }
         let alert = NSAlert()
-        alert.messageText = "Save changes to the check prompt?"
-        alert.informativeText = "Unsaved check instructions will be lost."
+        alert.messageText = "Save changes to your rules?"
+        alert.informativeText = "Unsaved changes will be lost."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Save Changes")
         alert.addButton(withTitle: "Cancel")

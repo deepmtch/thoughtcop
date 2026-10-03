@@ -94,3 +94,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-087](BUG-087-copied-chat-history-was-checked-again.md) | Copied chat history in resumed sessions was checked again | Fixed |
 | [BUG-088](BUG-088-violation-history-was-overloaded.md) | Violation history cards and window were overloaded | Fixed |
 | [BUG-089](BUG-089-checker-missed-blocks-and-flagged-ordinary-actions.md) | Checker missed blocked replies and flagged ordinary actions | Fixed |
+| [BUG-090](BUG-090-ui-was-not-one-coherent-app.md) | The UI was not one coherent app; cost was not visible | Fixed |

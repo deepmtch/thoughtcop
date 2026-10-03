@@ -77,9 +77,12 @@ final class MessagePreview {
     var detailText: String {
         switch evaluation {
         case .alert(let decision):
-            let proof = decision.evidence.isEmpty ? "" : "\nEvidence: \(decision.evidence)"
-            return "**Violation**\n\(decision.reason)\(proof)\n\n" +
-                "Triggered by \(source):\n\(text)"
+            // Same order as the history row: the quote, why, then the full
+            // message once (omitted when it is exactly the quote).
+            let quote = decision.evidence.isEmpty ? "" : "“\(decision.evidence)”\n\n"
+            let full = text == decision.evidence ? ""
+                : "\n\n**Full message**\n\(text)"
+            return "**Violation**\n\(quote)Why: \(decision.reason)\(full)"
         case .failed(let message):
             return "**Check unavailable**\nThis message was not evaluated.\n" +
                 "\(message)\n\nOriginal item from \(source):\n\(text)"
@@ -136,7 +139,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var messageReaderSnapshot: MessageReaderSnapshot?
     // Match the stable AppKit content surface. A 460-point frame clipped the
     // final 50 points of the toolbar, including the Hide button.
-    private let peekWidth: CGFloat = 510
+    /// The one-line ticker follows the Window Width setting (Narrow 400 /
+    /// Standard 560); 400 keeps the ticker bar's required 384 points.
+    private var tickerWidth: CGFloat {
+        max(CompactWindowSizing.narrowWidth, CompactWindowSizing.clamped(compactWidth))
+    }
     private let peekHeight: CGFloat = 70
     private var compactWidth = CompactWindowSizing.savedWidth()
     private var expandedHeight: CGFloat = 480
@@ -145,6 +152,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// History is a list of compact two-line rows (option C of the approved
     /// mockup). Hidden views must stay detached for this width to hold.
     private let expandedWidth: CGFloat = 380
+    /// Controls, reader and history share one width (approved unified UI).
+    private var detailWidth: CGFloat { expandedWidth }
     private var presentationKeys = Set<String>()
     private var unseenCount = 0
     private let transcriptMonitor = TranscriptMonitorWorker()
@@ -178,6 +187,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var hiddenByUser = false
     private var violationAlertsEnabled = ViolationAlertsPreference.load()
     private var violationVerificationEnabled = ViolationVerificationPreference.load()
+    private var usageMenuItem: NSMenuItem?
+    private var usageWindow: UsageWindow?
     /// Only records written after this moment are checked (see
     /// writtenSinceLaunch). Saved violations are kept regardless.
     private let launchedAt = Date()
@@ -599,7 +610,18 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // The repeating timer performs the first scan after POLL seconds.
     }
 
+    private func usageJSON(_ summary: UsageSummary) -> [String: Any] {
+        ["checks": summary.totals.checks, "secondChecks": summary.totals.secondChecks,
+         "inputTokens": summary.totals.inputTokens,
+         "outputTokens": summary.totals.outputTokens,
+         "costUSD": summary.costUSD.map { $0 as Any } ?? NSNull(),
+         "models": summary.models]
+    }
+
     private func publishAPI() {
+        let usage = UsageStore.shared.summary()
+        usageMenuItem?.title = usageMenuTitle(usage.today)
+        if usageWindow?.isVisible == true { usageWindow?.refresh(backends: driftBackends()) }
         let visibleFrame = (panel.screen ?? NSScreen.main)?.visibleFrame
         let tickerPresentation = peekTicker.presentationMetrics
         let tickerToolbarAttached = peekToolbar.arrangedSubviews.count == 2 &&
@@ -634,6 +656,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "violationRetentionLimit": violationStore.limit,
             "violationRetentionChoices": ViolationHistoryPreference.choices,
             "violationVerificationEnabled": violationVerificationEnabled,
+            "usageMenuTitle": usageMenuItem?.title ?? "",
+            "usageWindowVisible": usageWindow?.isVisible == true,
+            "usageToday": usageJSON(usage.today),
+            "usageMonth": usageJSON(usage.month),
             "violationsVisible": violationsOnly && !peekMode && !messageMode,
             "violationEmptyStateVisible": violationEmptyState?.isHidden == false,
             "currentViolationVisible": unacknowledgedViolationIndex != nil,
@@ -766,13 +792,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowDidResize(_ notification: Notification) {
         guard panel != nil else { return }
         if peekMode {
-            publishAPI()
-            return
+            compactWidth = max(CompactWindowSizing.narrowWidth,
+                               CompactWindowSizing.clamped(panel.frame.width))
         } else if messageMode {
-            compactWidth = CompactWindowSizing.clamped(panel.frame.width)
         } else if compactMode {
-            compactWidth = CompactWindowSizing.clamped(panel.frame.width)
-            detailHeaderLayout.apply(width: compactWidth)
+            detailHeaderLayout.apply(width: panel.frame.width)
         } else {
             expandedHeight = panel.frame.height
             detailHeaderLayout.apply(width: panel.frame.width)
@@ -781,7 +805,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func windowDidEndLiveResize(_ notification: Notification) {
-        if compactMode, !peekMode {
+        if peekMode {
             UserDefaults.standard.set(Double(compactWidth),
                                       forKey: CompactWindowSizing.defaultsKey)
             updateSettingsMenuChecks(peekTicker.speed)
@@ -909,6 +933,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .violationAlerts(let enabled): setViolationAlerts(enabled)
         case .violationVerification(let enabled): setViolationVerification(enabled)
         case .violationHistoryLimit(let limit): setViolationHistoryLimit(limit)
+        case .showUsage: showUsage()
+        case .closeUsage: usageWindow?.close()
         case .toggleSelectedViolation:
             guard !compactMode, eventCards.indices.contains(compactIndex) else { break }
             let card = eventCards[compactIndex]
@@ -934,12 +960,20 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         violations.target = self
         menu.addItem(violations)
         violationsMenuItem = violations
-        let checkPrompt = NSMenuItem(title: "Edit Check Prompt…",
+        menu.addItem(.separator())
+        let usage = NSMenuItem(title: usageMenuTitle(UsageStore.shared.summary().today),
+                               action: #selector(showUsageFromMenu(_:)), keyEquivalent: "")
+        usage.target = self
+        usage.toolTip = "Checks and cost today and this month"
+        menu.addItem(usage)
+        usageMenuItem = usage
+        menu.addItem(.separator())
+        let checkPrompt = NSMenuItem(title: "Edit Rules…",
                                      action: #selector(showCheckPromptFromMenu(_:)),
                                      keyEquivalent: ",")
         checkPrompt.target = self
         menu.addItem(checkPrompt)
-        let credentials = NSMenuItem(title: "Provider Credentials…",
+        let credentials = NSMenuItem(title: "Provider Keys…",
                                      action: #selector(showProviderCredentialsFromMenu(_:)),
                                      keyEquivalent: "")
         credentials.target = self
@@ -980,6 +1014,19 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func quitFromMenu(_ sender: Any?) { quitApplication() }
+
+    @objc private func showUsageFromMenu(_ sender: Any?) {
+        api.perform(.showUsage, origin: .appKit)
+    }
+
+    private func showUsage() {
+        if usageWindow == nil {
+            usageWindow = UsageWindow()
+            usageWindow?.closed = { [weak self] in self?.publishAPI() }
+        }
+        usageWindow?.show(backends: driftBackends())
+        publishAPI()
+    }
 
     private func setTickerSpeed(_ rawValue: String) {
         guard let speed = TickerSpeed(rawValue: rawValue) else { return }
@@ -1175,18 +1222,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         UserDefaults.standard.set(Double(compactWidth),
                                   forKey: CompactWindowSizing.defaultsKey)
         updateSettingsMenuChecks(peekTicker.speed)
-        guard compactMode, !peekMode else { publishAPI(); return }
-        detailHeaderLayout.apply(width: compactWidth)
-        let minimumHeight: CGFloat = messageMode
-            ? 180 : CompactWindowSizing.controlsHeight(for: compactWidth)
-        let maximumHeight: CGFloat = messageMode ? 520 : minimumHeight
-        transitionPanel(to: messageMode ? max(minimumHeight, panel.frame.height)
-                                        : minimumHeight,
-                        width: compactWidth,
-                        minSize: NSSize(width: CompactWindowSizing.minimumWidth,
-                                        height: minimumHeight),
+        // The setting sizes the ticker; detail views keep their one width.
+        guard peekMode else { publishAPI(); return }
+        transitionPanel(to: peekHeight, width: tickerWidth,
+                        minSize: NSSize(width: CompactWindowSizing.narrowWidth, height: 54),
                         maxSize: NSSize(width: CompactWindowSizing.maximumWidth,
-                                        height: maximumHeight))
+                                        height: peekHeight))
         publishAPI()
     }
 
@@ -1224,24 +1265,22 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                                      compactMode: compactMode)
         peekTicker.setActive(peek)
         if peek {
-            detailHeaderLayout.setActive(false, width: compactWidth)
-            transitionPanel(to: peekHeight, width: peekWidth,
-                            minSize: NSSize(width: 340, height: 54),
-                            maxSize: NSSize(width: peekWidth, height: peekHeight),
+            detailHeaderLayout.setActive(false, width: detailWidth)
+            transitionPanel(to: peekHeight, width: tickerWidth,
+                            minSize: NSSize(width: CompactWindowSizing.narrowWidth, height: 54),
+                            maxSize: NSSize(width: CompactWindowSizing.maximumWidth,
+                                            height: peekHeight),
                             animated: animated)
             releaseDetailFocus()
         } else {
-            detailHeaderLayout.setActive(true,
-                width: compactMode ? compactWidth : expandedWidth)
-            let controlsHeight = CompactWindowSizing.controlsHeight(for: compactWidth)
+            detailHeaderLayout.setActive(true, width: detailWidth)
+            let controlsHeight = CompactWindowSizing.controlsHeight(for: detailWidth)
             let minSize = compactMode
-                ? NSSize(width: CompactWindowSizing.minimumWidth,
-                         height: controlsHeight)
+                ? NSSize(width: detailWidth, height: controlsHeight)
                 : NSSize(width: expandedWidth, height: 300)
             let maxSize: NSSize
             if compactMode {
-                maxSize = NSSize(width: CompactWindowSizing.maximumWidth,
-                                 height: controlsHeight)
+                maxSize = NSSize(width: detailWidth, height: controlsHeight)
             } else if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
                 maxSize = NSSize(width: min(expandedWidth, visible.width),
                                  height: visible.height)
@@ -1250,7 +1289,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             transitionPanel(to: compactMode ? controlsHeight
                                             : max(360, expandedHeight),
-                            width: compactMode ? compactWidth : expandedWidth,
+                            width: detailWidth,
                             minSize: minSize, maxSize: maxSize, animated: animated)
             focusDetails()
         }
@@ -1342,13 +1381,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         fullMessageView.isHidden = false
         detailHeader.isHidden = true
         scrollView.isHidden = true
-        detailHeaderLayout.setActive(false, width: compactWidth)
+        detailHeaderLayout.setActive(false, width: detailWidth)
         peekTicker.setActive(false)
         panel.becomesKeyOnlyIfNeeded = false
-        let readerHeight = fullMessageView.preferredHeight(forWidth: compactWidth)
-        transitionPanel(to: readerHeight, width: compactWidth,
-                        minSize: NSSize(width: CompactWindowSizing.minimumWidth, height: 118),
-                        maxSize: NSSize(width: CompactWindowSizing.maximumWidth, height: 420))
+        let readerHeight = fullMessageView.preferredHeight(forWidth: detailWidth)
+        transitionPanel(to: readerHeight, width: detailWidth,
+                        minSize: NSSize(width: detailWidth, height: 118),
+                        maxSize: NSSize(width: detailWidth, height: 420))
         focusDetails()
         publishAPI()
     }
@@ -1506,7 +1545,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 feedStack.insertArrangedSubview(
                     card, at: feedStack.arrangedSubviews.count - attachedAfter)
                 // Violation rows form one list with hairline separators.
-                if card.isViolationRow { feedStack.setCustomSpacing(2, after: card) }
+                if card.isListRow { feedStack.setCustomSpacing(2, after: card) }
                 card.widthAnchor.constraint(
                     equalTo: feedStack.widthAnchor,
                     constant: -feedStack.edgeInsets.left - feedStack.edgeInsets.right)
@@ -1536,10 +1575,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if !eventCards.isEmpty {
                 compactIndex = min(max(0, compactIndex), eventCards.count - 1)
             }
-            for (index, card) in eventCards.enumerated() {
-                card.isHidden = index != compactIndex
-            }
-            for card in systemCards { card.isHidden = !eventCards.isEmpty }
+            // The compact controls show navigation and settings only; the
+            // message itself is in the ticker and the reader (UI checklist).
+            for card in eventCards { card.isHidden = true }
+            for card in systemCards { card.isHidden = true }
             syncCardAttachment()
             positionLabel.stringValue = eventCards.isEmpty
                 ? "—" : "\(compactIndex + 1) / \(eventCards.count)"
@@ -1562,7 +1601,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             for (index, card) in eventCards.enumerated() {
                 card.isHidden = violationsOnly && !eventPreviews[index].alarmActive
             }
-            for card in systemCards { card.isHidden = !eventCards.isEmpty }
+            for card in systemCards { card.isHidden = violationsOnly || !eventCards.isEmpty }
             syncCardAttachment()
             let visibleCount = violationsOnly
                 ? eventPreviews.filter(\.alarmActive).count : eventCards.count
@@ -1607,16 +1646,16 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func fitCompactControlsToContent() {
         guard compactMode, !peekMode, !messageMode else { return }
-        let previewHeight = min(CompactWindowSizing.messagePreviewHeight,
-                                ceil(feedStack.fittingSize.height))
-        let targetHeight = CompactWindowSizing.headerHeight(for: compactWidth) +
+        // Compact controls show no message card, so nothing below the header.
+        let previewHeight: CGFloat = feedStack.arrangedSubviews.contains { !$0.isHidden }
+            ? min(CompactWindowSizing.messagePreviewHeight, ceil(feedStack.fittingSize.height))
+            : 0
+        let targetHeight = CompactWindowSizing.headerHeight(for: detailWidth) +
             previewHeight
         guard abs(panel.frame.height - targetHeight) > 0.5 else { return }
-        transitionPanel(to: targetHeight, width: compactWidth,
-                        minSize: NSSize(width: CompactWindowSizing.minimumWidth,
-                                        height: targetHeight),
-                        maxSize: NSSize(width: CompactWindowSizing.maximumWidth,
-                                        height: targetHeight),
+        transitionPanel(to: targetHeight, width: detailWidth,
+                        minSize: NSSize(width: detailWidth, height: targetHeight),
+                        maxSize: NSSize(width: detailWidth, height: targetHeight),
                         animated: false)
     }
 
@@ -1633,7 +1672,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func captureWindowPNG() -> Data? {
         let captureWindow: NSWindow?
-        if providerCredentialsEditor?.window?.isVisible == true {
+        if usageWindow?.isVisible == true {
+            captureWindow = usageWindow?.window
+        } else if providerCredentialsEditor?.window?.isVisible == true {
             captureWindow = providerCredentialsEditor?.window
         } else if checkRulesEditor?.window?.isVisible == true {
             captureWindow = checkRulesEditor?.window
@@ -1664,7 +1705,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let calendar = Calendar.current
         let fmt = DateFormatter()
         if calendar.isDateInToday(date) {
-            fmt.dateFormat = "'Today,' HH:mm"
+            fmt.dateFormat = "HH:mm"
         } else if calendar.isDateInYesterday(date) {
             fmt.dateFormat = "'Yesterday,' HH:mm"
         } else {
@@ -1707,7 +1748,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func addCard(source: String, event: UIEvent,
                          deferScrollAndLayout: Bool = false,
                          navigable: Bool = true) -> EventCard {
-        let follow = !deferScrollAndLayout &&
+        // Scroll-following is for the expanded history only. In compact mode
+        // MessageReaderSelection decides whether a new message is selected;
+        // with no card shown there, "near bottom" was always true and a new
+        // message replaced the open reader (frozen-reader regression).
+        let follow = !compactMode && !deferScrollAndLayout &&
             (nearBottom() || feedCardCount == 0)
         let card = EventCard(source: source, time: displayTime(event.timestamp), event: event)
         card.selectedRequested = { [weak self, weak card] in
@@ -1735,6 +1780,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         card.isHidden = true
         feedOrder.append(card)
         if navigable {
+            // History is one list of rows; violations restyle their row later.
+            card.setThoughtRow()
             let wasFollowingLatest = eventCards.isEmpty || compactIndex == eventCards.count - 1
             eventCards.append(card)
             eventPreviews.append(MessagePreview(source: source, text: event.text,
@@ -2184,7 +2231,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                timestamp: block.ts, card: card, preview: preview)
             case .scored(let decision, let provider):
                 existingPreview?.evaluation = .clear
-                existingCard?.setFooter("No violation · checked by \(provider) in \(Int(ms)) ms")
+                existingCard?.setFooter("No violation",
+                                        detail: "Checked by \(provider) in \(Int(ms)) ms")
                 self.apiEvents.append([
                     "kind": "drift-clean", "text": "no alert", "provider": provider,
                     "rejectedClaims": decision.rejectedClaims,

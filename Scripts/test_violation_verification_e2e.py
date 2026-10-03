@@ -11,6 +11,7 @@ The built app runs against a loopback dummy checker:
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 import os
 import socket
 import subprocess
@@ -105,7 +106,8 @@ def append_thinking(path: Path, text: str) -> None:
     with path.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps({
             "type": "assistant",
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+            "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+                .replace("+00:00", "Z"),
             "message": {"content": [
                 {"type": "thinking", "thinking": text, "signature": "s"}]}}) + "\n")
 

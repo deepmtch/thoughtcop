@@ -44,6 +44,12 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Unseen/history state is labeled instead of silently changing selection.
 - [x] Expanded history has a visible selected row and supports Up/Down, J/K,
   Home/End, Return, and Space without stealing keys from text controls.
+- [x] Controls, reader and history share one 380-point width; the Window Width
+  setting sizes only the ticker.
+- [x] Every history item is a two-line row; the reader shows quote, Why, then the
+  full message once.
+- [x] Usage Today in the menu-bar menu opens a Usage window with provider-reported
+  tokens and provider-published prices; a missing price is shown as missing.
 - [x] Violation History offers 10/25/50/100/250/500 newest (default 50) with the
   current choice checked; lowering it removes deleted violations' cards.
 - [x] Confirm with Second Check is a checked toggle (default on); rejected

@@ -20,6 +20,7 @@ swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
     Sources/Monitoring/Sessions.swift \
     Sources/Monitoring/MessageReaderState.swift \
     Sources/Checker/DriftCheck.swift \
+    Sources/Checker/UsageStore.swift \
     Sources/Infrastructure/SingleInstance.swift \
     Sources/Infrastructure/UIStateServer.swift \
     Sources/Monitoring/PresentationState.swift \
@@ -32,6 +33,7 @@ swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
     Sources/UI/Ticker/TickerSettingsMenu.swift \
     Sources/UI/Controls/CheckRulesEditor.swift \
     Sources/UI/Controls/ProviderCredentialsEditor.swift \
+    Sources/UI/Controls/UsageWindow.swift \
     Sources/UI/Ticker/ProviderIcon.swift \
     Sources/UI/Ticker/TickerBackground.swift \
     Sources/UI/Ticker/TickerView.swift \

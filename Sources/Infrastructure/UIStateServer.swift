@@ -109,6 +109,8 @@ enum UICommand {
     case violationVerification(Bool)
     case violationHistoryLimit(Int)
     case toggleSelectedViolation
+    case showUsage
+    case closeUsage
 
     var name: String {
         switch self {
@@ -146,6 +148,8 @@ enum UICommand {
             ? "violation-verification/on" : "violation-verification/off"
         case .violationHistoryLimit(let limit): return "violation-history/\(limit)"
         case .toggleSelectedViolation: return "toggle-selected-violation"
+        case .showUsage: return "usage"
+        case .closeUsage: return "usage/close"
         }
     }
 }
@@ -337,6 +341,8 @@ final class UIStateServer {
         case "/violation-alerts/on": return .violationAlerts(true)
         case "/violation-alerts/off": return .violationAlerts(false)
         case "/toggle-selected-violation": return .toggleSelectedViolation
+        case "/usage": return .showUsage
+        case "/usage/close": return .closeUsage
         case "/violation-verification/on": return .violationVerification(true)
         case "/violation-verification/off": return .violationVerification(false)
         case "/position/top-left": return .position("top-left")

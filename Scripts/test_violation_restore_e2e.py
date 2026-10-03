@@ -10,6 +10,7 @@ seconds, with every record restored.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 import os
 import socket
 import subprocess
@@ -76,7 +77,8 @@ def append_and_wait(port: int, transcript: Path, marker: str, limit: float) -> f
     with transcript.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps({
             "type": "assistant",
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+            "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+                .replace("+00:00", "Z"),
             "message": {"content": [
                 {"type": "thinking", "thinking": marker, "signature": "s"}]}}) + "\n")
     sent = time.monotonic()
