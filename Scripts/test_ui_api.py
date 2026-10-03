@@ -118,7 +118,7 @@ assert history["historyFilter"] == "all"
 assert history["closeControlVisible"] is True
 assert history["detailCheckRulesControlVisible"] is False
 assert history["detailSettingsControlVisible"] is False
-assert history["latestControlVisible"] is True
+assert history["latestControlVisible"] is False  # newest first: only with unseen items
 
 post("/filter/violations")
 violations = wait_state(lambda value:

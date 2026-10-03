@@ -105,6 +105,8 @@ final class IntrinsicTextView: NSTextView {
 
 final class ConstrainedPanel: NSPanel {
     var escapeRequested: (() -> Void)?
+    /// True while the history list (newest first) is shown.
+    var newestFirst: () -> Bool = { false }
     var previousRequested: (() -> Void)?
     var nextRequested: (() -> Void)?
     var firstRequested: (() -> Void)?
@@ -129,18 +131,25 @@ final class ConstrainedPanel: NSPanel {
             return super.performKeyEquivalent(with: event)
         }
         let focusedControl = firstResponder is NSTextView || firstResponder is NSControl
+        // In the newest-first history, Up/k/Home move toward newer items
+        // (visually up); elsewhere they move toward older ones.
+        let upIsNewer = newestFirst()
+        let up = upIsNewer ? nextRequested : previousRequested
+        let down = upIsNewer ? previousRequested : nextRequested
         if !focusedControl {
             switch event.keyCode {
-            case 123, 126: previousRequested?(); return true
-            case 124, 125: nextRequested?(); return true
-            case 115: firstRequested?(); return true
-            case 119: latestRequested?(); return true
+            case 123: previousRequested?(); return true
+            case 124: nextRequested?(); return true
+            case 126: up?(); return true
+            case 125: down?(); return true
+            case 115: (upIsNewer ? latestRequested : firstRequested)?(); return true
+            case 119: (upIsNewer ? firstRequested : latestRequested)?(); return true
             case 36, 49: openMessageRequested?(); return true
             default: break
             }
         }
-        if !focusedControl, characters == "k" { previousRequested?(); return true }
-        if !focusedControl, characters == "j" { nextRequested?(); return true }
+        if !focusedControl, characters == "k" { up?(); return true }
+        if !focusedControl, characters == "j" { down?(); return true }
         return super.performKeyEquivalent(with: event)
     }
 

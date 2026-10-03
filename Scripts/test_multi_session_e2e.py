@@ -435,7 +435,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert violation_list["historyFilter"] == "violations", violation_list
         assert violation_list["detailCheckRulesControlVisible"] is False, violation_list
         assert violation_list["detailSettingsControlVisible"] is False, violation_list
-        assert violation_list["latestControlVisible"] is True, violation_list
+        # Newest first: "↑ N new" appears only when unseen items are above.
+        assert violation_list["latestControlVisible"] is False, violation_list
         get_json(API_BASE, "/filter/all")
         all_list = wait_for(lambda state:
             state.get("historyFilter") == "all" and

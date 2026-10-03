@@ -7,6 +7,8 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- History lists the newest item first; "Latest ↓" is replaced by "↑ N new",
+  shown only when newer items arrived above.
 - Usage and cost: "Usage Today" in the menu-bar menu and a Usage window, from
   provider-reported tokens and provider-published prices.
 - One coherent UI: one detail width, every history item a row, a calmer reader,

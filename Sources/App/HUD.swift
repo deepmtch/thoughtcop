@@ -223,6 +223,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self, !self.peekMode else { return }
             self.api.perform(.close, origin: .appKit)
         }
+        (panel as? ConstrainedPanel)?.newestFirst = { [weak self] in
+            guard let self else { return false }
+            return !self.compactMode && !self.peekMode && !self.messageMode
+        }
         (panel as? ConstrainedPanel)?.previousRequested = { [weak self] in
             self?.api.perform(.previous, origin: .appKit)
         }
@@ -363,15 +367,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         detailHeader.addSubview(detailExitControls)
 
-        latestButton = NSButton(title: "Latest ↓", target: self,
+        latestButton = NSButton(title: "↑ New", target: self,
                                 action: #selector(requestLatest(_:)))
         latestButton.bezelStyle = .rounded
         latestButton.controlSize = .small
         latestButton.translatesAutoresizingMaskIntoConstraints = false
         latestButton.setContentHuggingPriority(.required, for: .horizontal)
         latestButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-        latestButton.toolTip = "Scroll to the latest history item"
-        latestButton.setAccessibilityLabel("Scroll to latest history item")
+        latestButton.toolTip = "Scroll to the newest history items"
+        latestButton.setAccessibilityLabel("Scroll to newest history items")
         picker.setContentHuggingPriority(.defaultLow, for: .horizontal)
         picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
@@ -1514,7 +1518,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                         maxSize: maxSize)
         updateCardVisibility()
         unseenCount = 0
-        latestButton.title = "Latest ↓"
+        updateLatestButton()
         if let latest = visibleEventIndexes.last { selectExpandedMessage(at: latest) }
     }
 
@@ -1540,10 +1544,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 feedStack.removeArrangedSubview(card)
                 card.removeFromSuperview()
             } else if !card.isHidden, !attached {
+                // Newest first: every newer attached card sits above this one,
+                // below the empty state when that is shown.
                 let attachedAfter = feedOrder[(position + 1)...]
                     .filter { $0.superview === feedStack }.count
-                feedStack.insertArrangedSubview(
-                    card, at: feedStack.arrangedSubviews.count - attachedAfter)
+                let base = violationEmptyState.superview === feedStack ? 1 : 0
+                feedStack.insertArrangedSubview(card, at: base + attachedAfter)
                 // Violation rows form one list with hairline separators.
                 if card.isListRow { feedStack.setCustomSpacing(2, after: card) }
                 card.widthAnchor.constraint(
@@ -1611,7 +1617,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             nextButton.isEnabled = false
             expandButton.isHidden = true
             restartTickerButton.isEnabled = false
-            latestButton.isHidden = false
+            latestButton.isHidden = unseenCount == 0
             let indexes = visibleEventIndexes
             if !indexes.contains(compactIndex), let latest = indexes.last {
                 compactIndex = latest
@@ -1714,9 +1720,16 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return fmt.string(from: date)
     }
 
-    private func nearBottom() -> Bool {
-        let visible = scrollView.contentView.bounds
-        return feedView.bounds.maxY - visible.maxY < 64
+    /// The history is newest first, so following new items means staying at
+    /// the top of the (flipped) feed.
+    private func nearTop() -> Bool {
+        scrollView.contentView.bounds.minY < 64
+    }
+
+    /// "↑ N new" appears only when newer items arrived above the visible part.
+    private func updateLatestButton() {
+        latestButton.title = "↑ \(unseenCount) new"
+        latestButton.isHidden = compactMode || unseenCount == 0
     }
 
     @objc private func requestLatest(_ sender: Any?) {
@@ -1734,13 +1747,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // A compact carousel shows one card, so it must open at that card's
         // beginning. Scrolling to the feed bottom hid its header and body as
         // soon as a footer appeared. Expanded mode still follows the latest.
-        let y = compactMode
-            ? 0
-            : max(0, feedView.bounds.height - scrollView.contentView.bounds.height)
-        scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
+        // Newest first: the latest item is at the top in every mode.
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: 0))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         unseenCount = 0
-        latestButton.title = "Latest ↓"
+        updateLatestButton()
         publishAPI()
     }
 
@@ -1753,7 +1764,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // with no card shown there, "near bottom" was always true and a new
         // message replaced the open reader (frozen-reader regression).
         let follow = !compactMode && !deferScrollAndLayout &&
-            (nearBottom() || feedCardCount == 0)
+            (nearTop() || feedCardCount == 0)
         let card = EventCard(source: source, time: displayTime(event.timestamp), event: event)
         card.selectedRequested = { [weak self, weak card] in
             guard let self, let card,
@@ -1800,7 +1811,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             DispatchQueue.main.async { [weak self] in self?.scrollToLatest() }
         } else {
             unseenCount += 1
-            latestButton.title = "\(unseenCount) new ↓"
+            updateLatestButton()
         }
         return card
     }
@@ -1913,7 +1924,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             view.removeFromSuperview()
         }
         unseenCount = 0
-        latestButton.title = "Latest ↓"
+        updateLatestButton()
         apiEvents.removeAll()
         feedOrder.removeAll()
         eventCards.removeAll()
