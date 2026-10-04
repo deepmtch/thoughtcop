@@ -158,11 +158,12 @@ final class TickerSettingsMenu: NSObject {
 
     private func violationAlertsMenu() -> NSMenu {
         let submenu = NSMenu(title: "Violation Alerts")
-        violationAlertsItem = NSMenuItem(title: "Show for 10 Seconds",
+        violationAlertsItem = NSMenuItem(title: "Flash Red, Then Show Bubble",
                                          action: #selector(violationAlertsPicked(_:)),
                                          keyEquivalent: "")
         violationAlertsItem.target = self
-        violationAlertsItem.toolTip = "Temporarily show new violations for 10 seconds"
+        violationAlertsItem.toolTip = "On a new violation, turn the menu-bar icon red " +
+            "for 3 seconds, then show it in a bubble under the icon for 5 seconds"
         submenu.addItem(violationAlertsItem)
         violationVerificationItem = NSMenuItem(
             title: "Confirm with Second Check",

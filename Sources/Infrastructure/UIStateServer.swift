@@ -113,6 +113,8 @@ enum UICommand {
     case readerTab(Int)
     case readerLatest
     case closeUsage
+    case showLastViolation
+    case openViolationBubble
 
     var name: String {
         switch self {
@@ -154,6 +156,8 @@ enum UICommand {
         case .readerTab(let index): return "reader-tab/\(index)"
         case .readerLatest: return "reader-latest"
         case .closeUsage: return "usage/close"
+        case .showLastViolation: return "last-violation"
+        case .openViolationBubble: return "violation-bubble/open"
         }
     }
 }
@@ -164,7 +168,8 @@ final class UIStateServer {
     private var listener: NWListener?
     private let listenerQueue = DispatchQueue(label: "thinkpeek.ui-api")
     private let token: String
-    var captureHandler: (() -> Data?)?
+    /// Renders "window" (the visible Thinkpeek window) or "bubble" as PNG.
+    var captureHandler: ((String) -> Data?)?
     var actionHandler: ((UICommand) -> Void)?
     private let logURL: URL
 
@@ -256,13 +261,15 @@ final class UIStateServer {
                               extraHeaders: ["WWW-Authenticate": "Bearer"])
                     return
                 }
-                if parsed.path == "/screenshot" {
+                if parsed.path == "/screenshot" || parsed.path == "/screenshot/bubble" {
                     guard parsed.method == "GET" else {
                         self.sendMethodNotAllowed(connection, allow: "GET")
                         return
                     }
+                    let target = parsed.path == "/screenshot" ? "window"
+                        : String(parsed.path.dropFirst("/screenshot/".count))
                     DispatchQueue.main.async {
-                        let image = self.captureHandler?() ?? Data()
+                        let image = self.captureHandler?(target) ?? Data()
                         self.send(connection, payload: image, type: "image/png")
                     }
                     return
@@ -326,6 +333,9 @@ final class UIStateServer {
         case "/violations": return .showViolations
         case "/filter/all": return .historyFilter("all")
         case "/filter/violations": return .historyFilter("violations")
+        case "/filter/archive": return .historyFilter("archive")
+        case "/last-violation": return .showLastViolation
+        case "/violation-bubble/open": return .openViolationBubble
         case "/restart-ticker": return .restartTicker
         case "/message": return .showMessage
         case "/controls", "/reveal": return .showControls

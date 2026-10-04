@@ -174,10 +174,13 @@ The ticker uses the semantic macOS window surface during normal operation and th
 for an actual alert. Custom colors and opacity are remembered, text/icons
 automatically switch contrast, and **Use Default Violation Color** restores the
 critical-red light/dark warning surface.
-**Violation Alerts → Show for 10 Seconds** is off by default. When enabled, a
-new violation temporarily takes over the visible ticker for 10 seconds, then
-restores the item that was there before. Explicitly hidden and open detail
-windows are never interrupted.
+**Violation Alerts → Flash Red, Then Show Bubble** is off by default. When
+enabled, a new violation turns the menu-bar shield and count red for 3 seconds,
+then shows a bubble under the icon for 5 seconds with the session and the quoted
+evidence; clicking it opens that violation in the reader. If macOS has hidden
+the icon (a full menu bar), the bubble appears at the top right below the menu
+bar. The ticker selection, a hidden window, and open detail views are never
+changed by the alert. There is no sound.
 A single click opens a dedicated full-message reader; **Done** or a click outside
 the reader returns to the ticker. The visible controls button opens the separate
 navigation/settings view. The **↤** control returns directly to the
@@ -259,16 +262,20 @@ evidence record, evaluator provider, latency, and the exact check prompt in
 force.
 Every new violation updates the unread menu-bar count and gives its shield an
 alert tint. By default it does not interrupt the ticker, play a sound, or post a
-VoiceOver announcement. If the user enables the 10-second alert preference, a
-new violation temporarily takes priority in the visible ticker, sounds the
-alert, and uses a red warning surface with a visible **VIOLATION** label rather
-than color alone. The previous ticker item returns after 10 seconds.
+VoiceOver announcement. With **Flash Red, Then Show Bubble** on, it flashes the
+icon red, shows the bubble in words (never color alone), and posts a VoiceOver
+announcement.
 
-The menu-bar shield carries the recorded count. **Show Violations · N recorded**
-opens a dedicated violation-only list even after the ticker has been hidden or
-the app has restarted. The same state is available through `/ui`, and
-`/violations` opens the list through the local command API. `/filter/all` and
-`/filter/violations` exercise the same segmented filter without clicking the UI.
+The menu-bar shield carries the new-violation count. **Open Violation History…**
+opens the violation list even after the ticker has been hidden or the app has
+restarted; **Show Last Violation**, directly below it, opens the newest
+violation in the reader. History has three tabs: **All**, **Violations** (those
+whose transcript record is less than one hour old) and **Archive** (older ones,
+moved there at the exact one-hour mark even while history is open). The
+retention limit covers both tabs together, and archiving does not mark a
+violation reviewed. The same state is available through `/ui`; `/violations`,
+`/last-violation`, `/filter/all`, `/filter/violations` and `/filter/archive`
+drive the same actions without clicking the UI.
 
 The settings menu's **What to Check…** action edits that local value and mode directly.
 There is no file-backed configuration. The next response or reasoning block uses

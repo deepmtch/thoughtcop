@@ -409,7 +409,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert finished["navigableCount"] == 3, finished
         assert finished["violationCount"] == 1, finished
         assert finished["violationAlertsEnabled"] is False, finished
-        assert finished["violationAlertVisible"] is False, finished
+        assert finished["statusItemFlashActive"] is False, finished
+        assert finished["violationBubbleVisible"] is False, finished
         assert finished["menuBarViolationAlertActive"] is True, finished
         assert finished["statusItemBadgeText"] == "1", finished
         assert finished["currentViolationVisible"] is False, finished
@@ -646,16 +647,20 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert explicitly_revealed["hiddenByUser"] is False, explicitly_revealed
         assert explicitly_revealed["visibleCardCount"] == 2, explicitly_revealed
 
-        # Opting in temporarily presents a new violation, then restores the
-        # ticker item that was visible before the alert.
+        # "Flash Red, Then Show Bubble": the menu-bar icon is red first, then a
+        # bubble shows the violation; the hidden window stays hidden and the
+        # ticker selection does not change (BUG-074, BUG-094).
         get_json(API_BASE, "/close")
         ticker_before_transient = wait_for(lambda state:
             state.get("uiStyle") == "single-line-ticker")
         restore_index = ticker_before_transient["currentIndex"]
+        get_json(API_BASE, "/hide")
+        wait_for(lambda state: state.get("hiddenByUser") is True)
         get_json(API_BASE, "/violation-alerts/on")
         enabled = wait_for(lambda state:
             state.get("violationAlertsEnabled") is True)
-        assert enabled["violationAlertVisible"] is False, enabled
+        assert enabled["statusItemFlashActive"] is False, enabled
+        assert enabled["violationBubbleVisible"] is False, enabled
         append(claude_path, {
             "timestamp": record_timestamp(1_500),
             "type": "assistant",
@@ -664,16 +669,72 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
                 "text": "TRANSIENT_ALERT: show briefly when opted in",
             }]},
         })
-        transient = wait_for(lambda state:
+        flashing = wait_for(lambda state:
             state.get("violationCount") == 3 and
-            state.get("violationAlertVisible") is True)
-        assert transient["windowVisible"] is True, transient
-        assert transient["currentViolationVisible"] is True, transient
+            state.get("statusItemFlashActive") is True)
+        assert flashing["violationBubbleVisible"] is False, flashing
+        assert flashing["statusItemTitleIsRed"] is True, flashing
+        assert flashing["statusItemUsesNativeForeground"] is False, flashing
+        assert flashing["windowVisible"] is False, flashing
+        bubble = wait_for(lambda state:
+            state.get("violationBubbleVisible") is True)
+        assert bubble["statusItemFlashActive"] is False, bubble
+        assert bubble["statusItemUsesNativeForeground"] is True, bubble
+        assert bubble["statusItemTitleIsRed"] is False, bubble
+        assert bubble["violationBubbleTitle"].startswith("Violation · "), bubble
+        # The dummy checker quotes "ALERT" as its evidence.
+        assert bubble["violationBubbleQuote"] == "\u201cALERT\u201d", bubble
+        assert bubble["windowVisible"] is False, bubble
+        assert bubble["hiddenByUser"] is True, bubble
+        assert bubble["violationBubbleOnScreen"] is True, bubble
+        frame, anchor = bubble["violationBubbleFrame"], bubble["statusItemWindowFrame"]
+        if bubble["violationBubblePlacement"] == "under-icon":
+            assert bubble["statusItemVisible"] is True, bubble
+            assert frame["y"] + frame["height"] <= anchor["y"], (frame, anchor)
+        else:
+            assert bubble["violationBubblePlacement"] == "top-right", bubble
         restored = wait_for(lambda state:
             state.get("violationCount") == 3 and
-            state.get("violationAlertVisible") is False)
+            state.get("violationBubbleVisible") is False)
+        assert restored["statusItemFlashActive"] is False, restored
+        assert restored["statusItemUsesNativeForeground"] is True, restored
+        assert restored["windowVisible"] is False, restored
+        assert restored["hiddenByUser"] is True, restored
         assert restored["currentIndex"] == restore_index, restored
         assert restored["currentViolationVisible"] is False, restored
+
+        # Show Last Violation is an explicit action: it opens the newest
+        # violation in the reader and undoes Hide.
+        assert restored["lastViolationMenuTitle"] == "Show Last Violation", restored
+        get_json(API_BASE, "/last-violation")
+        last = wait_for(lambda state:
+            state.get("uiStyle") == "full-message" and
+            "TRANSIENT_ALERT" in (state.get("messageReaderText") or ""))
+        assert last["windowVisible"] is True, last
+        assert last["hiddenByUser"] is False, last
+
+        # Clicking the bubble opens that violation.
+        get_json(API_BASE, "/close")
+        get_json(API_BASE, "/hide")
+        wait_for(lambda state: state.get("hiddenByUser") is True)
+        append(claude_path, {
+            "timestamp": record_timestamp(1_600),
+            "type": "assistant",
+            "message": {"content": [{
+                "type": "text",
+                "text": "BUBBLE_ALERT: open me from the bubble",
+            }]},
+        })
+        wait_for(lambda state:
+            state.get("violationCount") == 4 and
+            state.get("violationBubbleVisible") is True)
+        get_json(API_BASE, "/violation-bubble/open")
+        opened = wait_for(lambda state:
+            state.get("uiStyle") == "full-message" and
+            "BUBBLE_ALERT" in (state.get("messageReaderText") or ""))
+        assert opened["violationBubbleVisible"] is False, opened
+        assert opened["windowVisible"] is True, opened
+        get_json(API_BASE, "/violation-alerts/off")
 
         print(json.dumps({
             "concurrentProviders": ["Claude", "Codex"],
@@ -685,7 +746,9 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "readerFrozeThenResumed": True,
             "hiddenViolationStayedHidden": hidden_before_alert["windowVisible"] is False,
             "defaultViolationAlertsOff": finished["violationAlertsEnabled"] is False,
-            "transientViolationRestored": restored["currentIndex"] == restore_index,
+            "flashThenBubbleKeptHidden": restored["hiddenByUser"] is True,
+            "lastViolationOpened": True,
+            "bubbleOpenedViolation": True,
             "providerTitles": ["Claude Alpha", "Claude Beta",
                                "Codex Alpha", "Codex Beta",
                                "Claude Desktop Exact Title"],

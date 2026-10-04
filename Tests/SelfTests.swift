@@ -1180,7 +1180,7 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
         "Window Position": ["Top Left", "Top Center", "Top Right", "Bottom Left",
                             "Bottom Center", "Bottom Right"],
         "Appearance": ["Violation Highlight Color…", "Use Default Violation Color"],
-        "Violation Alerts": ["Show for 10 Seconds", "Confirm with Second Check"],
+        "Violation Alerts": ["Flash Red, Then Show Bubble", "Confirm with Second Check"],
         "Violation History": ["Keep 10 Newest", "Keep 25 Newest", "Keep 50 Newest",
                               "Keep 100 Newest", "Keep 250 Newest", "Keep 500 Newest"],
     ]
@@ -1196,7 +1196,7 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
         NSApp.sendAction(action, to: item.target, from: item)
         return item
     }
-    _ = press("Violation Alerts", "Show for 10 Seconds")
+    _ = press("Violation Alerts", "Flash Red, Then Show Bubble")
     let verificationItem = press("Violation Alerts", "Confirm with Second Check")
     let historyMenu = settings.menu.item(withTitle: "Violation History")?.submenu
     let checkedLimits = historyMenu?.items.filter { $0.state == .on }.map(\.title)
@@ -1224,13 +1224,14 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
           ViolationAlertsPreference.load(defaults: defaults),
           !ViolationVerificationPreference.load(defaults: defaults),
           ViolationHistoryPreference.load(defaults: defaults) == 25,
-          ViolationAlertsPreference.displayDuration == 10 else {
+          ViolationAlertsPreference.flashDuration == 3,
+          ViolationAlertsPreference.bubbleDuration == 5 else {
         FileHandle.standardError.write(
             "settings menu self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
     print("settings menu: categories=6 singleButton=true hierarchical=true " +
-          "violationAlertsDefaultOff=true duration=10 verificationDefaultOn=true " +
+          "violationAlertsDefaultOff=true flash=3 bubble=5 verificationDefaultOn=true " +
           "historyDefault=50")
     exit(0)
 }
@@ -1443,6 +1444,19 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
 }
 
 if CommandLine.arguments.contains("--violation-store-selftest") {
+    // Violations vs Archive: exactly one hour from the record's timestamp.
+    let archiveNow = parsedRecordTimestamp("2026-10-04T12:00:00.000Z")!
+    guard violationIsArchived(timestamp: "2026-10-04T11:00:00.001Z", now: archiveNow) == false,
+          violationIsArchived(timestamp: "2026-10-04T11:00:00.000Z", now: archiveNow) == true,
+          violationIsArchived(timestamp: "2026-10-03T12:00:00Z", now: archiveNow) == true,
+          violationIsArchived(timestamp: "2026-10-04T11:59:00.123456Z", now: archiveNow) == false,
+          violationIsArchived(timestamp: "", now: archiveNow) == nil,
+          violationIsArchived(timestamp: "yesterday", now: archiveNow) == nil,
+          violationArchiveAge == 3600 else {
+        FileHandle.standardError.write("violation archive boundary self-test failed\n"
+            .data(using: .utf8)!)
+        exit(1)
+    }
     guard violationHistoryMenuTitle(recorded: 0, unreviewed: 0,
                                     storageUnavailable: false) ==
             "Open Violation History…",
@@ -1722,16 +1736,24 @@ if CommandLine.arguments.contains("--status-item-foreground-selftest") {
             "status item foreground self-test failed: missing button\n".data(using: .utf8)!)
         exit(1)
     }
+    // The violation flash colors both the shield and the count.
+    button.title = " 2"
     button.contentTintColor = .systemRed
+    button.attributedTitle = NSAttributedString(
+        string: " 2", attributes: [.foregroundColor: NSColor.systemRed])
     restoreNativeStatusItemForeground(button)
-    let usesNativeForeground = button.contentTintColor == nil
+    let titleColor = button.attributedTitle.length > 0
+        ? button.attributedTitle.attribute(.foregroundColor, at: 0, effectiveRange: nil)
+        : nil
+    let usesNativeForeground = button.contentTintColor == nil &&
+        (titleColor as? NSColor) != NSColor.systemRed && button.title == " 2"
     NSStatusBar.system.removeStatusItem(item)
     guard usesNativeForeground else {
         FileHandle.standardError.write(
             "status item foreground self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("status item foreground: native=true customBackground=false")
+    print("status item foreground: native=true titleNative=true customBackground=false")
     exit(0)
 }
 }

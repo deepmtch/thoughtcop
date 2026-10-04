@@ -6,11 +6,20 @@ import QuartzCore
 
 func restoreNativeStatusItemForeground(_ button: NSStatusBarButton) {
     button.contentTintColor = nil
+    // The flash sets a red attributed count; a plain title takes the native
+    // foreground again.
+    let title = button.title
+    button.title = title
 }
 
+/// "Flash Red, Then Show Bubble": one switch, off by default. When on, a new
+/// violation turns the menu-bar icon red for `flashDuration`, then shows a
+/// bubble under it for `bubbleDuration`. The key predates this behavior (it
+/// switched a 10-second ticker popup), so an earlier opt-in carries over.
 enum ViolationAlertsPreference {
     static let defaultsKey = "violationAlertsEnabled"
-    static let displayDuration: TimeInterval = 10
+    static let flashDuration: TimeInterval = 3
+    static let bubbleDuration: TimeInterval = 5
 
     static func load(defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: defaultsKey)
@@ -19,6 +28,23 @@ enum ViolationAlertsPreference {
     static func save(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: defaultsKey)
     }
+}
+
+/// The three history tabs. Violations lists those whose transcript record is
+/// less than `violationArchiveAge` old; older ones are under Archive.
+enum HistoryFilter: String {
+    case all, violations, archive
+}
+
+/// One hour, as the user asked. Measured from the violation's transcript
+/// record timestamp, the time shown on its row.
+let violationArchiveAge: TimeInterval = 3600
+
+/// nil when the record has no readable timestamp; such a violation is never
+/// archived, because its age is unknown, and `/ui` counts it.
+func violationIsArchived(timestamp: String, now: Date) -> Bool? {
+    guard let date = parsedRecordTimestamp(timestamp) else { return nil }
+    return now.timeIntervalSince(date) >= violationArchiveAge
 }
 
 func controlsExpansionTitle(compactMode: Bool) -> String? {
@@ -181,7 +207,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var alertCount = 0
     private let violationStore = ViolationStore()
     private var violationRecords: [ViolationRecord] = []
-    private var violationsOnly = false
+    private var historyFilter: HistoryFilter = .all
+    private var archiveBoundaryTimer: Timer?
     private var unacknowledgedViolationIndex: Int?
     private var violationsMenuItem: NSMenuItem?
     private var checkerRequestTokens = Set<UUID>()
@@ -207,8 +234,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Only records written after this moment are checked (see
     /// writtenSinceLaunch). Saved violations are kept regardless.
     private let launchedAt = Date()
-    private var violationAlertDismissal: DispatchWorkItem?
-    private var violationAlertRestoreIndex: Int?
+    /// While set, the menu-bar icon and count are red.
+    private var statusFlashActive = false
+    private let violationBubble = ViolationBubble()
+    private var bubbleViolationID: String?
+    /// Invalidates pending flash/bubble steps when a newer violation arrives.
+    private var violationAlertGeneration = 0
+    private var lastViolationMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         PrivacyAudit.shared.start()
@@ -473,14 +505,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         checkRulesButton.heightAnchor.constraint(equalToConstant: 26).isActive = true
 
         historyFilterControl = NSSegmentedControl(
-            labels: ["All", "Violations 0"], trackingMode: .selectOne,
+            labels: ["All", "Violations 0", "Archive 0"], trackingMode: .selectOne,
             target: self, action: #selector(requestHistoryFilter(_:)))
         historyFilterControl.selectedSegment = 0
         historyFilterControl.controlSize = .small
         historyFilterControl.toolTip = "Filter message history"
         historyFilterControl.setAccessibilityLabel("History filter")
         historyFilterControl.translatesAutoresizingMaskIntoConstraints = false
-        historyFilterControl.widthAnchor.constraint(greaterThanOrEqualToConstant: 176).isActive = true
+        historyFilterControl.widthAnchor.constraint(greaterThanOrEqualToConstant: 236).isActive = true
         historyFilterControl.isHidden = true
 
         positionButton = NSButton(frame: .zero)
@@ -605,7 +637,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.orderFrontRegardless()
         applyPeekMode(true, animated: false)
 
-        api.captureHandler = { [weak self] in self?.captureWindowPNG() }
+        api.captureHandler = { [weak self] target in self?.captureWindowPNG(target: target) }
         api.actionHandler = { [weak self] command in self?.handleCommand(command) }
         api.start()
         if !ISOLATED_E2E {
@@ -668,7 +700,28 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "windowVisible": panel.isVisible,
             "hiddenByUser": hiddenByUser,
             "violationAlertsEnabled": violationAlertsEnabled,
-            "violationAlertVisible": violationAlertDismissal != nil,
+            "statusItemFlashActive": statusFlashActive,
+            "violationBubbleVisible": violationBubble.isVisible,
+            "violationBubbleTitle": violationBubble.isVisible ? violationBubble.title : "",
+            "violationBubbleQuote": violationBubble.isVisible ? violationBubble.quote : "",
+            "violationBubblePlacement": violationBubble.isVisible ? violationBubble.placement : "",
+            "violationBubbleOnScreen": violationBubble.isVisible && violationBubble.isOnScreen,
+            "statusItemVisible": statusItem?.button?.window?.occlusionState
+                .contains(.visible) == true,
+            "violationBubbleFrame": violationBubble.isVisible ? [
+                "x": Int(violationBubble.frame.minX), "y": Int(violationBubble.frame.minY),
+                "width": Int(violationBubble.frame.width),
+                "height": Int(violationBubble.frame.height)] : [:],
+            "statusItemWindowFrame": statusItem?.button?.window.map { [
+                "x": Int($0.frame.minX), "y": Int($0.frame.minY),
+                "width": Int($0.frame.width), "height": Int($0.frame.height)] } ?? [:],
+            "statusItemTitleIsRed": statusItem?.button.map { button in
+                button.attributedTitle.length > 0 &&
+                    (button.attributedTitle.attribute(.foregroundColor, at: 0,
+                                                      effectiveRange: nil) as? NSColor)
+                    == NSColor.systemRed } ?? false,
+            "lastViolationMenuTitle": lastViolationMenuItem?.title ?? "",
+            "violationTabCounts": violationTabCountsJSON(),
             "menuBarViolationAlertActive": violationRecords.contains {
                 $0.reviewedAt == nil
             },
@@ -687,10 +740,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "usageWindowVisible": usageWindow?.isVisible == true,
             "usageToday": usageJSON(usage.today),
             "usageMonth": usageJSON(usage.month),
-            "violationsVisible": violationsOnly && !peekMode && !messageMode,
+            "violationsVisible": historyFilter == .violations && !peekMode && !messageMode,
             "violationEmptyStateVisible": violationEmptyState?.isHidden == false,
             "currentViolationVisible": unacknowledgedViolationIndex != nil,
-            "historyFilter": violationsOnly ? "violations" : "all",
+            "historyFilter": historyFilter.rawValue,
             "keyboardNavigation": ["left/up/k: previous", "right/down/j: next",
                                    "home: first", "end: latest",
                                    "return/space: open", "escape: ticker",
@@ -824,7 +877,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "uiStyle": peekMode ? "single-line-ticker"
                 : (messageMode ? "full-message"
                     : (compactMode ? "compact-controls"
-                        : (violationsOnly ? "violations-list" : "expanded-card-feed"))),
+                        : (historyFilter == .all ? "expanded-card-feed"
+                            : "\(historyFilter.rawValue)-list"))),
             "events": Array(apiEvents.suffix(250)),
         ])
     }
@@ -915,11 +969,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func handleCommand(_ command: UICommand) {
-        if case .violationAlerts = command {
-            // Changing the preference handles an active transient itself.
-        } else {
-            cancelViolationAlertDismissal()
-        }
         switch command {
         case .first: showFirst()
         case .previous: showPrevious()
@@ -928,7 +977,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .showHistory: showHistory()
         case .showViolations: showViolations()
         case .historyFilter(let value):
-            violationsOnly = value == "violations"
+            guard let filter = HistoryFilter(rawValue: value) else { return }
+            historyFilter = filter
             unacknowledgedViolationIndex = nil
             showExpandedFeed()
         case .restartTicker: restartTickerAtBeginning()
@@ -977,6 +1027,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .readerLatest: if messageMode { showReaderLatest() }
         case .showUsage: showUsage()
         case .closeUsage: usageWindow?.close()
+        case .showLastViolation: showLastViolation()
+        case .openViolationBubble: openBubbleViolation()
         case .toggleSelectedViolation:
             guard !compactMode, eventCards.indices.contains(compactIndex) else { break }
             let card = eventCards[compactIndex]
@@ -1002,6 +1054,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         violations.target = self
         menu.addItem(violations)
         violationsMenuItem = violations
+        let lastViolation = NSMenuItem(title: "Show Last Violation",
+                                       action: #selector(showLastViolationFromMenu(_:)),
+                                       keyEquivalent: "")
+        lastViolation.target = self
+        lastViolation.toolTip = "Open the newest violation in the reader"
+        menu.addItem(lastViolation)
+        lastViolationMenuItem = lastViolation
         menu.addItem(.separator())
         let usage = NSMenuItem(title: usageMenuTitle(UsageStore.shared.summary().today),
                                action: #selector(showUsageFromMenu(_:)), keyEquivalent: "")
@@ -1030,7 +1089,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func hideHUD() {
-        cancelViolationAlertDismissal()
         hiddenByUser = true
         panel.orderOut(nil)
         publishAPI()
@@ -1045,6 +1103,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func showViolationsFromMenu(_ sender: Any?) {
         api.perform(.showViolations, origin: .appKit)
+    }
+
+    @objc private func showLastViolationFromMenu(_ sender: Any?) {
+        api.perform(.showLastViolation, origin: .appKit)
     }
 
     @objc private func showCheckPromptFromMenu(_ sender: Any?) {
@@ -1244,8 +1306,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if compactIndex > index { compactIndex -= 1 }
             unacknowledgedViolationIndex = shifted(unacknowledgedViolationIndex,
                                                    removing: index)
-            violationAlertRestoreIndex = shifted(violationAlertRestoreIndex,
-                                                 removing: index)
         }
         compactIndex = min(compactIndex, eventCards.count - 1)
         updateCardVisibility()
@@ -1254,7 +1314,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func setViolationAlerts(_ enabled: Bool) {
         violationAlertsEnabled = enabled
         ViolationAlertsPreference.save(enabled)
-        if !enabled { dismissTemporaryViolation() }
+        if !enabled { endViolationAlert() }
         updateSettingsMenuChecks(peekTicker.speed)
         publishAPI()
     }
@@ -1360,7 +1420,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func dismissDetailsToTicker() {
         let shouldResumeLatest = messageMode || !compactMode
-        violationsOnly = false
+        historyFilter = .all
         if !compactMode {
             expandedHeight = panel.frame.height
             compactMode = true
@@ -1421,6 +1481,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func refreshReaderChrome() {
         guard messageMode else { return }
         let sessions = readerSessions()
+        // With no chat yet, a lone "All" chip and a Live line would describe
+        // nothing; the reader shows its single source line instead.
+        guard !sessions.isEmpty else {
+            fullMessageView.setSessions([], selected: 0, status: "", live: false,
+                                        showJump: false, width: detailWidth)
+            return
+        }
         func title(_ source: String) -> String {
             let name = source.components(separatedBy: " · ").dropFirst().joined(separator: " · ")
             let unseen = readerUnseen[source, default: 0]
@@ -1514,6 +1581,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                              kind: preview.readerKind,
                                              tone: preview.readerTone)
         }
+        presentReader(snapshot, openedIndex: openedIndex)
+    }
+
+    /// Opens the reader on `snapshot`; `openedIndex` is its history item, if any.
+    private func presentReader(_ snapshot: MessageReaderSnapshot, openedIndex: Int?) {
         if let openedIndex { markViolationReviewed(at: openedIndex) }
         // The reader opens on this message's session; it follows that session
         // live only when this is its newest message.
@@ -1563,8 +1635,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func requestHistoryFilter(_ sender: NSSegmentedControl) {
-        api.perform(.historyFilter(sender.selectedSegment == 1
-            ? "violations" : "all"), origin: .appKit)
+        let filters: [HistoryFilter] = [.all, .violations, .archive]
+        guard filters.indices.contains(sender.selectedSegment) else { return }
+        api.perform(.historyFilter(filters[sender.selectedSegment].rawValue), origin: .appKit)
     }
 
     @objc private func requestCheckRules(_ sender: Any?) {
@@ -1651,14 +1724,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func showHistory() {
-        violationsOnly = false
+        historyFilter = .all
         unacknowledgedViolationIndex = nil
         showExpandedFeed()
     }
 
     private func showViolations() {
         hiddenByUser = false
-        violationsOnly = true
+        historyFilter = .violations
         unacknowledgedViolationIndex = nil
         showExpandedFeed()
         panel.orderFrontRegardless()
@@ -1772,15 +1845,19 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             restartTickerButton.isEnabled = !eventCards.isEmpty
             latestButton.isHidden = true
         } else {
+            let tabs = violationTabs()
             for (index, card) in eventCards.enumerated() {
-                card.isHidden = violationsOnly && !eventPreviews[index].alarmActive
+                card.isHidden = !historyIncludes(eventPreviews[index], tabs: tabs)
             }
-            for card in systemCards { card.isHidden = violationsOnly || !eventCards.isEmpty }
+            for card in systemCards {
+                card.isHidden = historyFilter != .all || !eventCards.isEmpty
+            }
             syncCardAttachment()
-            let visibleCount = violationsOnly
-                ? eventPreviews.filter(\.alarmActive).count : eventCards.count
-            positionLabel.stringValue = violationsOnly
-                ? "Violations \(visibleCount)" : "All \(visibleCount)"
+            switch historyFilter {
+            case .all: positionLabel.stringValue = "All \(eventCards.count)"
+            case .violations: positionLabel.stringValue = "Violations \(tabs.recent.count)"
+            case .archive: positionLabel.stringValue = "Archive \(tabs.archived.count)"
+            }
             previousButton.isEnabled = false
             nextButton.isEnabled = false
             expandButton.isHidden = true
@@ -1791,9 +1868,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 compactIndex = latest
             }
         }
-        violationEmptyState.showStorageError(violationStore.lastError)
-        let showViolationEmptyState = !compactMode && violationsOnly &&
-            (violationRecords.isEmpty || violationStore.lastError != nil)
+        let tabs = violationTabs()
+        violationEmptyState.show(
+            empty: historyFilter == .archive
+                ? "No archived violations." : "No violations in the last hour.",
+            storageError: violationStore.lastError)
+        let tabIsEmpty = historyFilter == .archive
+            ? tabs.archived.isEmpty : tabs.recent.isEmpty
+        let showViolationEmptyState = !compactMode && historyFilter != .all &&
+            (tabIsEmpty || violationStore.lastError != nil)
         violationEmptyState.isHidden = !showViolationEmptyState
         setViolationEmptyStateAttached(showViolationEmptyState)
         navigationGroup.isHidden = !compactMode
@@ -1803,9 +1886,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // placing them beside history filters makes their actions ambiguous.
         checkRulesButton.isHidden = !compactMode
         positionButton.isHidden = !compactMode
-        historyFilterControl.selectedSegment = violationsOnly ? 1 : 0
+        historyFilterControl.selectedSegment = [HistoryFilter.all, .violations, .archive]
+            .firstIndex(of: historyFilter) ?? 0
         historyFilterControl.setLabel("All \(eventCards.count)", forSegment: 0)
-        historyFilterControl.setLabel("Violations \(violationRecords.count)", forSegment: 1)
+        setViolationTabLabels(tabs)
+        scheduleArchiveBoundary(tabs)
         for (index, card) in eventCards.enumerated() {
             card.setSelected(!compactMode && index == compactIndex && !card.isHidden)
         }
@@ -1845,7 +1930,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         CATransaction.flush()
     }
 
-    private func captureWindowPNG() -> Data? {
+    private func captureWindowPNG(target: String) -> Data? {
+        if target == "bubble" {
+            guard violationBubble.isVisible else { return nil }
+            return pngData(of: violationBubble.contentView, scale: 2)
+        }
         let captureWindow: NSWindow?
         if usageWindow?.isVisible == true {
             captureWindow = usageWindow?.window
@@ -1857,7 +1946,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             captureWindow = panel
         }
         guard let window = captureWindow, let view = window.contentView else { return nil }
-        let scale = window.backingScaleFactor
+        return pngData(of: view, scale: window.backingScaleFactor)
+    }
+
+    private func pngData(of view: NSView, scale: CGFloat) -> Data? {
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
             pixelsWide: max(1, Int(view.bounds.width * scale)),
@@ -1997,7 +2089,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private var visibleEventIndexes: [Int] {
-        eventPreviews.indices.filter { !violationsOnly || eventPreviews[$0].alarmActive }
+        let tabs = violationTabs()
+        return eventPreviews.indices.filter { historyIncludes(eventPreviews[$0], tabs: tabs) }
     }
 
     private func selectExpandedMessage(at index: Int) {
@@ -2065,7 +2158,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             storageUnavailable: violationStore.lastError != nil)
         violationsMenuItem?.toolTip = "Keeps the newest \(violationStore.limit) violations locally."
         violationsMenuItem?.isEnabled = true
-        historyFilterControl?.setLabel("Violations \(count)", forSegment: 1)
+        setViolationTabLabels(violationTabs())
         let hasUnacknowledged = newCount > 0
         statusItem?.button?.image = NSImage(
             systemSymbolName: count > 0
@@ -2077,7 +2170,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem?.button?.title = violationStatusBadgeTitle(unreviewed: newCount)
         statusItem?.button?.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
         if let button = statusItem?.button {
-            restoreNativeStatusItemForeground(button)
+            if statusFlashActive {
+                // The flash colors the shield and the count; it ends after
+                // `flashDuration`, then the native foreground returns.
+                button.contentTintColor = .systemRed
+                button.attributedTitle = NSAttributedString(
+                    string: button.title, attributes: [
+                        .foregroundColor: NSColor.systemRed,
+                        .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .bold)])
+            } else {
+                restoreNativeStatusItemForeground(button)
+            }
         }
         statusItem?.button?.setAccessibilityLabel(count == 0
             ? "Thinkpeek, no recorded violations"
@@ -2113,7 +2216,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         presentationKeys.removeAll()
         operationState.resetPending()
         unacknowledgedViolationIndex = nil
-        violationsOnly = false
+        historyFilter = .all
         compactIndex = -1
         restoreViolationCards()
         updateCardVisibility()
@@ -2277,7 +2380,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showAlert(_ decision: EvaluationDecision, provider: String,
                            _ ms: Double, timestamp: String, card: EventCard,
                            preview: MessagePreview) {
-        let shouldRevealTicker = violationAlertsEnabled && peekMode && !hiddenByUser
         let priorSelection = compactIndex
         var restoreSelection = priorSelection
         preview.evaluation = .alert(decision)
@@ -2297,36 +2399,23 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // count with the previous badge.
         updateViolationMenu()
         removeCardsForDeletedViolations()
-        if shouldRevealTicker {
-            NSSound.beep()
+        alertCount = violationRecords.count
+        if let index = eventPreviews.firstIndex(where: { $0 === preview }) {
+            if priorSelection == index, index > 0 { restoreSelection = index - 1 }
+            // A just-arrived violation never takes over the ticker merely
+            // because it is the newest record.
+            if compactIndex == index, index > 0 { compactIndex = index - 1 }
+        }
+        compactIndex = restoreSelection
+        updateCardVisibility()
+        if violationAlertsEnabled {
             NSAccessibility.post(element: panel as Any,
                                  notification: .announcementRequested,
                                  userInfo: [
                                     .announcement: "New Thinkpeek violation from \(preview.source). \(decision.reason)",
                                     .priority: NSAccessibilityPriorityLevel.high.rawValue,
                                  ])
-        }
-        alertCount = violationRecords.count
-        if let index = eventPreviews.firstIndex(where: { $0 === preview }) {
-            if priorSelection == index, index > 0 { restoreSelection = index - 1 }
-            if shouldRevealTicker {
-                compactIndex = index
-            } else if compactIndex == index, index > 0 {
-                // With popups disabled, a just-arrived violation must not take
-                // over the ticker merely because it was the newest record.
-                compactIndex = index - 1
-            }
-            unacknowledgedViolationIndex = shouldRevealTicker ? index : nil
-        }
-        violationsOnly = false
-        if shouldRevealTicker {
-            if violationAlertDismissal == nil { violationAlertRestoreIndex = restoreSelection }
-            applyPeekMode(true, animated: false)
-            panel.orderFrontRegardless()
-            scheduleViolationAlertDismissal()
-        } else {
-            compactIndex = restoreSelection
-            updateCardVisibility()
+            startViolationAlert(record)
         }
         panel.title = "⚠ Thinkpeek alert — \(alertCount)"
         apiEvents.append([
@@ -2339,31 +2428,168 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         publishAPI()
     }
 
-    private func scheduleViolationAlertDismissal() {
-        violationAlertDismissal?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.dismissTemporaryViolation() }
-        violationAlertDismissal = work
-        let duration = ISOLATED_E2E ? 0.25 : ViolationAlertsPreference.displayDuration
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
-    }
-
-    private func cancelViolationAlertDismissal() {
-        violationAlertDismissal?.cancel()
-        violationAlertDismissal = nil
-        violationAlertRestoreIndex = nil
-    }
-
-    private func dismissTemporaryViolation() {
-        violationAlertDismissal?.cancel()
-        violationAlertDismissal = nil
-        unacknowledgedViolationIndex = nil
-        if let restoreIndex = violationAlertRestoreIndex, !eventCards.isEmpty {
-            compactIndex = min(max(0, restoreIndex), eventCards.count - 1)
-            updateCardVisibility()
-            updateWindowTitle()
+    private var alertDurations: (flash: TimeInterval, bubble: TimeInterval) {
+        guard ISOLATED_E2E else {
+            return (ViolationAlertsPreference.flashDuration,
+                    ViolationAlertsPreference.bubbleDuration)
         }
-        violationAlertRestoreIndex = nil
+        // Isolated tests shorten the steps; the visual check passes the real
+        // "3,5" so the guest screen can be captured during each step.
+        let parts = (ProcessInfo.processInfo.environment["THINKPEEK_E2E_ALERT_SECONDS"] ?? "")
+            .split(separator: ",").compactMap { TimeInterval(String($0)) }
+        return parts.count == 2 ? (parts[0], parts[1]) : (1.0, 1.5)
+    }
+
+    /// Red menu-bar icon for the flash step, then the bubble. A newer
+    /// violation restarts both with its own content.
+    private func startViolationAlert(_ record: ViolationRecord) {
+        violationAlertGeneration += 1
+        let generation = violationAlertGeneration
+        violationBubble.hide()
+        bubbleViolationID = record.id
+        statusFlashActive = true
+        updateViolationMenu()
+        let durations = alertDurations
+        DispatchQueue.main.asyncAfter(deadline: .now() + durations.flash) { [weak self] in
+            guard let self, generation == self.violationAlertGeneration else { return }
+            self.statusFlashActive = false
+            self.updateViolationMenu()
+            self.violationBubble.clicked = { [weak self] in
+                self?.api.perform(.openViolationBubble, origin: .appKit)
+            }
+            // The session name, as on the reader chips (the source is the
+            // app's own "Provider · Session" label).
+            let session = record.source.components(separatedBy: " · ").dropFirst()
+                .joined(separator: " · ")
+            let title = "Violation · " + (session.isEmpty ? record.source : session)
+            let quote = record.evidence.isEmpty ? "Why: \(record.reason)"
+                : "“\(record.evidence)”"
+            // A status item macOS hid (full menu bar) is not a usable anchor.
+            let iconWindow = self.statusItem?.button?.window
+            let anchor = iconWindow.flatMap { window in
+                window.occlusionState.contains(.visible) ? window.frame : nil }
+            self.violationBubble.show(title: title, quote: quote, below: anchor)
+            self.publishAPI()
+            DispatchQueue.main.asyncAfter(deadline: .now() + durations.bubble) {
+                [weak self] in
+                guard let self, generation == self.violationAlertGeneration else { return }
+                self.endViolationAlert()
+            }
+        }
         publishAPI()
+    }
+
+    private func endViolationAlert() {
+        violationAlertGeneration += 1
+        violationBubble.hide()
+        bubbleViolationID = nil
+        if statusFlashActive {
+            statusFlashActive = false
+            updateViolationMenu()
+        }
+        publishAPI()
+    }
+
+    /// Clicking the bubble opens its violation in the reader.
+    private func openBubbleViolation() {
+        let id = bubbleViolationID
+        endViolationAlert()
+        if let id, let index = eventPreviews.firstIndex(where: { $0.violationID == id }) {
+            openViolationReader(at: index)
+        } else {
+            showViolations()
+        }
+    }
+
+    /// The newest stored violation, in the reader. The store keeps records
+    /// in the order they were recorded, so the last one is the newest.
+    private func showLastViolation() {
+        if let id = violationRecords.last?.id,
+           let index = eventPreviews.firstIndex(where: { $0.violationID == id }) {
+            openViolationReader(at: index)
+        } else {
+            presentReader(MessageReaderSnapshot(source: "Thinkpeek", text: "No violations yet.",
+                                                kind: "activity", tone: .normal),
+                          openedIndex: nil)
+            revealForExplicitRequest()
+        }
+    }
+
+    private func openViolationReader(at index: Int) {
+        unacknowledgedViolationIndex = index
+        showCurrentMessage()
+        unacknowledgedViolationIndex = nil
+        revealForExplicitRequest()
+    }
+
+    /// An explicit Show/Open action is the only thing that undoes Hide.
+    private func revealForExplicitRequest() {
+        hiddenByUser = false
+        panel.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+        publishAPI()
+    }
+
+    /// Violation ids per tab, from the store (the same source as the badge
+    /// and menu counts).
+    private func violationTabs(now: Date = Date())
+        -> (recent: Set<String>, archived: Set<String>, undated: Int) {
+        var recent = Set<String>(), archived = Set<String>(), undated = 0
+        for record in violationRecords {
+            switch violationIsArchived(timestamp: record.timestamp, now: now) {
+            case .some(true): archived.insert(record.id)
+            case .some(false): recent.insert(record.id)
+            case .none:
+                recent.insert(record.id)
+                undated += 1
+            }
+        }
+        return (recent, archived, undated)
+    }
+
+    private func historyIncludes(
+        _ preview: MessagePreview,
+        tabs: (recent: Set<String>, archived: Set<String>, undated: Int)) -> Bool {
+        switch historyFilter {
+        case .all: return true
+        case .violations:
+            return preview.alarmActive && preview.violationID.map(tabs.recent.contains) == true
+        case .archive:
+            return preview.alarmActive && preview.violationID.map(tabs.archived.contains) == true
+        }
+    }
+
+    private func setViolationTabLabels(
+        _ tabs: (recent: Set<String>, archived: Set<String>, undated: Int)) {
+        historyFilterControl?.setLabel("Violations \(tabs.recent.count)", forSegment: 1)
+        historyFilterControl?.setLabel("Archive \(tabs.archived.count)", forSegment: 2)
+    }
+
+    private func violationTabCountsJSON() -> [String: Int] {
+        let tabs = violationTabs()
+        return ["recent": tabs.recent.count, "archived": tabs.archived.count,
+                "withoutReadableTimestamp": tabs.undated]
+    }
+
+    /// Re-sorts the tabs exactly when the oldest recent violation turns one
+    /// hour old, so it moves to Archive even while history is open.
+    private func scheduleArchiveBoundary(
+        _ tabs: (recent: Set<String>, archived: Set<String>, undated: Int)) {
+        archiveBoundaryTimer?.invalidate()
+        archiveBoundaryTimer = nil
+        let next = violationRecords
+            .filter { tabs.recent.contains($0.id) }
+            .compactMap { parsedRecordTimestamp($0.timestamp) }
+            .map { $0.addingTimeInterval(violationArchiveAge) }
+            .min()
+        guard let next else { return }
+        let timer = Timer(fire: max(next, Date().addingTimeInterval(0.05)), interval: 0,
+                          repeats: false) { [weak self] _ in
+            self?.updateCardVisibility()
+            self?.updateViolationMenu()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        archiveBoundaryTimer = timer
     }
 
     private func showCheckFailure(_ message: String, _ ms: Double,

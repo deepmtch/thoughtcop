@@ -80,8 +80,15 @@ running `/ui` inspection surface. A checked item is not merely planned.
   mode uses a dynamic critical-red light/dark surface.
 - [x] System-background reset is available.
 - [x] Foreground text/icons automatically maintain light/dark contrast.
-- [x] Violation popups are an explicit persisted opt-in, default off, and the
-  enabled popup restores the prior ticker item after 10 seconds.
+- [x] Flash Red, Then Show Bubble is one persisted opt-in, default off: the
+  menu-bar icon and count are red for 3 s, then a bubble under the icon (top
+  right when macOS hides the icon) shows the violation for 5 s and opens it on
+  click; the ticker selection and a hidden window never change.
+- [x] Show Last Violation sits directly below Open Violation History… and opens
+  the newest violation in the reader ("No violations yet." when none).
+- [x] History tabs All | Violations | Archive: Violations holds the last hour
+  by record timestamp; older ones move to Archive at the exact boundary, each
+  tab with its own empty state.
 - [x] Provider credentials use native secure fields, are never prefilled, and
   distinguish keep, replace, and remove actions without displaying key values.
 

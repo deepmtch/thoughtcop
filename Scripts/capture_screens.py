@@ -40,16 +40,25 @@ SESSIONS = {
     "55555555-5555-4555-8555-555555555555": "video recap",
 }
 
+def iso(delta: timedelta) -> str:
+    return (datetime.now(timezone.utc) - delta).isoformat(timespec="milliseconds") \
+        .replace("+00:00", "Z")
+
+
+# Ages relative to launch: two from yesterday (Archive), one 25 minutes old
+# (Violations), and one that turns one hour old about 90 s after launch, so it
+# moves to Archive while history is open.
+BOUNDARY_SECONDS = 90
 VIOLATIONS = [
-    {"id": "00000000-0000-4000-8000-000000000001", "timestamp": "2026-10-02T18:24:00.000Z",
+    {"id": "00000000-0000-4000-8000-000000000001", "timestamp": iso(timedelta(days=1, minutes=1)),
      "source": "Claude · video recap",
      "content": "Manual dubs need `dubbing_studio=true`. Adding it and retrying:",
      "reason": "The assistant adds a missing parameter on its own instead of asking the user.",
      "evidence": "Manual dubs need `dubbing_studio=true`. Adding it and retrying:",
      "provider": "Groq · qwen/qwen3.8-27b · confirmed by second check", "latencyMs": 1246,
      "checkPrompt": "The ai is taking a shortcut or workaround witouth asking th euser",
-     "reviewedAt": "2026-10-02T18:30:00Z"},
-    {"id": "00000000-0000-4000-8000-000000000002", "timestamp": "2026-10-02T18:25:00.000Z",
+     "reviewedAt": iso(timedelta(days=1))},
+    {"id": "00000000-0000-4000-8000-000000000002", "timestamp": iso(timedelta(days=1)),
      "source": "Claude · EU brand finder app mockup",
      "content": "The screens are there, but the AI parts are fake: match scores come from "
                 "simple word matching, and the brief is built from the real data.",
@@ -57,6 +66,21 @@ VIOLATIONS = [
      "evidence": "The screens are there, but the AI parts are fake: match scores come from "
                  "simple word matching, and the brief is built from the real data.",
      "provider": "Groq · qwen/qwen3.8-27b", "latencyMs": 559, "checkPrompt": "rule"},
+    {"id": "00000000-0000-4000-8000-000000000003",
+     "timestamp": iso(timedelta(hours=1) - timedelta(seconds=BOUNDARY_SECONDS)),
+     "source": "Claude · Clipboard image generation shortcut",
+     "content": "The clipboard test kept failing on CI, so I marked it as skipped to get "
+                "the build green.",
+     "reason": "The assistant disabled a failing test instead of fixing it or asking.",
+     "evidence": "I marked it as skipped to get the build green.",
+     "provider": "Groq · qwen/qwen3.8-27b", "latencyMs": 812, "checkPrompt": "rule"},
+    {"id": "00000000-0000-4000-8000-000000000004", "timestamp": iso(timedelta(minutes=25)),
+     "source": "Claude · research grants for the guidelet open-source launch",
+     "content": "The NLnet portal was down, so I assumed we meet the eligibility rules and "
+                "drafted the application anyway.",
+     "reason": "The assistant assumed eligibility instead of checking or asking the user.",
+     "evidence": "I assumed we meet the eligibility rules and drafted the application anyway.",
+     "provider": "Groq · qwen/qwen3.8-27b", "latencyMs": 690, "checkPrompt": "rule"},
 ]
 
 
@@ -160,7 +184,8 @@ class Capture:
     def shot(self, name: str, kind: str, settle: float = 0.7) -> dict:
         time.sleep(settle)
         state = ui(self.port)
-        (self.out / f"{name}.png").write_bytes(request(self.port, "GET", "/screenshot"))
+        path = "/screenshot/bubble" if kind == "bubble" else "/screenshot"
+        (self.out / f"{name}.png").write_bytes(request(self.port, "GET", path))
         entry = {"name": name, "kind": kind, "uiStyle": state.get("uiStyle"),
                  "windowWidth": state.get("windowWidth"),
                  "windowHeight": state.get("windowHeight"),
@@ -169,7 +194,15 @@ class Capture:
                  "readerSelectedTab": state.get("readerSelectedTab"),
                  "readerText": state.get("messageReaderRenderedText"),
                  "readerTabFrames": state.get("readerTabFrames"),
-                 "readerTabAreaWidth": state.get("readerTabAreaWidth")}
+                 "readerTabAreaWidth": state.get("readerTabAreaWidth"),
+                 "bubbleFrame": state.get("violationBubbleFrame"),
+                 "bubblePlacement": state.get("violationBubblePlacement"),
+                 "bubbleOnScreen": state.get("violationBubbleOnScreen"),
+                 "statusItemWindowFrame": state.get("statusItemWindowFrame"),
+                 "historyFilter": state.get("historyFilter"),
+                 "visibleCardCount": state.get("visibleCardCount"),
+                 "violationTabCounts": state.get("violationTabCounts"),
+                 "emptyStateVisible": state.get("violationEmptyStateVisible")}
         self.manifest.append(entry)
         return entry
 
@@ -205,6 +238,9 @@ def launch(root: Path, port: int, checker: int | None, violations: list) -> subp
         "THINKPEEK_UI_API_TOKEN": API_TOKEN,
         "THINKPEEK_HISTORY_COUNT": "0",
         "THINKPEEK_USAGE_PATH": str(root / "usage.json"),
+        # The real flash and bubble durations, so each step can be captured.
+        "THINKPEEK_E2E_ALERT_SECONDS": os.environ.get("THINKPEEK_CAPTURE_ALERT_SECONDS",
+                                                     "3,5"),
     })
     args = ["./.build/thinkpeek", "--isolated-e2e"]
     args += (["--dummy-checker-url", f"http://127.0.0.1:{checker}/v1/chat/completions"]
@@ -299,20 +335,49 @@ def main() -> None:
             request(port, "POST", "/violation-alerts/on")
             reply(brand, "The sales API returned 403, so I hardcoded last month's numbers "
                          "into the dashboard instead.")
-            wait_ui(port, lambda s: s.get("violationAlertVisible") is True)
-            capture.shot("08-ticker-violation-alert", "ticker", settle=0)
+            flashing = wait_ui(port, lambda s: s.get("statusItemFlashActive") is True)
+            assert flashing["statusItemTitleIsRed"] is True, flashing
+            assert flashing["violationBubbleVisible"] is False, flashing
+            wait_ui(port, lambda s: s.get("violationBubbleVisible") is True, 6)
+            # The real menu bar is captured from the host (it cannot be
+            # rendered from inside the app); see BUG-094.
+            entry = capture.shot("08-violation-bubble", "bubble", settle=0.2)
+            assert entry["bubbleFrame"]["width"] == 300, entry
+            assert ui(port)["violationBubbleTitle"] == "Violation · EU brand finder app mockup"
+            # The quote is longer than one line, so the bubble shows two
+            # (a one-line bubble is about 68 points tall).
+            assert entry["bubbleFrame"]["height"] >= 80, entry
             request(port, "POST", "/violation-alerts/off")
-            time.sleep(0.5)
+            wait_ui(port, lambda s: s.get("violationBubbleVisible") is False)
 
             request(port, "POST", "/filter/all")
             wait_ui(port, lambda s: s.get("compactMode") is False)
             capture.shot("09-history-all", "history")
             request(port, "POST", "/filter/violations")
-            capture.shot("10-history-violations", "history")
+            entry = capture.shot("10-history-violations", "history")
+            # Last hour: the live one, the 25-minute one, and the one about to
+            # turn one hour old; yesterday's two are in Archive.
+            assert entry["violationTabCounts"]["recent"] == 3, entry
+            assert entry["visibleCardCount"] == 3, entry
+            request(port, "POST", "/filter/archive")
+            entry = capture.shot("10b-history-archive", "history")
+            assert entry["historyFilter"] == "archive", entry
+            assert entry["visibleCardCount"] == 2, entry
+            request(port, "POST", "/filter/violations")
+            moved = wait_ui(port, lambda s: s["violationTabCounts"]["archived"] == 3,
+                            BOUNDARY_SECONDS + 15)
+            assert moved["visibleCardCount"] == 2, moved
+            assert moved["historyFilter"] == "violations", moved
             request(port, "POST", "/toggle-selected-violation")
             capture.shot("11-violation-expanded", "history")
             request(port, "POST", "/message")
             capture.shot("12-reader-violation", "reader")
+            request(port, "POST", "/close")
+            time.sleep(0.4)
+            request(port, "POST", "/last-violation")
+            wait_ui(port, lambda s: s.get("messageMode") is True)
+            entry = capture.shot("12b-reader-last-violation", "reader")
+            assert "hardcoded" in (entry["readerText"] or ""), entry
             request(port, "POST", "/close")
             time.sleep(0.4)
             request(port, "POST", "/check-rules")
@@ -337,7 +402,19 @@ def main() -> None:
         try:
             request(port, "POST", "/violations")
             wait_ui(port, lambda s: s.get("compactMode") is False)
-            capture_empty.shot("16-violations-empty", "history")
+            entry = capture_empty.shot("16-violations-empty", "history")
+            assert entry["emptyStateVisible"] is True, entry
+            request(port, "POST", "/filter/archive")
+            entry = capture_empty.shot("16b-archive-empty", "history")
+            assert entry["emptyStateVisible"] is True, entry
+            request(port, "POST", "/close")
+            time.sleep(0.4)
+            request(port, "POST", "/last-violation")
+            wait_ui(port, lambda s: s.get("messageMode") is True)
+            entry = capture_empty.shot("17-reader-no-violations", "reader")
+            assert "No violations yet." in (entry["readerText"] or ""), entry
+            # No chat yet: no lone "All" chip and no Live line.
+            assert not entry["readerTabs"], entry
         finally:
             stop(process, port)
     server.shutdown()
@@ -349,6 +426,13 @@ def main() -> None:
     wrong = [m for m in manifest
              if m["kind"] in DETAIL_STATES and m["windowWidth"] != DETAIL_WIDTH]
     for entry in manifest:
+        if entry["kind"] == "bubble":
+            assert entry["bubbleOnScreen"] is True, f"{entry['name']}: bubble off-screen: {entry}"
+            if entry["bubblePlacement"] == "under-icon":
+                frame, anchor = entry["bubbleFrame"], entry["statusItemWindowFrame"]
+                assert frame["y"] + frame["height"] <= anchor["y"], \
+                    f"{entry['name']}: bubble is not below the menu-bar icon: {frame} {anchor}"
+            continue
         if entry["kind"] == "ticker":
             assert entry["windowHeight"] == TICKER_HEIGHT, \
                 f"{entry['name']}: ticker is {entry['windowHeight']} pt tall, not {TICKER_HEIGHT}"

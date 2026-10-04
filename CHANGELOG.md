@@ -7,6 +7,12 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- Violation Alerts → **Flash Red, Then Show Bubble** (one setting, off by
+  default) replaces "Show for 10 Seconds": the menu-bar icon turns red for 3 s,
+  then a bubble shows the violation for 5 s; clicking it opens the violation.
+- **Show Last Violation** in the menu-bar menu, below Open Violation History…
+- History tabs **All | Violations | Archive**: Violations shows the last hour;
+  older violations move to Archive.
 - Reader tabs: one per recent session plus All, live on the newest message,
   paused on older ones, with "(N new)" counts and "Jump to latest". Tabs are
   wrapping chips as wide as their names, with the full name on hover.

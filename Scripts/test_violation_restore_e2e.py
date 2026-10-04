@@ -176,14 +176,15 @@ def main() -> None:
             # Known limit (BUG-086): measured, not bounded tightly.
             expanded_live = append_and_wait(port, transcript, "EXPANDED_THOUGHT", 30)
 
-            post(port, "/filter/violations")
+            # The stored records are from 2026-09-19, so they are under Archive.
+            post(port, "/filter/archive")
             seen_states = []
 
             def violations_shown(ui: dict) -> bool:
                 seen_states.append((ui.get("historyFilter"), ui.get("compactMode"),
                                     ui.get("peekMode"), ui.get("messageMode"),
                                     ui.get("visibleCardCount")))
-                return ui.get("historyFilter") == "violations" and \
+                return ui.get("historyFilter") == "archive" and \
                     ui.get("compactMode") is False and ui.get("peekMode") is False
             violations = wait_ui(port, violations_shown, limit)
             print("filter states:", sorted(set(seen_states), key=str))

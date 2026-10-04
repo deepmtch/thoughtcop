@@ -47,8 +47,12 @@ final class HistoryEmptyStateView: NSView {
 
     /// One quiet line; a storage problem is stated in words, never hidden.
     func showStorageError(_ message: String?) {
+        show(empty: "No violations yet.", storageError: message)
+    }
+
+    func show(empty: String, storageError message: String?) {
         detail.stringValue = message.map { "Violation history is unavailable. \($0)" }
-            ?? "No violations yet."
+            ?? empty
         detail.textColor = message == nil ? .secondaryLabelColor : .systemOrange
         setAccessibilityLabel(detail.stringValue)
     }

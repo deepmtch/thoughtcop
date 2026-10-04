@@ -177,10 +177,13 @@ def main() -> None:
             trimmed = wait_ui(ui_port, lambda ui: ui.get("violationCount") == 10)
             assert trimmed["violationRetentionLimit"] == 10
             assert len(json.loads(violations_path.read_text())) == 10
-            request(ui_port, "POST", "/filter/violations")
-            listed = wait_ui(ui_port, lambda ui: ui.get("historyFilter") == "violations"
+            # Seeded on 2026-09-19: older than one hour, so under Archive.
+            request(ui_port, "POST", "/filter/archive")
+            listed = wait_ui(ui_port, lambda ui: ui.get("historyFilter") == "archive"
                              and ui.get("compactMode") is False)
             assert listed["visibleCardCount"] == 10, listed["visibleCardCount"]
+            assert listed["violationTabCounts"] == {
+                "recent": 0, "archived": 10, "withoutReadableTimestamp": 0}, listed
             request(ui_port, "POST", "/close")
             request(ui_port, "POST", "/violation-history/500")
             wait_ui(ui_port, lambda ui: ui.get("violationRetentionLimit") == 500)

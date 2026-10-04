@@ -126,7 +126,7 @@ violations = wait_state(lambda value:
                         value.get("violationsVisible") is True)
 assert violations["historyFilter"] == "violations"
 assert violations["violationsVisible"] is True
-if violations["violationCount"] == 0:
+if violations["violationTabCounts"]["recent"] == 0:
     assert violations["violationEmptyStateVisible"] is True
 
 post("/check-rules")
