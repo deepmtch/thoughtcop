@@ -1,73 +1,61 @@
-// Compact nonmodal editor for Thinkpeek's locally persisted check rules.
+// The Rules tab of Settings: Thinkpeek's locally persisted check rules.
 
 import AppKit
 
-final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDelegate {
+final class CheckRulesEditor: NSViewController, NSTextViewDelegate {
     private let textView = NSTextView(frame: .zero)
     private let modeButton = NSPopUpButton(frame: .zero, pullsDown: false)
     private let saveHandler: (String, CheckInstructionMode) -> Void
-    private let closeHandler: () -> Void
     private let buttonRow = NSStackView()
+    private let savedLabel = NSTextField(labelWithString: "")
     private var originalText: String
     private var originalMode: CheckInstructionMode
-    private var allowClose = false
 
-    var currentText: String { textView.string }
+    // Each accessor loads the view first: its controls are built there.
+    var currentText: String { _ = view; return textView.string }
     var currentMode: CheckInstructionMode {
-        CheckInstructionMode(rawValue: modeButton.selectedItem?.representedObject as? String ?? "")
-            ?? .wholeText
+        _ = view
+        return CheckInstructionMode(
+            rawValue: modeButton.selectedItem?.representedObject as? String ?? "") ?? .wholeText
     }
     var actionTitles: [String] {
-        buttonRow.arrangedSubviews.compactMap { ($0 as? NSButton)?.title }
+        _ = view
+        return buttonRow.arrangedSubviews.compactMap { ($0 as? NSButton)?.title }
     }
-    var actionsAreHorizontal: Bool { buttonRow.orientation == .horizontal }
+    var actionsAreHorizontal: Bool { _ = view; return buttonRow.orientation == .horizontal }
 
     init(contents: String, mode: CheckInstructionMode,
-         save: @escaping (String, CheckInstructionMode) -> Void,
-         closed: @escaping () -> Void) {
+         save: @escaping (String, CheckInstructionMode) -> Void) {
         saveHandler = save
-        closeHandler = closed
         originalText = contents
         originalMode = mode
-        let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 340),
-                             styleMask: [.titled, .closable, .resizable],
-                             backing: .buffered, defer: false)
-        window.title = "Rules"
-        window.level = .floating
-        window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 440, height: 300)
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        super.init(window: window)
-        window.delegate = self
-        buildContent(contents: contents, mode: mode)
+        super.init(nibName: nil, bundle: nil)
     }
 
     required init?(coder: NSCoder) { nil }
 
-    func present() {
-        NSApp.activate(ignoringOtherApps: true)
-        window?.center()
-        showWindow(nil)
-        window?.makeKeyAndOrderFront(nil)
-        window?.makeFirstResponder(textView)
+    override func loadView() {
+        view = NSView()
+        buildContent(contents: originalText, mode: originalMode)
     }
 
-    func windowWillClose(_ notification: Notification) { closeHandler() }
+    func focus() { view.window?.makeFirstResponder(textView) }
 
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard !allowClose, isDirty else { return true }
-        presentUnsavedChangesAlert()
-        return false
+    /// Shows the stored rules again unless there are unsaved edits.
+    func reload(contents: String, mode: CheckInstructionMode) {
+        _ = view
+        guard !isDirty else { return }
+        originalText = contents
+        originalMode = mode
+        revertToSaved()
     }
 
-    private var isDirty: Bool {
-        textView.string != originalText || currentMode != originalMode
-    }
+    var isDirty: Bool { currentText != originalText || currentMode != originalMode }
+
+    func textDidChange(_ notification: Notification) { savedLabel.stringValue = "" }
 
     private func buildContent(contents: String, mode: CheckInstructionMode) {
-        guard let content = window?.contentView else { return }
-        content.wantsLayer = true
-        content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        let content = view
 
         let title = NSTextField(labelWithString: "What should Thinkpeek check?")
         title.font = .systemFont(ofSize: 15, weight: .semibold)
@@ -136,9 +124,10 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
         privacy.textColor = .secondaryLabelColor
         privacy.translatesAutoresizingMaskIntoConstraints = false
 
-        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel(_:)))
+        // Settings stays open after saving, so the second action reverts.
+        let cancel = NSButton(title: "Revert", target: self, action: #selector(cancel(_:)))
         cancel.bezelStyle = .rounded
-        cancel.keyEquivalent = "\u{1b}"
+        cancel.setAccessibilityLabel("Revert to the saved rules")
         let save = NSButton(title: "Save Rules", target: self,
                             action: #selector(save(_:)))
         save.bezelStyle = .rounded
@@ -150,6 +139,9 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
         buttonRow.orientation = .horizontal
         buttonRow.alignment = .centerY
         buttonRow.spacing = 8
+        savedLabel.font = .systemFont(ofSize: 11)
+        savedLabel.textColor = .secondaryLabelColor
+        buttonRow.addArrangedSubview(savedLabel)
         buttonRow.addArrangedSubview(cancel)
         buttonRow.addArrangedSubview(save)
         buttonRow.translatesAutoresizingMaskIntoConstraints = false
@@ -189,19 +181,22 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
         saveHandler(textView.string, currentMode)
         originalText = textView.string
         originalMode = currentMode
-        allowClose = true
-        close()
+        savedLabel.stringValue = "Saved."
     }
 
-    @objc private func cancel(_ sender: Any?) {
-        guard isDirty else { allowClose = true; close(); return }
-        presentUnsavedChangesAlert()
+    @objc private func cancel(_ sender: Any?) { revertToSaved() }
+
+    private func revertToSaved() {
+        textView.string = originalText
+        modeButton.selectItem(at: CheckInstructionMode.allCases.firstIndex(of: originalMode) ?? 0)
+        savedLabel.stringValue = ""
     }
 
-    @objc private func modeChanged(_ sender: Any?) {}
+    @objc private func modeChanged(_ sender: Any?) { savedLabel.stringValue = "" }
 
-    private func presentUnsavedChangesAlert() {
-        guard let window else { return }
+    /// Asks before unsaved rules are lost; `proceed` is true after Save or
+    /// Discard, false when the user keeps editing.
+    func confirmDiscard(in window: NSWindow, proceed: @escaping (Bool) -> Void) {
         let alert = NSAlert()
         alert.messageText = "Save changes to your rules?"
         alert.informativeText = "Unsaved changes will be lost."
@@ -214,11 +209,12 @@ final class CheckRulesEditor: NSWindowController, NSWindowDelegate, NSTextViewDe
             switch response {
             case .alertFirstButtonReturn:
                 self.save(nil)
+                proceed(true)
             case .alertThirdButtonReturn:
-                self.allowClose = true
-                self.close()
+                self.revertToSaved()
+                proceed(true)
             default:
-                break
+                proceed(false)
             }
         }
     }

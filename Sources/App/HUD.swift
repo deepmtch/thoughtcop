@@ -159,10 +159,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var navigationGroup: DetailToolbarGroup!
     private var utilitiesGroup: DetailToolbarGroup!
     private var violationEmptyState: HistoryEmptyStateView!
-    private var tickerSettingsMenu: TickerSettingsMenu!
-    private var peekSettingsMenu: TickerSettingsMenu!
-    private var checkRulesEditor: CheckRulesEditor?
-    private var providerCredentialsEditor: ProviderCredentialsEditor?
+    private var settingsWindow: SettingsWindow!
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
     private var eventPreviews: [MessagePreview] = []
@@ -357,9 +354,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.api.perform(.showControls, origin: .appKit)
         }
         peekPrimaryActions.hideRequested = { [weak self] in self?.hideHUD() }
-        peekSettingsMenu = TickerSettingsMenu()
-        configureSettingsMenu(peekSettingsMenu)
-        peekSettingsMenu.install(on: peekPrimaryActions.displaySettingsButton)
+        configureSettingsButton(peekPrimaryActions.displaySettingsButton)
         peekToolbar = NSStackView(views: [peekCornerControls, peekPrimaryActions])
         peekToolbar.orientation = .horizontal
         peekToolbar.alignment = .centerY
@@ -518,13 +513,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         historyFilterControl.isHidden = true
 
         positionButton = NSButton(frame: .zero)
-        tickerSettingsMenu = TickerSettingsMenu()
-        configureSettingsMenu(tickerSettingsMenu)
-        tickerSettingsMenu.install(on: positionButton)
+        configureSettingsButton(positionButton)
         positionButton.controlSize = .small
         positionButton.translatesAutoresizingMaskIntoConstraints = false
         positionButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
         positionButton.heightAnchor.constraint(equalToConstant: 26).isActive = true
+        settingsWindow = makeSettingsWindow()
         updateSettingsMenuChecks(savedSpeed)
 
         navigationGroup = DetailToolbarGroup(
@@ -648,8 +642,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     guard let self,
                           shouldDismissDetails(isShowingDetails: !self.peekMode,
                                                isEditorVisible:
-                                                self.checkRulesEditor?.window?.isVisible == true ||
-                                                self.providerCredentialsEditor?.window?.isVisible == true,
+                                                self.settingsWindow.isVisible,
                                                windowFrame: self.panel.frame,
                                                clickLocation: location) else { return }
                     self.api.perform(.close, origin: .appKit)
@@ -854,16 +847,26 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "availableWindowPositions": ["top-left", "top-center", "top-right",
                                          "bottom-left", "bottom-center", "bottom-right"],
             "tickerPrimaryActions": peekPrimaryActions.accessibilityNames,
-            "settingsMenuStructure": tickerSettingsMenu?.structure ?? [:],
-            "settingsMenuItems": tickerSettingsMenu?.topLevelTitles ?? [],
+            "settingsVisible": settingsWindow?.isVisible == true,
+            "settingsTab": settingsWindow?.isVisible == true
+                ? settingsWindow.selectedTab.rawValue : "",
+            "settingsTabs": SettingsTab.allCases.map(\.title),
+            "settingsWindowTitle": settingsWindow?.window?.title ?? "",
+            "settingsAlertsSwitchOn": settingsWindow?.alerts.alertsSwitch.state == .on,
+            "settingsVerificationSwitchOn":
+                settingsWindow?.alerts.verificationSwitch.state == .on,
+            "settingsHistoryChoice": settingsWindow?.alerts.historyButton.titleOfSelectedItem ?? "",
+            "settingsSpeedChoice": settingsWindow?.general.speedButton.titleOfSelectedItem ?? "",
+            "settingsWidthChoice": settingsWindow?.general.widthButton.titleOfSelectedItem ?? "",
             "checkRulesText": CheckRulesStore.loadRaw(),
             "checkRuleCount": loadEvaluationInstructions().count,
             "checkInstructionMode": CheckRulesStore.mode().rawValue,
             "checkRulesStorage": "local-app-preferences",
             "checkRulesCustomized": CheckRulesStore.isCustomized(),
-            "checkRulesEditorVisible": checkRulesEditor?.window?.isVisible ?? false,
-            "providerCredentialsEditorVisible":
-                providerCredentialsEditor?.window?.isVisible ?? false,
+            "checkRulesEditorVisible": settingsWindow?.isVisible == true &&
+                settingsWindow.selectedTab == .rules,
+            "providerCredentialsEditorVisible": settingsWindow?.isVisible == true &&
+                settingsWindow.selectedTab == .keys,
             "groqCredentialConfigured": CheckerCredentials.shared.isConfigured(.groq),
             "cerebrasCredentialConfigured": CheckerCredentials.shared.isConfigured(.cerebras),
             "outsideClickDismissesDetails": true,
@@ -990,18 +993,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .hideHUD: hideHUD()
         case .close: dismissDetailsToTicker()
         case .quit: quitApplication()
-        case .editCheckRules: showCheckRulesEditor()
-        case .closeCheckRules:
-            checkRulesEditor?.close()
+        case .editCheckRules: showSettings(.rules)
+        case .closeCheckRules, .closeProviderCredentials, .closeSettings:
+            settingsWindow.requestClose()
+        case .showSettings(let tab): showSettings(SettingsTab(rawValue: tab) ?? .general)
         case .saveCheckRules(let text, let rawMode):
             guard let mode = CheckInstructionMode(rawValue: rawMode) else { return }
             CheckRulesStore.saveRaw(text)
             CheckRulesStore.saveMode(mode)
             refreshStatus()
             publishAPI()
-        case .editProviderCredentials: showProviderCredentialsEditor()
-        case .closeProviderCredentials:
-            providerCredentialsEditor?.close()
+        case .editProviderCredentials: showSettings(.keys)
         case .applyProviderCredentialEdits(let edits, let completion):
             let failures = CheckerCredentials.shared.apply(edits)
             refreshStatus()
@@ -1071,16 +1073,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(usage)
         usageMenuItem = usage
         menu.addItem(.separator())
-        let checkPrompt = NSMenuItem(title: "Edit Rules…",
-                                     action: #selector(showCheckPromptFromMenu(_:)),
-                                     keyEquivalent: ",")
-        checkPrompt.target = self
-        menu.addItem(checkPrompt)
-        let credentials = NSMenuItem(title: "Provider Keys…",
-                                     action: #selector(showProviderCredentialsFromMenu(_:)),
-                                     keyEquivalent: "")
-        credentials.target = self
-        menu.addItem(credentials)
+        let settings = NSMenuItem(title: "Settings…",
+                                  action: #selector(showSettingsFromMenu(_:)),
+                                  keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit Thinkpeek", action: #selector(quitFromMenu(_:)),
                               keyEquivalent: "q")
@@ -1111,12 +1108,26 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         api.perform(.showLastViolation, origin: .appKit)
     }
 
-    @objc private func showCheckPromptFromMenu(_ sender: Any?) {
-        api.perform(.editCheckRules, origin: .appKit)
+    @objc private func showSettingsFromMenu(_ sender: Any?) {
+        api.perform(.showSettings(SettingsTab.general.rawValue), origin: .appKit)
     }
 
-    @objc private func showProviderCredentialsFromMenu(_ sender: Any?) {
-        api.perform(.editProviderCredentials, origin: .appKit)
+    @objc private func showGeneralSettings(_ sender: Any?) {
+        api.perform(.showSettings(SettingsTab.general.rawValue), origin: .appKit)
+    }
+
+    /// Both ⚙ buttons open Settings › General.
+    private func configureSettingsButton(_ button: NSButton) {
+        button.title = ""
+        button.image = NSImage(systemSymbolName: "gearshape",
+                               accessibilityDescription: "Settings")
+        button.imagePosition = .imageOnly
+        button.bezelStyle = .accessoryBarAction
+        button.isBordered = false
+        button.target = self
+        button.action = #selector(showGeneralSettings(_:))
+        button.toolTip = "Settings"
+        button.setAccessibilityLabel("Settings")
     }
 
     @objc private func quitFromMenu(_ sender: Any?) { quitApplication() }
@@ -1169,46 +1180,65 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         publishAPI()
     }
 
-    private func showCheckRulesEditor() {
-        if let checkRulesEditor {
-            checkRulesEditor.present()
-            return
-        }
-        let editor = CheckRulesEditor(contents: CheckRulesStore.loadRaw(),
-                                      mode: CheckRulesStore.mode(),
-                                      save: { [weak self] text, mode in
+    private func makeSettingsWindow() -> SettingsWindow {
+        let rules = CheckRulesEditor(contents: CheckRulesStore.loadRaw(),
+                                     mode: CheckRulesStore.mode(),
+                                     save: { [weak self] text, mode in
             self?.api.perform(.saveCheckRules(text: text, mode: mode.rawValue),
                               origin: .appKit)
-        }, closed: { [weak self] in
-            self?.checkRulesEditor = nil
-            self?.publishAPI()
         })
-        checkRulesEditor = editor
-        editor.present()
-        publishAPI()
-    }
-
-    private func showProviderCredentialsEditor() {
-        if let providerCredentialsEditor {
-            providerCredentialsEditor.present()
-            return
-        }
-        CheckerCredentials.shared.reload()
-        let statuses = Dictionary(uniqueKeysWithValues: CheckerProvider.allCases.map {
-            ($0, CheckerCredentials.shared.status($0))
-        })
-        let editor = ProviderCredentialsEditor(statuses: statuses,
+        let keys = ProviderCredentialsEditor(statuses: Self.credentialStatuses(),
             save: { [weak self] edits in
                 var failures = ["Thinkpeek could not save credentials."]
                 self?.api.perform(.applyProviderCredentialEdits(edits,
                     completion: { failures = $0 }), origin: .appKit)
                 return failures
-            }, closed: { [weak self] in
-                self?.providerCredentialsEditor = nil
-                self?.publishAPI()
             })
-        providerCredentialsEditor = editor
-        editor.present()
+        keys.statusesProvider = { Self.credentialStatuses() }
+        let window = SettingsWindow(rules: rules, keys: keys)
+        window.closed = { [weak self] in self?.publishAPI() }
+        let general = window.general
+        general.speedChanged = { [weak self] speed in
+            self?.api.perform(.speed(speed.rawValue), origin: .appKit)
+        }
+        general.widthChanged = { [weak self] width in
+            self?.api.perform(.width(width), origin: .appKit)
+        }
+        general.positionPicked = { [weak self] preset in
+            self?.api.perform(.position(preset), origin: .appKit)
+        }
+        general.chooseColorRequested = { [weak self] in
+            self?.api.perform(.chooseBackground, origin: .appKit)
+        }
+        general.defaultColorRequested = { [weak self] in
+            self?.api.perform(.backgroundRGBA(nil), origin: .appKit)
+        }
+        let alerts = window.alerts
+        alerts.alertsChanged = { [weak self] enabled in
+            self?.api.perform(.violationAlerts(enabled), origin: .appKit)
+        }
+        alerts.verificationChanged = { [weak self] enabled in
+            self?.api.perform(.violationVerification(enabled), origin: .appKit)
+        }
+        alerts.historyLimitChanged = { [weak self] limit in
+            self?.api.perform(.violationHistoryLimit(limit), origin: .appKit)
+        }
+        return window
+    }
+
+    private static func credentialStatuses() -> [CheckerProvider: String] {
+        CheckerCredentials.shared.reload()
+        return Dictionary(uniqueKeysWithValues: CheckerProvider.allCases.map {
+            ($0, CheckerCredentials.shared.status($0))
+        })
+    }
+
+    private func showSettings(_ tab: SettingsTab) {
+        settingsWindow.rules.reload(contents: CheckRulesStore.loadRaw(),
+                                    mode: CheckRulesStore.mode())
+        settingsWindow.keys.refresh(statuses: Self.credentialStatuses())
+        updateSettingsMenuChecks(peekTicker.speed)
+        settingsWindow.show(tab)
         publishAPI()
     }
 
@@ -1227,41 +1257,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekCornerControls?.foregroundColor = foreground.withAlphaComponent(0.78)
     }
 
+    /// The single refresh point for every settings control.
     private func updateSettingsMenuChecks(_ speed: TickerSpeed) {
-        for menu in [tickerSettingsMenu, peekSettingsMenu] {
-            menu?.update(speed: speed, width: compactWidth,
-                         usesDefaultAlarmColor: tickerAlarmColor == nil,
-                         violationAlertsEnabled: violationAlertsEnabled,
-                         violationVerificationEnabled: violationVerificationEnabled,
-                         violationHistoryLimit: violationStore.limit)
-        }
-    }
-
-    private func configureSettingsMenu(_ menu: TickerSettingsMenu) {
-        menu.speedRequested = { [weak self] speed in
-            self?.api.perform(.speed(speed.rawValue), origin: .appKit)
-        }
-        menu.widthRequested = { [weak self] width in
-            self?.api.perform(.width(width), origin: .appKit)
-        }
-        menu.positionRequested = { [weak self] preset in
-            self?.api.perform(.position(preset), origin: .appKit)
-        }
-        menu.backgroundRequested = { [weak self] in
-            self?.api.perform(.chooseBackground, origin: .appKit)
-        }
-        menu.defaultAlarmColorRequested = { [weak self] in
-            self?.api.perform(.backgroundRGBA(nil), origin: .appKit)
-        }
-        menu.violationAlertsRequested = { [weak self] enabled in
-            self?.api.perform(.violationAlerts(enabled), origin: .appKit)
-        }
-        menu.violationVerificationRequested = { [weak self] enabled in
-            self?.api.perform(.violationVerification(enabled), origin: .appKit)
-        }
-        menu.violationHistoryLimitRequested = { [weak self] limit in
-            self?.api.perform(.violationHistoryLimit(limit), origin: .appKit)
-        }
+        guard let settingsWindow else { return }
+        settingsWindow.general.update(speed: speed, width: compactWidth,
+                                      usesDefaultAlarmColor: tickerAlarmColor == nil)
+        settingsWindow.alerts.update(alertsEnabled: violationAlertsEnabled,
+                                     verificationEnabled: violationVerificationEnabled,
+                                     historyLimit: violationStore.limit)
     }
 
     private func setViolationVerification(_ enabled: Bool) {
@@ -1948,14 +1951,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let captureWindow: NSWindow?
         if usageWindow?.isVisible == true {
             captureWindow = usageWindow?.window
-        } else if providerCredentialsEditor?.window?.isVisible == true {
-            captureWindow = providerCredentialsEditor?.window
-        } else if checkRulesEditor?.window?.isVisible == true {
-            captureWindow = checkRulesEditor?.window
+        } else if settingsWindow.isVisible {
+            captureWindow = settingsWindow.window
         } else {
             captureWindow = panel
         }
-        guard let window = captureWindow, let view = window.contentView else { return nil }
+        guard let window = captureWindow, let content = window.contentView else { return nil }
+        // Settings: include the window frame, so the tab toolbar is captured.
+        let view = window === settingsWindow.window ? (content.superview ?? content) : content
         return pngData(of: view, scale: window.backingScaleFactor)
     }
 
@@ -2546,7 +2549,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         -> (recent: Set<String>, archived: Set<String>, undated: Int) {
         var recent = Set<String>(), archived = Set<String>(), undated = 0
         for record in violationRecords {
-            switch violationIsArchived(timestamp: record.timestamp, now: now) {
+            switch violationArchived(record, now: now) {
             case .some(true): archived.insert(record.id)
             case .some(false): recent.insert(record.id)
             case .none:
@@ -2555,6 +2558,21 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
         return (recent, archived, undated)
+    }
+
+    /// Record times parsed once per record (a record's timestamp never changes).
+    private var violationDates: [String: Date?] = [:]
+
+    private func violationArchived(_ record: ViolationRecord, now: Date) -> Bool? {
+        let date: Date?
+        if let cached = violationDates[record.id] {
+            date = cached
+        } else {
+            date = parsedRecordTimestamp(record.timestamp)
+            violationDates[record.id] = date
+        }
+        guard let date else { return nil }
+        return now.timeIntervalSince(date) >= violationArchiveAge
     }
 
     private func historyIncludes(
@@ -2589,7 +2607,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         archiveBoundaryTimer = nil
         let next = violationRecords
             .filter { tabs.recent.contains($0.id) }
-            .compactMap { parsedRecordTimestamp($0.timestamp) }
+            .compactMap { violationDates[$0.id] ?? nil }
             .map { $0.addingTimeInterval(violationArchiveAge) }
             .min()
         guard let next else { return }

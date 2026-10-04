@@ -170,7 +170,7 @@ def main() -> None:
             assert len(stored) == 50 and stored[0]["content"] == "Seeded violation 10", \
                 (len(stored), stored[0]["content"])
             assert launched["violationVerificationEnabled"] is True
-            assert "Violation History" in launched["settingsMenuStructure"]
+            assert launched["settingsTabs"] == ["General", "Alerts", "Rules", "Keys"]
 
             # Lowering the limit deletes the oldest and their cards.
             request(ui_port, "POST", "/violation-history/10")

@@ -114,6 +114,8 @@ enum UICommand {
     case readerLatest
     case closeUsage
     case showLastViolation
+    case showSettings(String)
+    case closeSettings
     case openViolationBubble
 
     var name: String {
@@ -157,6 +159,8 @@ enum UICommand {
         case .readerLatest: return "reader-latest"
         case .closeUsage: return "usage/close"
         case .showLastViolation: return "last-violation"
+        case .showSettings(let tab): return "settings/\(tab)"
+        case .closeSettings: return "settings/close"
         case .openViolationBubble: return "violation-bubble/open"
         }
     }
@@ -318,6 +322,13 @@ final class UIStateServer {
             return .readerTab(index)
         }
         if path == "/reader-latest" { return .readerLatest }
+        if path == "/settings" { return .showSettings("general") }
+        if path == "/settings/close" { return .closeSettings }
+        let settingsPrefix = "/settings/"
+        if path.hasPrefix(settingsPrefix),
+           let tab = SettingsTab(rawValue: String(path.dropFirst(settingsPrefix.count))) {
+            return .showSettings(tab.rawValue)
+        }
         let historyPrefix = "/violation-history/"
         if path.hasPrefix(historyPrefix),
            let limit = Int(path.dropFirst(historyPrefix.count)),

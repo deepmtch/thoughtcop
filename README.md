@@ -168,13 +168,19 @@ A formatting-only or empty summary is discarded and cannot replace the last
 visible message.
 The ticker's compact toolbar keeps the four corner-placement arrows and the
 primary actions visible. Six precise window positions also remain available in
-the native **Display Settings** menu.
-The settings menu's **Violation Highlight Color…** item opens the native macOS color picker.
+**Settings › General › Position**.
+
+All settings are in one **Settings** window: **Settings… (⌘,)** in the menu-bar
+menu, or either ⚙ button. Its tabs are **General** (scroll speed, ticker
+width, position, violation color), **Alerts** (Flash red, then show bubble;
+Confirm with second check; violation history), **Rules** and **Keys**. General
+and Alerts apply immediately; Rules and Keys have Revert and Save.
+**Settings › General › Violation color › Choose…** opens the native macOS color picker.
 The ticker uses the semantic macOS window surface during normal operation and the selected color only
 for an actual alert. Custom colors and opacity are remembered, text/icons
-automatically switch contrast, and **Use Default Violation Color** restores the
+automatically switch contrast, and **Use Default** restores the
 critical-red light/dark warning surface.
-**Violation Alerts → Flash Red, Then Show Bubble** is off by default. When
+**Settings › Alerts › Flash red, then show bubble** is off by default. When
 enabled, a new violation turns the menu-bar shield and count red for 3 seconds,
 then shows a bubble under the icon for 5 seconds with the session and the quoted
 evidence; clicking it opens that violation in the reader. If macOS has hidden
@@ -184,8 +190,8 @@ changed by the alert. There is no sound.
 A single click opens a dedicated full-message reader; **Done** or a click outside
 the reader returns to the ticker. The visible controls button opens the separate
 navigation/settings view. The **↤** control returns directly to the
-ticker's beginning. The settings menu selects and remembers Slow, Normal, or Fast
-ticker movement and provides Top/Bottom × Left/Center/Right presets.
+ticker's beginning. Settings › General selects and remembers Slow, Normal, or
+Fast ticker movement and provides Top/Bottom × Left/Center/Right presets.
 The reader keeps **Done** visible. **Hide Thinkpeek** is the ticker's direct X
 action, and **Quit Thinkpeek** remains available from the menu bar.
 Escape from the reader, controls, or full history always returns directly to the
@@ -194,8 +200,8 @@ Controls and full history use the same lifecycle pattern: **Done** returns to th
 ticker without terminating the monitor.
 The controls and full-message views can be resized horizontally from 380 to 560
 points. Their width is remembered; below 500 points the header stacks into two
-rows so the session selector and controls remain usable. The settings menu also
-offers **Width: Narrow** and **Width: Standard** shortcuts.
+rows so the session selector and controls remain usable. Settings › General also
+offers **Ticker width: Narrow** and **Standard**.
 Compact controls show the currently selected message beneath the toolbar in a
 content-sized viewport capped at 210 points. Clicking the ticker opens the
 dedicated reader, while **Show all** displays the complete history.
@@ -234,7 +240,7 @@ latest request you typed before that record, to a fast model. Tool calls and too
 and never enter the automatic evaluation path. Thinkpeek does not infer actions
 from keywords.
 
-The **What to Check…** editor has two explicit modes:
+The **Settings › Rules** editor has two explicit modes:
 
 - **Whole text is one instruction** sends the complete text verbatim once.
 - **Each non-empty line is independent** sends every line verbatim in a separate
@@ -277,12 +283,12 @@ violation reviewed. The same state is available through `/ui`; `/violations`,
 `/last-violation`, `/filter/all`, `/filter/violations` and `/filter/archive`
 drive the same actions without clicking the UI.
 
-The settings menu's **What to Check…** action edits that local value and mode directly.
+**Settings › Rules** edits that local value and mode directly.
 There is no file-backed configuration. The next response or reasoning block uses
 the saved rules without restarting Thinkpeek.
 
-The ticker's checklist button opens **What to Check** directly in one click. The
-sliders button remains reserved for navigation and secondary display preferences.
+The ticker's 💬 button opens **Settings › Rules** directly in one click; ⚙ opens
+Settings › General.
 
 ### Privacy audit log
 

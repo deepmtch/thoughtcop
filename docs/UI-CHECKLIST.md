@@ -64,16 +64,19 @@ running `/ui` inspection surface. A checked item is not merely planned.
 
 ## Settings
 
-- [x] Settings use compact Speed, Width, Position, and Appearance submenus.
+- [x] One Settings window (menu bar › Settings… ⌘,, and both ⚙ buttons) with
+  General, Alerts, Rules and Keys toolbar tabs; General and Alerts apply at
+  once, toggles are switches with a one-line description.
 - [x] What to Check uses local app storage as its only source of truth.
 - [x] No triggers file or file path remains in the UI or runtime configuration.
-- [x] Editor actions are horizontal Save/Cancel controls; Return inserts a
-  newline, Command-S saves, and unsaved dismissal requires a decision.
+- [x] Rules and Keys keep horizontal Revert/Save controls; Return inserts a
+  newline, Command-S saves, the window stays open after Save, switching tabs
+  keeps typed text, and closing with unsaved edits requires a decision.
 - [x] Ticker speed offers Slow, Normal, and Fast and persists the choice.
 - [x] Width offers Narrow and Standard, supports drag resize, and persists.
 - [x] Position offers six Top/Bottom × Left/Center/Right presets.
 - [x] Four direct corner-placement arrows stay visible in the ticker; six
-  Top/Bottom × Left/Center/Right positions also remain in Display Settings.
+  Top/Bottom × Left/Center/Right positions also remain in Settings › General.
 - [x] Top positions use the macOS visible frame below the menu bar.
 - [x] Ticker background uses the native color picker and persists opacity.
 - [x] Normal mode uses the semantic macOS window surface; first-run violation

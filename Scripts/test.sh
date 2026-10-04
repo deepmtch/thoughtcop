@@ -28,7 +28,7 @@ for test in \
     --window-position-selftest \
     --ticker-corner-selftest \
     --provider-icon-selftest \
-    --settings-menu-selftest \
+    --settings-window-selftest \
     --check-rules-editor-selftest \
     --window-chrome-selftest \
     --compact-width-selftest \

@@ -202,7 +202,8 @@ class Capture:
                  "historyFilter": state.get("historyFilter"),
                  "visibleCardCount": state.get("visibleCardCount"),
                  "violationTabCounts": state.get("violationTabCounts"),
-                 "emptyStateVisible": state.get("violationEmptyStateVisible")}
+                 "emptyStateVisible": state.get("violationEmptyStateVisible"),
+                 "settingsTab": state.get("settingsTab")}
         self.manifest.append(entry)
         return entry
 
@@ -380,13 +381,21 @@ def main() -> None:
             assert "hardcoded" in (entry["readerText"] or ""), entry
             request(port, "POST", "/close")
             time.sleep(0.4)
-            request(port, "POST", "/check-rules")
-            capture.shot("13-rules-editor", "editor", settle=1.0)
-            request(port, "POST", "/check-rules/close")
-            time.sleep(0.4)
-            request(port, "POST", "/provider-credentials")
-            capture.shot("14-provider-keys", "editor", settle=1.0)
-            request(port, "POST", "/provider-credentials/close")
+            for index, tab in enumerate(["general", "alerts", "rules", "keys"]):
+                request(port, "POST", f"/settings/{tab}")
+                entry = capture.shot(f"13{'abcd'[index]}-settings-{tab}", "settings", settle=1.0)
+                assert entry["settingsTab"] == tab, entry
+                assert ui(port)["settingsWindowTitle"] == tab.capitalize(), ui(port)["settingsWindowTitle"]
+            state = ui(port)
+            items = state["statusMenuItems"]
+            assert items[0] == "Show Thinkpeek" and \
+                items[1].startswith("Open Violation History") and \
+                items[2:] == ["Show Last Violation", state["usageMenuTitle"], "Settings…",
+                              "Quit Thinkpeek"], items
+            assert state["settingsAlertsSwitchOn"] is False, state  # alerts off again
+            assert state["settingsHistoryChoice"] == "50 newest", state
+            request(port, "POST", "/settings/close")
+            wait_ui(port, lambda s: s.get("settingsVisible") is False)
             time.sleep(0.4)
             request(port, "POST", "/usage")
             capture.shot("15-usage", "editor", settle=1.0)
@@ -460,7 +469,7 @@ def main() -> None:
         if entry["kind"] == "ticker":
             assert entry["windowHeight"] == TICKER_HEIGHT, \
                 f"{entry['name']}: ticker is {entry['windowHeight']} pt tall, not {TICKER_HEIGHT}"
-        if entry["kind"] != "editor":
+        if entry["kind"] not in {"editor", "settings"}:
             assert entry["contentViewHeight"] == entry["windowHeight"], \
                 f"{entry['name']}: content {entry['contentViewHeight']} pt tall in a " \
                 f"{entry['windowHeight']} pt window (top is cut off)"

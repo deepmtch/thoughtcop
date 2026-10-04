@@ -1,9 +1,8 @@
-// Native Keychain editor for external checker credentials.
+// The Keys tab of Settings: native Keychain editor for checker credentials.
 
 import AppKit
 
-final class ProviderCredentialsEditor: NSWindowController, NSWindowDelegate,
-    NSTextFieldDelegate {
+final class ProviderCredentialsEditor: NSViewController, NSTextFieldDelegate {
     private let groqField = NSSecureTextField()
     private let cerebrasField = NSSecureTextField()
     private let removeGroq = NSButton(checkboxWithTitle: "Remove saved Groq key",
@@ -11,58 +10,50 @@ final class ProviderCredentialsEditor: NSWindowController, NSWindowDelegate,
     private let removeCerebras = NSButton(checkboxWithTitle: "Remove saved Cerebras key",
                                           target: nil, action: nil)
     private let saveHandler: ([CheckerProvider: CheckerCredentialEdit]) -> [String]
-    private let closeHandler: () -> Void
-    private var allowClose = false
+    private var statuses: [CheckerProvider: String]
+    /// Re-reads the saved state after Save, so the status lines stay true.
+    var statusesProvider: (() -> [CheckerProvider: String])?
 
     var usesSecureInputs: Bool {
-        groqField.cell is NSSecureTextFieldCell &&
+        _ = view
+        return groqField.cell is NSSecureTextFieldCell &&
             cerebrasField.cell is NSSecureTextFieldCell
     }
 
     init(statuses: [CheckerProvider: String],
-         save: @escaping ([CheckerProvider: CheckerCredentialEdit]) -> [String],
-         closed: @escaping () -> Void) {
+         save: @escaping ([CheckerProvider: CheckerCredentialEdit]) -> [String]) {
         saveHandler = save
-        closeHandler = closed
-        let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 350),
-                             styleMask: [.titled, .closable],
-                             backing: .buffered, defer: false)
-        window.title = "Provider Keys"
-        window.level = .floating
-        window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        super.init(window: window)
-        window.delegate = self
-        buildContent(statuses: statuses)
+        self.statuses = statuses
+        super.init(nibName: nil, bundle: nil)
     }
 
     required init?(coder: NSCoder) { nil }
 
-    func present() {
-        NSApp.activate(ignoringOtherApps: true)
-        window?.center()
-        showWindow(nil)
-        window?.makeKeyAndOrderFront(nil)
-        window?.makeFirstResponder(groqField)
+    override func loadView() {
+        view = NSView()
+        buildContent(statuses: statuses)
     }
 
-    func windowWillClose(_ notification: Notification) { closeHandler() }
+    func focus() { view.window?.makeFirstResponder(groqField) }
 
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard !allowClose, isDirty else { return true }
-        presentUnsavedChangesAlert()
-        return false
+    /// Rebuilds the status lines from the current saved state (unless edits
+    /// are pending).
+    func refresh(statuses: [CheckerProvider: String]) {
+        _ = view
+        guard !isDirty else { return }
+        self.statuses = statuses
+        view.subviews.forEach { $0.removeFromSuperview() }
+        buildContent(statuses: statuses)
     }
 
-    private var isDirty: Bool {
-        !groqField.stringValue.isEmpty || !cerebrasField.stringValue.isEmpty ||
+    var isDirty: Bool {
+        _ = view
+        return !groqField.stringValue.isEmpty || !cerebrasField.stringValue.isEmpty ||
             removeGroq.state == .on || removeCerebras.state == .on
     }
 
     private func buildContent(statuses: [CheckerProvider: String]) {
-        guard let content = window?.contentView else { return }
-        content.wantsLayer = true
-        content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        let content = view
 
         let title = NSTextField(labelWithString: "Provider keys")
         title.font = .systemFont(ofSize: 15, weight: .semibold)
@@ -109,9 +100,9 @@ final class ProviderCredentialsEditor: NSWindowController, NSWindowDelegate,
             section.widthAnchor.constraint(equalTo: grid.widthAnchor).isActive = true
         }
 
-        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel(_:)))
+        let cancel = NSButton(title: "Revert", target: self, action: #selector(cancel(_:)))
         cancel.bezelStyle = .rounded
-        cancel.keyEquivalent = "\u{1b}"
+        cancel.setAccessibilityLabel("Clear the typed keys")
         let save = NSButton(title: "Save", target: self,
                             action: #selector(save(_:)))
         save.bezelStyle = .rounded
@@ -179,27 +170,29 @@ final class ProviderCredentialsEditor: NSWindowController, NSWindowDelegate,
 
     @objc private func save(_ sender: Any?) {
         let failures = saveHandler(edits())
-        groqField.stringValue = ""
-        cerebrasField.stringValue = ""
+        clearEdits()
+        if let statusesProvider { refresh(statuses: statusesProvider()) }
         guard failures.isEmpty else {
             let alert = NSAlert()
             alert.alertStyle = .critical
             alert.messageText = "Some credentials could not be saved"
             alert.informativeText = failures.joined(separator: "\n")
-            if let window { alert.beginSheetModal(for: window) }
+            if let window = view.window { alert.beginSheetModal(for: window) }
             return
         }
-        allowClose = true
-        close()
     }
 
-    @objc private func cancel(_ sender: Any?) {
-        guard isDirty else { allowClose = true; close(); return }
-        presentUnsavedChangesAlert()
+    @objc private func cancel(_ sender: Any?) { clearEdits() }
+
+    private func clearEdits() {
+        groqField.stringValue = ""
+        cerebrasField.stringValue = ""
+        removeGroq.state = .off
+        removeCerebras.state = .off
     }
 
-    private func presentUnsavedChangesAlert() {
-        guard let window else { return }
+    /// Asks before typed keys are dropped; `proceed` is true after Discard.
+    func confirmDiscard(in window: NSWindow, proceed: @escaping (Bool) -> Void) {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Discard credential changes?"
@@ -207,9 +200,9 @@ final class ProviderCredentialsEditor: NSWindowController, NSWindowDelegate,
         alert.addButton(withTitle: "Keep Editing")
         alert.addButton(withTitle: "Discard Changes")
         alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertSecondButtonReturn else { return }
-            self?.allowClose = true
-            self?.close()
+            guard response == .alertSecondButtonReturn else { proceed(false); return }
+            self?.clearEdits()
+            proceed(true)
         }
     }
 }

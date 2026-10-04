@@ -56,8 +56,8 @@ final class TickerPrimaryActions: NSStackView {
         checkRulesButton.action = #selector(openCheckRules(_:))
         checkRulesButton.toolTip = "Edit check prompt"
         checkRulesButton.setAccessibilityLabel("Edit check prompt")
-        displaySettingsButton.toolTip = "Display settings"
-        displaySettingsButton.setAccessibilityLabel("Display settings")
+        displaySettingsButton.toolTip = "Settings"
+        displaySettingsButton.setAccessibilityLabel("Settings")
         controlsButton.target = self
         controlsButton.action = #selector(openControls(_:))
         controlsButton.toolTip = "Open message navigation"

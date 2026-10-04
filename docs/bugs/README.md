@@ -99,3 +99,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-092](BUG-092-hidden-reader-tabs-cut-off-the-ticker.md) | Hidden reader tab rows cut off the ticker header | Fixed |
 | [BUG-093](BUG-093-segmented-reader-tabs-were-unreadable.md) | Segmented reader tabs cut session names to a few letters | Fixed |
 | [BUG-094](BUG-094-hidden-violations-had-no-visible-alert.md) | A violation while Thinkpeek was hidden had no noticeable alert; old violations crowded the list | Fixed |
+| [BUG-095](BUG-095-settings-were-hidden-in-nested-menus.md) | Settings were hidden in nested ticker menus; ⌘, opened Edit Rules | Fixed |

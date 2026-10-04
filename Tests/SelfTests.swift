@@ -1055,8 +1055,6 @@ if CommandLine.arguments.contains("--outside-click-selftest") {
 if CommandLine.arguments.contains("--ticker-actions-selftest") {
     let actions = TickerPrimaryActions(frame: .zero)
     let activity = CheckerActivityIndicator(frame: .zero)
-    let settingsMenu = TickerSettingsMenu()
-    settingsMenu.install(on: actions.displaySettingsButton)
     var checkRules = false
     var controls = false
     var hidden = false
@@ -1067,10 +1065,8 @@ if CommandLine.arguments.contains("--ticker-actions-selftest") {
     actions.requestControlsForTest()
     actions.requestHideForTest()
     activity.begin(destination: "Groq · Test")
-    guard actions.accessibilityNames == ["Edit check prompt", "Display settings",
+    guard actions.accessibilityNames == ["Edit check prompt", "Settings",
                                          "Open message navigation", "Hide Thinkpeek"],
-          actions.displaySettingsButton.target != nil,
-          actions.displaySettingsButton.action != nil,
           checkRules, controls, hidden,
           activity.isChecking, !activity.isHidden,
           activity.destination == "Groq · Test",
@@ -1167,40 +1163,44 @@ if CommandLine.arguments.contains("--provider-icon-selftest") {
     exit(0)
 }
 
-if CommandLine.arguments.contains("--settings-menu-selftest") {
-    let button = NSButton(frame: .zero)
-    let settings = TickerSettingsMenu()
-    settings.install(on: button)
-    settings.update(speed: .normal, width: CompactWindowSizing.standardWidth,
-                    usesDefaultAlarmColor: true, violationAlertsEnabled: false,
-                    violationVerificationEnabled: true, violationHistoryLimit: 50)
-    let expected = [
-        "Scroll Speed": ["Slow", "Normal", "Fast"],
-        "Window Width": ["Narrow", "Standard"],
-        "Window Position": ["Top Left", "Top Center", "Top Right", "Bottom Left",
-                            "Bottom Center", "Bottom Right"],
-        "Appearance": ["Violation Highlight Color…", "Use Default Violation Color"],
-        "Violation Alerts": ["Flash Red, Then Show Bubble", "Confirm with Second Check"],
-        "Violation History": ["Keep 10 Newest", "Keep 25 Newest", "Keep 50 Newest",
-                              "Keep 100 Newest", "Keep 250 Newest", "Keep 500 Newest"],
-    ]
+if CommandLine.arguments.contains("--settings-window-selftest") {
+    _ = NSApplication.shared
+    let rules = CheckRulesEditor(contents: "Rule", mode: .wholeText, save: { _, _ in })
+    let keys = ProviderCredentialsEditor(statuses: [:], save: { _ in [] })
+    let settings = SettingsWindow(rules: rules, keys: keys)
     var requestedAlerts: Bool?
     var requestedVerification: Bool?
     var requestedLimit: Int?
-    settings.violationAlertsRequested = { requestedAlerts = $0 }
-    settings.violationVerificationRequested = { requestedVerification = $0 }
-    settings.violationHistoryLimitRequested = { requestedLimit = $0 }
-    func press(_ menuTitle: String, _ itemTitle: String) -> NSMenuItem? {
-        guard let item = settings.menu.item(withTitle: menuTitle)?.submenu?
-            .item(withTitle: itemTitle), let action = item.action else { return nil }
-        NSApp.sendAction(action, to: item.target, from: item)
-        return item
-    }
-    _ = press("Violation Alerts", "Flash Red, Then Show Bubble")
-    let verificationItem = press("Violation Alerts", "Confirm with Second Check")
-    let historyMenu = settings.menu.item(withTitle: "Violation History")?.submenu
-    let checkedLimits = historyMenu?.items.filter { $0.state == .on }.map(\.title)
-    _ = press("Violation History", "Keep 100 Newest")
+    var requestedSpeed: TickerSpeed?
+    var requestedPosition: String?
+    settings.alerts.alertsChanged = { requestedAlerts = $0 }
+    settings.alerts.verificationChanged = { requestedVerification = $0 }
+    settings.alerts.historyLimitChanged = { requestedLimit = $0 }
+    settings.general.speedChanged = { requestedSpeed = $0 }
+    settings.general.positionPicked = { requestedPosition = $0 }
+    settings.alerts.update(alertsEnabled: false, verificationEnabled: true, historyLimit: 50)
+    settings.general.update(speed: .normal, width: CompactWindowSizing.standardWidth,
+                            usesDefaultAlarmColor: true)
+    let initialAlertsOff = settings.alerts.alertsSwitch.state == .off
+    let initialHistory = settings.alerts.historyButton.titleOfSelectedItem
+    let initialSpeed = settings.general.speedButton.titleOfSelectedItem
+    settings.alerts.alertsSwitch.performClick(nil)
+    settings.alerts.verificationSwitch.performClick(nil)
+    settings.alerts.historyButton.selectItem(withTitle: "100 newest")
+    _ = settings.alerts.historyButton.target?.perform(settings.alerts.historyButton.action,
+                                                     with: settings.alerts.historyButton)
+    settings.general.speedButton.selectItem(withTitle: "Fast")
+    _ = settings.general.speedButton.target?.perform(settings.general.speedButton.action,
+                                                    with: settings.general.speedButton)
+    settings.general.positionButton.selectItem(withTitle: "Bottom Right")
+    _ = settings.general.positionButton.target?.perform(
+        settings.general.positionButton.action, with: settings.general.positionButton)
+    settings.show(.alerts)
+    let alertsTab = settings.selectedTab
+    settings.show(.keys)
+    let keysTab = settings.selectedTab
+    let windowWidth = settings.window?.frame.width ?? 0
+    settings.window?.close()
     let suite = "thinkpeek.violation-alerts-selftest"
     guard let defaults = UserDefaults(suiteName: suite) else { exit(1) }
     defaults.removePersistentDomain(forName: suite)
@@ -1209,28 +1209,23 @@ if CommandLine.arguments.contains("--settings-menu-selftest") {
     let verificationDefaultOn = ViolationVerificationPreference.load(defaults: defaults)
     let historyDefault = ViolationHistoryPreference.load(defaults: defaults)
     ViolationAlertsPreference.save(true, defaults: defaults)
-    ViolationVerificationPreference.save(false, defaults: defaults)
     ViolationHistoryPreference.save(25, defaults: defaults)
     ViolationHistoryPreference.save(7, defaults: defaults)  // not a choice: ignored
-    guard settings.structure == expected, settings.menu.numberOfItems == 6,
-          settings.usesSingleButtonLauncher,
-          settings.topLevelTitles == ["Scroll Speed", "Window Width",
-                                      "Window Position", "Appearance", "Violation Alerts",
-                                      "Violation History"],
-          requestedAlerts == true, defaultOff,
-          verificationItem?.state == .on, requestedVerification == false,
-          checkedLimits == ["Keep 50 Newest"], requestedLimit == 100,
-          verificationDefaultOn, historyDefault == 50,
+    guard SettingsTab.allCases.map(\.title) == ["General", "Alerts", "Rules", "Keys"],
+          initialAlertsOff, initialHistory == "50 newest", initialSpeed == "Normal",
+          requestedAlerts == true, requestedVerification == false,
+          requestedLimit == 100, requestedSpeed == .fast,
+          requestedPosition == "bottom-right",
+          alertsTab == .alerts, keysTab == .keys, windowWidth >= 500,
+          defaultOff, verificationDefaultOn, historyDefault == 50,
           ViolationAlertsPreference.load(defaults: defaults),
-          !ViolationVerificationPreference.load(defaults: defaults),
           ViolationHistoryPreference.load(defaults: defaults) == 25,
           ViolationAlertsPreference.flashDuration == 3,
           ViolationAlertsPreference.bubbleDuration == 5 else {
-        FileHandle.standardError.write(
-            "settings menu self-test failed\n".data(using: .utf8)!)
+        FileHandle.standardError.write("settings window self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("settings menu: categories=6 singleButton=true hierarchical=true " +
+    print("settings window: tabs=General,Alerts,Rules,Keys switches=true popups=true " +
           "violationAlertsDefaultOff=true flash=3 bubble=5 verificationDefaultOn=true " +
           "historyDefault=50")
     exit(0)
@@ -1250,22 +1245,22 @@ if CommandLine.arguments.contains("--check-rules-editor-selftest") ||
         saveActionRan = true
         CheckRulesStore.saveRaw(text, defaults: defaults)
         CheckRulesStore.saveMode(mode, defaults: defaults)
-    }, closed: {})
+    })
     guard editor.currentText == CheckRulesStore.defaultValue,
-          editor.actionTitles == ["Cancel", "Save Rules"],
+          editor.actionTitles == ["Revert", "Save Rules"],
           editor.actionsAreHorizontal,
           editor.currentMode == .eachLine,
           CheckRulesStore.instruction(defaults: defaults) ==
             CheckRulesStore.defaultValue,
           !CheckRulesStore.isCustomized(defaults: defaults)
     else { exit(1) }
-    guard let saveButton = editor.window?.contentView?.subviews
+    guard let saveButton = editor.view.subviews
         .compactMap({ $0 as? NSStackView })
         .flatMap(\.arrangedSubviews)
         .compactMap({ $0 as? NSButton })
         .first(where: { $0.title == "Save Rules" }) else { exit(1) }
     saveButton.performClick(nil)
-    guard saveActionRan,
+    guard saveActionRan, !editor.isDirty,
           CheckRulesStore.loadRaw(defaults: defaults) == CheckRulesStore.defaultValue,
           CheckRulesStore.isCustomized(defaults: defaults) else { exit(1) }
     let verbatim = "Updated instruction\n# remains literal user text\nSecond paragraph"
@@ -1636,7 +1631,7 @@ if CommandLine.arguments.contains("--checker-credentials-selftest") {
     }
     let editor = ProviderCredentialsEditor(statuses: [
         .groq: "Not configured", .cerebras: "Active: macOS Keychain",
-    ], save: { _ in [] }, closed: {})
+    ], save: { _ in [] })
     guard editor.usesSecureInputs else {
         FileHandle.standardError.write(
             "provider credentials editor self-test failed\n".data(using: .utf8)!)

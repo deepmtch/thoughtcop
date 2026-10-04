@@ -148,7 +148,7 @@ assert closed["tickerCornerButtons"] == [
     "Move window to bottom left corner", "Move window to bottom right corner",
 ]
 assert closed["tickerPrimaryActions"] == [
-    "Edit check prompt", "Display settings",
+    "Edit check prompt", "Settings",
     "Open message navigation", "Hide Thinkpeek",
 ]
 assert closed["tickerToolbarActions"] == [

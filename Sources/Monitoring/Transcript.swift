@@ -38,11 +38,19 @@ func writtenSinceLaunch(_ timestamp: String, launchedAt: Date) -> Bool {
 
 /// ISO-8601 with or without fractional seconds (any number of digits) and
 /// with a Z or numeric offset. nil when the provider wrote no such timestamp.
+// ISO8601DateFormatter is thread-safe; creating one per call was measurable
+// when the violation tabs read every stored record's time on each refresh.
+private let fractionalRecordTimestampFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+}()
+private let plainRecordTimestampFormatter = ISO8601DateFormatter()
+
 func parsedRecordTimestamp(_ timestamp: String) -> Date? {
-    let fractional = ISO8601DateFormatter()
-    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let fractional = fractionalRecordTimestampFormatter
     if let date = fractional.date(from: timestamp)
-        ?? ISO8601DateFormatter().date(from: timestamp) { return date }
+        ?? plainRecordTimestampFormatter.date(from: timestamp) { return date }
     // ISO8601DateFormatter accepts at most millisecond fractions; drop the
     // extra digits (sub-millisecond precision only) and parse again.
     guard let dot = timestamp.firstIndex(of: "."),
