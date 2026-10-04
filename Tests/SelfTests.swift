@@ -897,8 +897,8 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
           normalValues.count == 4,
           normalValues == (TickerBackgroundPreference.components(
             of: NSColor.windowBackgroundColor) ?? []),
-          alarmValues == values,
-          defaultAlarmValues.count == 4,
+          // A violation never changes the ticker background.
+          alarmValues == normalValues, defaultAlarmValues == normalValues,
           !tickerIsBold,
           TickerBackgroundPreference.load(defaults: defaults) == nil,
           TickerBackgroundPreference.usesDarkForeground(on: .white),
@@ -907,8 +907,8 @@ if CommandLine.arguments.contains("--ticker-background-selftest") {
             .data(using: .utf8)!)
         exit(1)
     }
-    print("ticker background: semanticSurface=true alarmOnly=true custom=true " +
-          "defaultAlarm=true autoContrast=true textWeight=regular")
+    print("ticker background: semanticSurface=true violationUnchanged=true custom=true " +
+          "autoContrast=true textWeight=regular")
     exit(0)
 }
 

@@ -76,9 +76,10 @@ running `/ui` inspection surface. A checked item is not merely planned.
   the ticker has no corner arrows.
 - [x] Top positions touch the menu bar (no gap), with only the bottom corners
   rounded; bottom positions keep a 12-point margin.
-- [x] Ticker background uses the native color picker and persists opacity.
-- [x] Normal mode uses the semantic macOS window surface; first-run violation
-  mode uses a dynamic critical-red light/dark surface.
+- [x] The violation color uses the native color picker and persists; it colors
+  the menu-bar flash.
+- [x] The ticker always uses the semantic macOS window surface; a violation
+  never changes its background.
 - [x] System-background reset is available.
 - [x] Foreground text/icons automatically maintain light/dark contrast.
 - [x] Two persisted switches: Flash menu-bar icon red (default on, 3 s) and Show

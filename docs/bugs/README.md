@@ -102,3 +102,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-095](BUG-095-settings-were-hidden-in-nested-menus.md) | Settings were hidden in nested ticker menus; ⌘, opened Edit Rules | Fixed |
 | [BUG-096](BUG-096-ticker-toolbar-was-overloaded.md) | The ticker toolbar had eight icons, three of them unclear | Fixed |
 | [BUG-097](BUG-097-ticker-was-two-rows-below-a-gap.md) | The ticker was two rows tall, below a gap under the menu bar | Fixed |
+| [BUG-098](BUG-098-ticker-background-turned-red-on-violation.md) | The ticker background turned red when its message was judged a violation | Fixed |

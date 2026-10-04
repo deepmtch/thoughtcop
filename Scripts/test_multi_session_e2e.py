@@ -490,6 +490,9 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         get_json(API_BASE, "/previous")
         previous = wait_for(lambda state: state.get("currentIndex") == 0)
         assert previous["tickerAlarmActive"] is True, previous
+        # Showing a violation never changes the ticker background.
+        assert previous["tickerBackgroundRGBA"] == local_summary["tickerBackgroundRGBA"], previous
+        assert previous["tickerBackgroundMode"] == "normal-semantic", previous
         assert previous["peekSource"] == "Claude · Claude Alpha", previous
         assert "Dummy detected explicit Claude uncertainty" in previous["peekText"], previous
 

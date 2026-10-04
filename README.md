@@ -178,10 +178,9 @@ width, position, violation color), **Alerts** (Flash red, then show bubble;
 Confirm with second check; violation history), **Rules** and **Keys**. General
 and Alerts apply immediately; Rules and Keys have Revert and Save.
 **Settings › General › Violation color › Choose…** opens the native macOS color picker.
-The ticker uses the semantic macOS window surface during normal operation and the selected color only
-for an actual alert. Custom colors and opacity are remembered, text/icons
-automatically switch contrast, and **Use Default** restores the
-critical-red light/dark warning surface.
+The ticker always uses the semantic macOS window surface; a violation never
+changes its background. The violation color colors the menu-bar flash. Custom
+colors are remembered, and **Use Default** restores red.
 **Settings › Alerts** has two separate switches. **Flash menu-bar icon red**
 (on by default) turns the shield and count red for 3 seconds when a violation
 arrives. **Show bubble** (off by default) shows a bubble under the icon for 5

@@ -68,10 +68,12 @@ enum TickerBackgroundPreference {
 enum TickerAppearance {
     static let normalBackground = NSColor.windowBackgroundColor
 
+    /// The ticker background never changes for a violation (the user,
+    /// 2026-10-04: "The background … should never change. It is only the
+    /// icon itself"). The violation color is used by the menu-bar flash.
     static func background(alarmActive: Bool,
                            configuredAlarmColor: NSColor?) -> NSColor {
-        guard alarmActive else { return normalBackground }
-        return configuredAlarmColor ?? TickerBackgroundPreference.stickyYellow
+        normalBackground
     }
 }
 

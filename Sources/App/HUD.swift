@@ -907,7 +907,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "tickerReduceMotion": NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
             "tickerSpeed": peekTicker.speed.rawValue,
             "tickerPointsPerSecond": Int(peekTicker.speed.pointsPerSecond),
-            "tickerBackgroundMode": tickerAlarmActive ? "alarm" : "normal-semantic",
+            "tickerBackgroundMode": "normal-semantic",
             "tickerBackgroundRGBA": TickerBackgroundPreference.components(
                 of: tickerActiveBackgroundColor)?.map(Double.init) ?? NSNull(),
             "tickerAlarmActive": tickerAlarmActive,
