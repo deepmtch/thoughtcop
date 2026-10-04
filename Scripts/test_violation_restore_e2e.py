@@ -194,6 +194,12 @@ def main() -> None:
             closed = wait_ui(port, lambda ui: ui.get("compactMode") is True, limit)
             after_close = append_and_wait(port, transcript, "AFTER_CLOSE_THOUGHT", limit)
         finally:
+            # Keep the command log (each command's origin: http or appKit), so
+            # an unexpected state can be traced to its cause.
+            log = root / "ui-api.jsonl"
+            if log.exists():
+                Path(".local").mkdir(exist_ok=True)
+                (Path(".local") / "last-restore-ui-api.jsonl").write_text(log.read_text())
             subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek",
                             "violationHistoryLimit"], capture_output=True, check=False)
             process.terminate()
@@ -217,6 +223,9 @@ def main() -> None:
     assert compact["attachedCardCount"] <= 2, compact["attachedCardCount"]
     assert expanded["visibleCardCount"] == RECORDS + LIVE_RECORDS, \
         expanded["visibleCardCount"]
+    ambient = [line for line in (Path(".local") / "last-restore-ui-api.jsonl")
+               .read_text().splitlines() if '"origin":"appKit"' in line]
+    assert not ambient, f"real input reached the isolated app: {ambient[:3]}"
     assert violations["visibleCardCount"] == RECORDS, violations["visibleCardCount"]
     assert closed["attachedCardCount"] <= 2, closed["attachedCardCount"]
     # BUG-088: hidden views must not hold the history wider than its window.

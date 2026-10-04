@@ -10,9 +10,9 @@ All notable user-facing changes will be recorded here. The project follows
 - One **Settings** window (menu bar › Settings… ⌘,, or ⚙) with General, Alerts,
   Rules and Keys tabs; replaces the nested ⚙ menus and the separate Edit Rules
   and Provider Keys windows.
-- Violation Alerts → **Flash Red, Then Show Bubble** (one setting, off by
-  default) replaces "Show for 10 Seconds": the menu-bar icon turns red for 3 s,
-  then a bubble shows the violation for 5 s; clicking it opens the violation.
+- Settings › Alerts: **Flash menu-bar icon red** (on by default, 3 s) and **Show
+  bubble** (off by default, 5 s; clicking it opens the violation) replace "Show
+  for 10 Seconds".
 - **Show Last Violation** in the menu-bar menu, below Open Violation History…
 - History tabs **All | Violations | Archive**: Violations shows the last hour;
   older violations move to Archive.

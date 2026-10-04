@@ -114,7 +114,7 @@ def append_thinking(path: Path, text: str) -> None:
 
 def reset_preferences() -> None:
     for key in ["violationHistoryLimit", "violationVerificationEnabled",
-                "violationAlertsEnabled"]:
+                "violationAlertsEnabled", "violationFlashEnabled"]:
         subprocess.run(["/usr/bin/defaults", "delete", DEFAULTS_DOMAIN, key],
                        capture_output=True, check=False)
 

@@ -12,14 +12,27 @@ func restoreNativeStatusItemForeground(_ button: NSStatusBarButton) {
     button.title = title
 }
 
-/// "Flash Red, Then Show Bubble": one switch, off by default. When on, a new
-/// violation turns the menu-bar icon red for `flashDuration`, then shows a
-/// bubble under it for `bubbleDuration`. The key predates this behavior (it
-/// switched a 10-second ticker popup), so an earlier opt-in carries over.
-enum ViolationAlertsPreference {
+/// Two independent switches, as the user asked (2026-10-04): a new violation
+/// turns the menu-bar icon red for `duration` (on by default)...
+enum ViolationFlashPreference {
+    static let defaultsKey = "violationFlashEnabled"
+    static let duration: TimeInterval = 3
+
+    static func load(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: defaultsKey) as? Bool ?? true
+    }
+
+    static func save(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: defaultsKey)
+    }
+}
+
+/// ...and shows a bubble under the icon for `duration` (off by default),
+/// after the flash when both are on. The key is the earlier single alert
+/// switch's, so an earlier opt-in keeps the bubble on.
+enum ViolationBubblePreference {
     static let defaultsKey = "violationAlertsEnabled"
-    static let flashDuration: TimeInterval = 3
-    static let bubbleDuration: TimeInterval = 5
+    static let duration: TimeInterval = 5
 
     static func load(defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: defaultsKey)
@@ -160,6 +173,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var utilitiesGroup: DetailToolbarGroup!
     private var violationEmptyState: HistoryEmptyStateView!
     private var settingsWindow: SettingsWindow!
+    private var isolatedInputMonitor: Any?
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
     private var eventPreviews: [MessagePreview] = []
@@ -220,7 +234,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var discardedEmptySummaryCount = 0
     private var statusItem: NSStatusItem?
     private var hiddenByUser = false
-    private var violationAlertsEnabled = ViolationAlertsPreference.load()
+    private var violationFlashEnabled = ViolationFlashPreference.load()
+    private var violationBubbleEnabled = ViolationBubblePreference.load()
     private var violationVerificationEnabled = ViolationVerificationPreference.load()
     private var usageMenuItem: NSMenuItem?
     /// Reader session tab (nil = All), whether it follows that session's
@@ -636,6 +651,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         api.captureHandler = { [weak self] target in self?.captureWindowPNG(target: target) }
         api.actionHandler = { [weak self] command in self?.handleCommand(command) }
         api.start()
+        if ISOLATED_E2E {
+            // Isolated tests drive Thinkpeek only through the command API.
+            // Real keys and clicks (a person or another tool using the same
+            // desktop) must not change the app mid-assertion.
+            isolatedInputMonitor = NSEvent.addLocalMonitorForEvents(matching: [
+                .keyDown, .keyUp, .leftMouseDown, .leftMouseUp, .rightMouseDown,
+                .rightMouseUp, .otherMouseDown, .otherMouseUp, .scrollWheel,
+            ]) { _ in nil }
+        }
         if !ISOLATED_E2E {
             outsideClickMonitor.start { [weak self] location in
                 DispatchQueue.main.async {
@@ -694,7 +718,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "alwaysOnTop": panel.level == .floating,
             "windowVisible": panel.isVisible,
             "hiddenByUser": hiddenByUser,
-            "violationAlertsEnabled": violationAlertsEnabled,
+            "isolatedInputIgnored": isolatedInputMonitor != nil,
+            "violationFlashEnabled": violationFlashEnabled,
+            "violationBubbleEnabled": violationBubbleEnabled,
             "statusItemFlashActive": statusFlashActive,
             "violationBubbleVisible": violationBubble.isVisible,
             "violationBubbleTitle": violationBubble.isVisible ? violationBubble.title : "",
@@ -852,7 +878,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 ? settingsWindow.selectedTab.rawValue : "",
             "settingsTabs": SettingsTab.allCases.map(\.title),
             "settingsWindowTitle": settingsWindow?.window?.title ?? "",
-            "settingsAlertsSwitchOn": settingsWindow?.alerts.alertsSwitch.state == .on,
+            "settingsFlashSwitchOn": settingsWindow?.alerts.flashSwitch.state == .on,
+            "settingsBubbleSwitchOn": settingsWindow?.alerts.bubbleSwitch.state == .on,
             "settingsVerificationSwitchOn":
                 settingsWindow?.alerts.verificationSwitch.state == .on,
             "settingsHistoryChoice": settingsWindow?.alerts.historyButton.titleOfSelectedItem ?? "",
@@ -1024,7 +1051,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard components.count == 4 else { return }
             setTickerBackground(NSColor(srgbRed: components[0], green: components[1],
                                         blue: components[2], alpha: components[3]))
-        case .violationAlerts(let enabled): setViolationAlerts(enabled)
+        case .violationFlash(let enabled): setViolationFlash(enabled)
+        case .violationBubble(let enabled): setViolationBubble(enabled)
         case .violationVerification(let enabled): setViolationVerification(enabled)
         case .violationHistoryLimit(let limit): setViolationHistoryLimit(limit)
         case .readerTab(let index): if messageMode { selectReaderTab(index) }
@@ -1214,8 +1242,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.api.perform(.backgroundRGBA(nil), origin: .appKit)
         }
         let alerts = window.alerts
-        alerts.alertsChanged = { [weak self] enabled in
-            self?.api.perform(.violationAlerts(enabled), origin: .appKit)
+        alerts.flashChanged = { [weak self] enabled in
+            self?.api.perform(.violationFlash(enabled), origin: .appKit)
+        }
+        alerts.bubbleChanged = { [weak self] enabled in
+            self?.api.perform(.violationBubble(enabled), origin: .appKit)
         }
         alerts.verificationChanged = { [weak self] enabled in
             self?.api.perform(.violationVerification(enabled), origin: .appKit)
@@ -1262,7 +1293,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let settingsWindow else { return }
         settingsWindow.general.update(speed: speed, width: compactWidth,
                                       usesDefaultAlarmColor: tickerAlarmColor == nil)
-        settingsWindow.alerts.update(alertsEnabled: violationAlertsEnabled,
+        settingsWindow.alerts.update(flashEnabled: violationFlashEnabled,
+                                     bubbleEnabled: violationBubbleEnabled,
                                      verificationEnabled: violationVerificationEnabled,
                                      historyLimit: violationStore.limit)
     }
@@ -1316,10 +1348,18 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updateCardVisibility()
     }
 
-    private func setViolationAlerts(_ enabled: Bool) {
-        violationAlertsEnabled = enabled
-        ViolationAlertsPreference.save(enabled)
-        if !enabled { endViolationAlert() }
+    private func setViolationFlash(_ enabled: Bool) {
+        violationFlashEnabled = enabled
+        ViolationFlashPreference.save(enabled)
+        if !enabled, statusFlashActive { endViolationAlert() }
+        updateSettingsMenuChecks(peekTicker.speed)
+        publishAPI()
+    }
+
+    private func setViolationBubble(_ enabled: Bool) {
+        violationBubbleEnabled = enabled
+        ViolationBubblePreference.save(enabled)
+        if !enabled, violationBubble.isVisible { endViolationAlert() }
         updateSettingsMenuChecks(peekTicker.speed)
         publishAPI()
     }
@@ -2421,7 +2461,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         compactIndex = restoreSelection
         updateCardVisibility()
-        if violationAlertsEnabled {
+        if violationFlashEnabled || violationBubbleEnabled {
             NSAccessibility.post(element: panel as Any,
                                  notification: .announcementRequested,
                                  userInfo: [
@@ -2443,8 +2483,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private var alertDurations: (flash: TimeInterval, bubble: TimeInterval) {
         guard ISOLATED_E2E else {
-            return (ViolationAlertsPreference.flashDuration,
-                    ViolationAlertsPreference.bubbleDuration)
+            return (ViolationFlashPreference.duration, ViolationBubblePreference.duration)
         }
         // Isolated tests shorten the steps; the visual check passes the real
         // "3,5" so the guest screen can be captured during each step.
@@ -2453,43 +2492,60 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return parts.count == 2 ? (parts[0], parts[1]) : (1.0, 1.5)
     }
 
-    /// Red menu-bar icon for the flash step, then the bubble. A newer
-    /// violation restarts both with its own content.
+    /// The flash step (red menu-bar icon) and then the bubble step, each only
+    /// when its switch is on. A newer violation restarts them with its own
+    /// content.
     private func startViolationAlert(_ record: ViolationRecord) {
         violationAlertGeneration += 1
         let generation = violationAlertGeneration
         violationBubble.hide()
         bubbleViolationID = record.id
+        let durations = alertDurations
+        let showBubble = violationBubbleEnabled
+        guard violationFlashEnabled else {
+            if showBubble { showViolationBubble(record, generation: generation,
+                                                duration: durations.bubble) }
+            publishAPI()
+            return
+        }
         statusFlashActive = true
         updateViolationMenu()
-        let durations = alertDurations
         DispatchQueue.main.asyncAfter(deadline: .now() + durations.flash) { [weak self] in
             guard let self, generation == self.violationAlertGeneration else { return }
             self.statusFlashActive = false
             self.updateViolationMenu()
-            self.violationBubble.clicked = { [weak self] in
-                self?.api.perform(.openViolationBubble, origin: .appKit)
-            }
-            // The session name, as on the reader chips (the source is the
-            // app's own "Provider · Session" label).
-            let session = record.source.components(separatedBy: " · ").dropFirst()
-                .joined(separator: " · ")
-            let title = "Violation · " + (session.isEmpty ? record.source : session)
-            let quote = record.evidence.isEmpty ? "Why: \(record.reason)"
-                : "“\(record.evidence)”"
-            // A status item macOS hid (full menu bar) is not a usable anchor.
-            let iconWindow = self.statusItem?.button?.window
-            let anchor = iconWindow.flatMap { window in
-                window.occlusionState.contains(.visible) ? window.frame : nil }
-            self.violationBubble.show(title: title, quote: quote, below: anchor)
-            self.publishAPI()
-            DispatchQueue.main.asyncAfter(deadline: .now() + durations.bubble) {
-                [weak self] in
-                guard let self, generation == self.violationAlertGeneration else { return }
+            if showBubble {
+                self.showViolationBubble(record, generation: generation,
+                                         duration: durations.bubble)
+            } else {
                 self.endViolationAlert()
             }
         }
         publishAPI()
+    }
+
+    private func showViolationBubble(_ record: ViolationRecord, generation: Int,
+                                     duration: TimeInterval) {
+        violationBubble.clicked = { [weak self] in
+            self?.api.perform(.openViolationBubble, origin: .appKit)
+        }
+        // The session name, as on the reader chips (the source is the app's
+        // own "Provider · Session" label).
+        let session = record.source.components(separatedBy: " · ").dropFirst()
+            .joined(separator: " · ")
+        let title = "Violation · " + (session.isEmpty ? record.source : session)
+        let quote = record.evidence.isEmpty ? "Why: \(record.reason)"
+            : "“\(record.evidence)”"
+        // A status item macOS hid (full menu bar) is not a usable anchor.
+        let iconWindow = statusItem?.button?.window
+        let anchor = iconWindow.flatMap { window in
+            window.occlusionState.contains(.visible) ? window.frame : nil }
+        violationBubble.show(title: title, quote: quote, below: anchor)
+        publishAPI()
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self, generation == self.violationAlertGeneration else { return }
+            self.endViolationAlert()
+        }
     }
 
     private func endViolationAlert() {

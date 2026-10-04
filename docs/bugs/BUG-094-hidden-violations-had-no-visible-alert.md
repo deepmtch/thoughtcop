@@ -102,3 +102,28 @@ follow live and shows no chips or status line (`readerShowsNote`). Moving to
 any message clears it. `capture_screens.py` adds
 `17b-reader-no-violations-with-chats`: it posts a thought after
 `/last-violation` and asserts that the note stays and no chips are shown.
+
+## Follow-up: flash and bubble are separate switches
+
+The user (2026-10-04): "The flash and bubble are separate options and by
+default the flash must be on and the bubble off."
+
+- **Two switches.** `ViolationFlashPreference` (`violationFlashEnabled`,
+  default on) and `ViolationBubblePreference` (`violationAlertsEnabled`,
+  default off) replace the single switch. The bubble reuses the old key, so an
+  earlier opt-in keeps the bubble on.
+- **Order.** The bubble follows the flash when both are on, and appears at once
+  when only the bubble is on.
+- **Routes and `/ui`.** The routes are `/violation-flash/on|off` and
+  `/violation-bubble/on|off`. `/ui` reports `violationFlashEnabled` and
+  `violationBubbleEnabled`.
+- **Tests.** The e2e asserts the defaults, then checks each case:
+  - flash only: red, and no bubble at any point;
+  - both: red, then the bubble;
+  - bubble only: the bubble with no red step, opened by a click.
+
+While verifying this, another tool typing in the shared Parallels guest sent
+keys into the isolated test app and opened its reader (`appKit`-origin
+"message" commands in the kept command log). Isolated mode now drops all real
+keyboard and mouse input, and the restore test asserts its command log has no
+`appKit`-origin commands.

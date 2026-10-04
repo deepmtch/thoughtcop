@@ -191,7 +191,7 @@ def main() -> None:
         try:
             wait_for(ui_port, lambda state: state.get("initialScanComplete") is True,
                      20, process)
-            get_ui_post(ui_port, "/violation-alerts/off")
+            get_ui_post(ui_port, "/violation-bubble/off")
             started = datetime.now(timezone.utc)
             for offset, (path, record) in enumerate(
                     [(claude_path, record) for record in claude] +

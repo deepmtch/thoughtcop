@@ -180,9 +180,10 @@ The ticker uses the semantic macOS window surface during normal operation and th
 for an actual alert. Custom colors and opacity are remembered, text/icons
 automatically switch contrast, and **Use Default** restores the
 critical-red light/dark warning surface.
-**Settings › Alerts › Flash red, then show bubble** is off by default. When
-enabled, a new violation turns the menu-bar shield and count red for 3 seconds,
-then shows a bubble under the icon for 5 seconds with the session and the quoted
+**Settings › Alerts** has two separate switches. **Flash menu-bar icon red**
+(on by default) turns the shield and count red for 3 seconds when a violation
+arrives. **Show bubble** (off by default) shows a bubble under the icon for 5
+seconds, after the flash when both are on, with the session and the quoted
 evidence; clicking it opens that violation in the reader. If macOS has hidden
 the icon (a full menu bar), the bubble appears at the top right below the menu
 bar. The ticker selection, a hidden window, and open detail views are never
@@ -268,9 +269,8 @@ evidence record, evaluator provider, latency, and the exact check prompt in
 force.
 Every new violation updates the unread menu-bar count and gives its shield an
 alert tint. By default it does not interrupt the ticker, play a sound, or post a
-VoiceOver announcement. With **Flash Red, Then Show Bubble** on, it flashes the
-icon red, shows the bubble in words (never color alone), and posts a VoiceOver
-announcement.
+VoiceOver announcement. With the flash or the bubble on, it posts a VoiceOver
+announcement; the bubble states the violation in words (never color alone).
 
 The menu-bar shield carries the new-violation count. **Open Violation History…**
 opens the violation list even after the ticker has been hidden or the app has

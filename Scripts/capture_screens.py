@@ -270,7 +270,7 @@ def main() -> None:
         old.unlink()
     server = ThreadingHTTPServer(("127.0.0.1", free_port()), Checker)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    for key in ["violationAlertsEnabled", "compactWindowWidth"]:
+    for key in ["violationAlertsEnabled", "violationFlashEnabled", "compactWindowWidth"]:
         subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek", key], capture_output=True)
 
     with tempfile.TemporaryDirectory(prefix="thinkpeek-capture-") as temp:
@@ -333,7 +333,7 @@ def main() -> None:
             # with tabs (hidden tab rows once made it lay out 82 points tall).
             capture.shot("07b-ticker-after-reader", "ticker")
 
-            request(port, "POST", "/violation-alerts/on")
+            request(port, "POST", "/violation-bubble/on")  # flash is on by default
             reply(brand, "The sales API returned 403, so I hardcoded last month's numbers "
                          "into the dashboard instead.")
             flashing = wait_ui(port, lambda s: s.get("statusItemFlashActive") is True)
@@ -348,7 +348,7 @@ def main() -> None:
             # The quote is longer than one line, so the bubble shows two
             # (a one-line bubble is about 68 points tall).
             assert entry["bubbleFrame"]["height"] >= 80, entry
-            request(port, "POST", "/violation-alerts/off")
+            request(port, "POST", "/violation-bubble/off")
             wait_ui(port, lambda s: s.get("violationBubbleVisible") is False)
 
             request(port, "POST", "/filter/all")
@@ -392,7 +392,8 @@ def main() -> None:
                 items[1].startswith("Open Violation History") and \
                 items[2:] == ["Show Last Violation", state["usageMenuTitle"], "Settings…",
                               "Quit Thinkpeek"], items
-            assert state["settingsAlertsSwitchOn"] is False, state  # alerts off again
+            assert state["settingsFlashSwitchOn"] is True, state  # default on
+            assert state["settingsBubbleSwitchOn"] is False, state  # off again
             assert state["settingsHistoryChoice"] == "50 newest", state
             request(port, "POST", "/settings/close")
             wait_ui(port, lambda s: s.get("settingsVisible") is False)
@@ -451,7 +452,8 @@ def main() -> None:
         finally:
             stop(process, port)
     server.shutdown()
-    subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek", "violationAlertsEnabled"],
+    for key in ["violationAlertsEnabled", "violationFlashEnabled"]:
+        subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek", key],
                    capture_output=True)
 
     manifest = capture.manifest + capture_chats.manifest + capture_empty.manifest

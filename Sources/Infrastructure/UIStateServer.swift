@@ -105,7 +105,8 @@ enum UICommand {
     case position(String)
     case chooseBackground
     case backgroundRGBA([Double]?)
-    case violationAlerts(Bool)
+    case violationFlash(Bool)
+    case violationBubble(Bool)
     case violationVerification(Bool)
     case violationHistoryLimit(Int)
     case toggleSelectedViolation
@@ -148,8 +149,10 @@ enum UICommand {
         case .chooseBackground: return "choose-background"
         case .backgroundRGBA(let values): return values == nil
             ? "background/system" : "background/rgba"
-        case .violationAlerts(let enabled): return enabled
-            ? "violation-alerts/on" : "violation-alerts/off"
+        case .violationFlash(let enabled): return enabled
+            ? "violation-flash/on" : "violation-flash/off"
+        case .violationBubble(let enabled): return enabled
+            ? "violation-bubble/on" : "violation-bubble/off"
         case .violationVerification(let enabled): return enabled
             ? "violation-verification/on" : "violation-verification/off"
         case .violationHistoryLimit(let limit): return "violation-history/\(limit)"
@@ -369,8 +372,10 @@ final class UIStateServer {
         case "/width/standard": return .width(CompactWindowSizing.standardWidth)
         case "/background/blue": return .backgroundRGBA([0.16, 0.38, 0.68, 1])
         case "/background/system": return .backgroundRGBA(nil)
-        case "/violation-alerts/on": return .violationAlerts(true)
-        case "/violation-alerts/off": return .violationAlerts(false)
+        case "/violation-flash/on": return .violationFlash(true)
+        case "/violation-flash/off": return .violationFlash(false)
+        case "/violation-bubble/on": return .violationBubble(true)
+        case "/violation-bubble/off": return .violationBubble(false)
         case "/toggle-selected-violation": return .toggleSelectedViolation
         case "/usage": return .showUsage
         case "/usage/close": return .closeUsage

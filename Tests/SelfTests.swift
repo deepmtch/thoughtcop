@@ -1168,23 +1168,28 @@ if CommandLine.arguments.contains("--settings-window-selftest") {
     let rules = CheckRulesEditor(contents: "Rule", mode: .wholeText, save: { _, _ in })
     let keys = ProviderCredentialsEditor(statuses: [:], save: { _ in [] })
     let settings = SettingsWindow(rules: rules, keys: keys)
-    var requestedAlerts: Bool?
+    var requestedFlash: Bool?
+    var requestedBubble: Bool?
     var requestedVerification: Bool?
     var requestedLimit: Int?
     var requestedSpeed: TickerSpeed?
     var requestedPosition: String?
-    settings.alerts.alertsChanged = { requestedAlerts = $0 }
+    settings.alerts.flashChanged = { requestedFlash = $0 }
+    settings.alerts.bubbleChanged = { requestedBubble = $0 }
     settings.alerts.verificationChanged = { requestedVerification = $0 }
     settings.alerts.historyLimitChanged = { requestedLimit = $0 }
     settings.general.speedChanged = { requestedSpeed = $0 }
     settings.general.positionPicked = { requestedPosition = $0 }
-    settings.alerts.update(alertsEnabled: false, verificationEnabled: true, historyLimit: 50)
+    settings.alerts.update(flashEnabled: true, bubbleEnabled: false, verificationEnabled: true,
+                           historyLimit: 50)
     settings.general.update(speed: .normal, width: CompactWindowSizing.standardWidth,
                             usesDefaultAlarmColor: true)
-    let initialAlertsOff = settings.alerts.alertsSwitch.state == .off
+    let initialFlashOn = settings.alerts.flashSwitch.state == .on
+    let initialBubbleOff = settings.alerts.bubbleSwitch.state == .off
     let initialHistory = settings.alerts.historyButton.titleOfSelectedItem
     let initialSpeed = settings.general.speedButton.titleOfSelectedItem
-    settings.alerts.alertsSwitch.performClick(nil)
+    settings.alerts.flashSwitch.performClick(nil)
+    settings.alerts.bubbleSwitch.performClick(nil)
     settings.alerts.verificationSwitch.performClick(nil)
     settings.alerts.historyButton.selectItem(withTitle: "100 newest")
     _ = settings.alerts.historyButton.target?.perform(settings.alerts.historyButton.action,
@@ -1205,28 +1210,32 @@ if CommandLine.arguments.contains("--settings-window-selftest") {
     guard let defaults = UserDefaults(suiteName: suite) else { exit(1) }
     defaults.removePersistentDomain(forName: suite)
     defer { defaults.removePersistentDomain(forName: suite) }
-    let defaultOff = !ViolationAlertsPreference.load(defaults: defaults)
+    let flashDefaultOn = ViolationFlashPreference.load(defaults: defaults)
+    let bubbleDefaultOff = !ViolationBubblePreference.load(defaults: defaults)
     let verificationDefaultOn = ViolationVerificationPreference.load(defaults: defaults)
     let historyDefault = ViolationHistoryPreference.load(defaults: defaults)
-    ViolationAlertsPreference.save(true, defaults: defaults)
+    ViolationFlashPreference.save(false, defaults: defaults)
+    ViolationBubblePreference.save(true, defaults: defaults)
     ViolationHistoryPreference.save(25, defaults: defaults)
     ViolationHistoryPreference.save(7, defaults: defaults)  // not a choice: ignored
     guard SettingsTab.allCases.map(\.title) == ["General", "Alerts", "Rules", "Keys"],
-          initialAlertsOff, initialHistory == "50 newest", initialSpeed == "Normal",
-          requestedAlerts == true, requestedVerification == false,
+          initialFlashOn, initialBubbleOff, initialHistory == "50 newest",
+          initialSpeed == "Normal",
+          requestedFlash == false, requestedBubble == true, requestedVerification == false,
           requestedLimit == 100, requestedSpeed == .fast,
           requestedPosition == "bottom-right",
           alertsTab == .alerts, keysTab == .keys, windowWidth >= 500,
-          defaultOff, verificationDefaultOn, historyDefault == 50,
-          ViolationAlertsPreference.load(defaults: defaults),
+          flashDefaultOn, bubbleDefaultOff, verificationDefaultOn, historyDefault == 50,
+          !ViolationFlashPreference.load(defaults: defaults),
+          ViolationBubblePreference.load(defaults: defaults),
           ViolationHistoryPreference.load(defaults: defaults) == 25,
-          ViolationAlertsPreference.flashDuration == 3,
-          ViolationAlertsPreference.bubbleDuration == 5 else {
+          ViolationFlashPreference.duration == 3,
+          ViolationBubblePreference.duration == 5 else {
         FileHandle.standardError.write("settings window self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
     print("settings window: tabs=General,Alerts,Rules,Keys switches=true popups=true " +
-          "violationAlertsDefaultOff=true flash=3 bubble=5 verificationDefaultOn=true " +
+          "flashDefaultOn=true bubbleDefaultOff=true flash=3 bubble=5 verificationDefaultOn=true " +
           "historyDefault=50")
     exit(0)
 }
@@ -1655,8 +1664,8 @@ if CommandLine.arguments.contains("--ui-command-api-selftest") {
     api.perform(.showViolations, origin: .http)
     api.perform(.closeCheckRules, origin: .http)
     api.perform(.historyFilter("violations"), origin: .http)
-    api.perform(.violationAlerts(true), origin: .http)
-    api.perform(.violationAlerts(false), origin: .appKit)
+    api.perform(.violationBubble(true), origin: .http)
+    api.perform(.violationBubble(false), origin: .appKit)
     api.perform(.next, origin: .http)
     api.perform(.saveCheckRules(text: "SECRET_RULE_CONTENT", mode: "whole-text"),
                 origin: .appKit)
@@ -1666,8 +1675,8 @@ if CommandLine.arguments.contains("--ui-command-api-selftest") {
     try? FileManager.default.removeItem(at: logURL)
     guard handled == ["first", "controls", "hide", "show-violations",
                       "check-rules/close",
-                      "filter/violations", "violation-alerts/on",
-                      "violation-alerts/off", "next",
+                      "filter/violations", "violation-bubble/on",
+                      "violation-bubble/off", "next",
                       "save-check-rules", "save-provider-credentials"],
           log.contains("\"origin\":\"appKit\""),
           log.contains("\"origin\":\"http\""),

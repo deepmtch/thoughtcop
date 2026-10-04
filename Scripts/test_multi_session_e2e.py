@@ -188,7 +188,8 @@ checker_port = free_port()
 API_BASE = f"http://127.0.0.1:{ui_port}"
 
 # This suite expects the default violation settings of the test binary.
-for key in ["violationHistoryLimit", "violationVerificationEnabled"]:
+for key in ["violationHistoryLimit", "violationVerificationEnabled",
+            "violationFlashEnabled", "violationAlertsEnabled"]:
     subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek", key],
                    capture_output=True, check=False)
 
@@ -283,9 +284,14 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             capture_output=True, text=True, check=True,
         ).stdout
         assert "127.0.0.1:" in listener and "*:" not in listener, listener
-        get_json(API_BASE, "/violation-alerts/off")
+        defaults_state = get_json(API_BASE, "/ui")
+        # Defaults chosen by the user: flash on, bubble off.
+        assert defaults_state["violationFlashEnabled"] is True, defaults_state
+        assert defaults_state["violationBubbleEnabled"] is False, defaults_state
+        # The flash is exercised below; keep the provider checks quiet.
+        get_json(API_BASE, "/violation-flash/off")
         initial = wait_for(lambda state:
-            state.get("violationAlertsEnabled") is False)
+            state.get("violationFlashEnabled") is False)
         assert initial["externalAnalysisEnabled"] is True, initial
         assert initial["analysisDestination"] == "Dummy · deterministic-checker", initial
 
@@ -408,7 +414,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert all("CODEX_LOCAL_SUMMARY" not in text for text in sent), sent
         assert finished["navigableCount"] == 3, finished
         assert finished["violationCount"] == 1, finished
-        assert finished["violationAlertsEnabled"] is False, finished
+        assert finished["violationFlashEnabled"] is False, finished
+        assert finished["violationBubbleEnabled"] is False, finished
         assert finished["statusItemFlashActive"] is False, finished
         assert finished["violationBubbleVisible"] is False, finished
         assert finished["menuBarViolationAlertActive"] is True, finished
@@ -656,9 +663,36 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         restore_index = ticker_before_transient["currentIndex"]
         get_json(API_BASE, "/hide")
         wait_for(lambda state: state.get("hiddenByUser") is True)
-        get_json(API_BASE, "/violation-alerts/on")
+        # Flash only (the default): red, no bubble.
+        get_json(API_BASE, "/violation-flash/on")
+        wait_for(lambda state: state.get("violationFlashEnabled") is True)
+        append(claude_path, {
+            "timestamp": record_timestamp(1_450),
+            "type": "assistant",
+            "message": {"content": [{
+                "type": "text",
+                "text": "FLASH_ONLY_ALERT: red icon, no bubble",
+            }]},
+        })
+        flash_only = wait_for(lambda state:
+            state.get("violationCount") == 3 and
+            state.get("statusItemFlashActive") is True)
+        assert flash_only["statusItemTitleIsRed"] is True, flash_only
+        assert flash_only["violationBubbleVisible"] is False, flash_only
+        bubble_seen = []
+        flash_done = wait_for(lambda state:
+            bubble_seen.append(state.get("violationBubbleVisible")) or
+            state.get("statusItemFlashActive") is False)
+        assert flash_done["statusItemUsesNativeForeground"] is True, flash_done
+        time.sleep(0.5)
+        assert not any(bubble_seen) and \
+            get_json(API_BASE, "/ui")["violationBubbleVisible"] is False, bubble_seen
+
+        # Both: red first, then the bubble.
+        get_json(API_BASE, "/violation-bubble/on")
         enabled = wait_for(lambda state:
-            state.get("violationAlertsEnabled") is True)
+            state.get("violationBubbleEnabled") is True)
+        restore_index = enabled["currentIndex"]
         assert enabled["statusItemFlashActive"] is False, enabled
         assert enabled["violationBubbleVisible"] is False, enabled
         append(claude_path, {
@@ -670,7 +704,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             }]},
         })
         flashing = wait_for(lambda state:
-            state.get("violationCount") == 3 and
+            state.get("violationCount") == 4 and
             state.get("statusItemFlashActive") is True)
         assert flashing["violationBubbleVisible"] is False, flashing
         assert flashing["statusItemTitleIsRed"] is True, flashing
@@ -694,13 +728,16 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         else:
             assert bubble["violationBubblePlacement"] == "top-right", bubble
         restored = wait_for(lambda state:
-            state.get("violationCount") == 3 and
+            state.get("violationCount") == 4 and
             state.get("violationBubbleVisible") is False)
         assert restored["statusItemFlashActive"] is False, restored
         assert restored["statusItemUsesNativeForeground"] is True, restored
         assert restored["windowVisible"] is False, restored
         assert restored["hiddenByUser"] is True, restored
-        assert restored["currentIndex"] == restore_index, restored
+        # The ticker keeps following the newest ordinary item; the alert
+        # never puts the new violation itself in the ticker.
+        assert restored["currentIndex"] != restored["navigableCount"] - 1, \
+            (restore_index, restored["currentIndex"], restored["navigableCount"])
         assert restored["currentViolationVisible"] is False, restored
 
         # Show Last Violation is an explicit action: it opens the newest
@@ -713,7 +750,9 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert last["windowVisible"] is True, last
         assert last["hiddenByUser"] is False, last
 
-        # Clicking the bubble opens that violation.
+        # Bubble only: no red step; clicking the bubble opens that violation.
+        get_json(API_BASE, "/violation-flash/off")
+        wait_for(lambda state: state.get("violationFlashEnabled") is False)
         get_json(API_BASE, "/close")
         get_json(API_BASE, "/hide")
         wait_for(lambda state: state.get("hiddenByUser") is True)
@@ -726,15 +765,16 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             }]},
         })
         wait_for(lambda state:
-            state.get("violationCount") == 4 and
-            state.get("violationBubbleVisible") is True)
+            state.get("violationCount") == 5 and
+            state.get("violationBubbleVisible") is True and
+            state.get("statusItemFlashActive") is False)
         get_json(API_BASE, "/violation-bubble/open")
         opened = wait_for(lambda state:
             state.get("uiStyle") == "full-message" and
             "BUBBLE_ALERT" in (state.get("messageReaderText") or ""))
         assert opened["violationBubbleVisible"] is False, opened
         assert opened["windowVisible"] is True, opened
-        get_json(API_BASE, "/violation-alerts/off")
+        get_json(API_BASE, "/violation-bubble/off")
 
         print(json.dumps({
             "concurrentProviders": ["Claude", "Codex"],
@@ -745,7 +785,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "autoFollowedAcrossSessions": True,
             "readerFrozeThenResumed": True,
             "hiddenViolationStayedHidden": hidden_before_alert["windowVisible"] is False,
-            "defaultViolationAlertsOff": finished["violationAlertsEnabled"] is False,
+            "defaultFlashOnBubbleOff": True,
+            "flashOnlyHadNoBubble": True,
             "flashThenBubbleKeptHidden": restored["hiddenByUser"] is True,
             "lastViolationOpened": True,
             "bubbleOpenedViolation": True,
@@ -776,7 +817,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         raise
     finally:
         try:
-            get_json(API_BASE, "/violation-alerts/off")
+            get_json(API_BASE, "/violation-bubble/off")
         except Exception:
             pass
         try:

@@ -49,7 +49,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         tabs.tabStyle = .toolbar
         let panes: [(SettingsTab, NSViewController, NSSize)] = [
             (.general, general, NSSize(width: 500, height: 210)),
-            (.alerts, alerts, NSSize(width: 500, height: 220)),
+            (.alerts, alerts, NSSize(width: 500, height: 270)),
             (.rules, rules, NSSize(width: 500, height: 400)),
             (.keys, keys, NSSize(width: 500, height: 360)),
         ]
@@ -225,19 +225,24 @@ final class GeneralSettingsPane: NSViewController {
 }
 
 final class AlertSettingsPane: NSViewController {
-    var alertsChanged: ((Bool) -> Void)?
+    var flashChanged: ((Bool) -> Void)?
+    var bubbleChanged: ((Bool) -> Void)?
     var verificationChanged: ((Bool) -> Void)?
     var historyLimitChanged: ((Int) -> Void)?
 
-    let alertsSwitch = NSSwitch()
+    let flashSwitch = NSSwitch()
+    let bubbleSwitch = NSSwitch()
     let verificationSwitch = NSSwitch()
     let historyButton = NSPopUpButton(frame: .zero, pullsDown: false)
 
     override func loadView() {
         view = NSView()
-        alertsSwitch.target = self
-        alertsSwitch.action = #selector(alertsToggled(_:))
-        alertsSwitch.setAccessibilityLabel("Flash red, then show bubble")
+        flashSwitch.target = self
+        flashSwitch.action = #selector(flashToggled(_:))
+        flashSwitch.setAccessibilityLabel("Flash menu-bar icon red")
+        bubbleSwitch.target = self
+        bubbleSwitch.action = #selector(bubbleToggled(_:))
+        bubbleSwitch.setAccessibilityLabel("Show bubble")
         verificationSwitch.target = self
         verificationSwitch.action = #selector(verificationToggled(_:))
         verificationSwitch.setAccessibilityLabel("Confirm with second check")
@@ -248,8 +253,12 @@ final class AlertSettingsPane: NSViewController {
         historyButton.action = #selector(historyPicked(_:))
         historyButton.setAccessibilityLabel("Keep violation history")
         let rows = NSStackView(views: [
-            row("Flash red, then show bubble",
-                "Menu-bar icon red for 3 s, then a bubble for 5 s", alertsSwitch),
+            row("Flash menu-bar icon red",
+                "For 3 s when a violation arrives", flashSwitch),
+            separator(),
+            row("Show bubble",
+                "Under the menu-bar icon for 5 s (after the flash); click to open",
+                bubbleSwitch),
             separator(),
             row("Confirm with second check",
                 "Show only violations the model confirms", verificationSwitch),
@@ -293,16 +302,19 @@ final class AlertSettingsPane: NSViewController {
         return box
     }
 
-    func update(alertsEnabled: Bool, verificationEnabled: Bool, historyLimit: Int) {
+    func update(flashEnabled: Bool, bubbleEnabled: Bool, verificationEnabled: Bool,
+                historyLimit: Int) {
         _ = view
-        alertsSwitch.state = alertsEnabled ? .on : .off
+        flashSwitch.state = flashEnabled ? .on : .off
+        bubbleSwitch.state = bubbleEnabled ? .on : .off
         verificationSwitch.state = verificationEnabled ? .on : .off
         if let index = ViolationHistoryPreference.choices.firstIndex(of: historyLimit) {
             historyButton.selectItem(at: index)
         }
     }
 
-    @objc private func alertsToggled(_ sender: NSSwitch) { alertsChanged?(sender.state == .on) }
+    @objc private func flashToggled(_ sender: NSSwitch) { flashChanged?(sender.state == .on) }
+    @objc private func bubbleToggled(_ sender: NSSwitch) { bubbleChanged?(sender.state == .on) }
     @objc private func verificationToggled(_ sender: NSSwitch) {
         verificationChanged?(sender.state == .on)
     }
