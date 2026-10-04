@@ -731,17 +731,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             ]) { _ in nil }
         }
         if !ISOLATED_E2E {
-            outsideClickMonitor.start { [weak self] location in
-                DispatchQueue.main.async {
-                    guard let self,
-                          shouldDismissDetails(isShowingDetails: !self.peekMode,
-                                               isEditorVisible:
-                                                self.settingsWindow.isVisible,
-                                               windowFrame: self.panel.frame,
-                                               clickLocation: location) else { return }
-                    self.api.perform(.close, origin: .appKit)
-                }
-            }
+            outsideClickMonitor.start(shouldDismiss: { [weak self] location in
+                guard let self else { return false }
+                return shouldDismissDetails(isShowingDetails: !self.peekMode,
+                                            isEditorVisible: self.settingsWindow.isVisible,
+                                            windowFrame: self.panel.frame,
+                                            clickLocation: location)
+            }, dismiss: { [weak self] in
+                self?.api.perform(.close, origin: .appKit)
+            })
         }
         requestTranscriptDiscovery(includeSessions: true)
         refreshStatus()

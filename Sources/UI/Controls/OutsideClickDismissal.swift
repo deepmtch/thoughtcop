@@ -11,17 +11,29 @@ func shouldDismissDetails(isShowingDetails: Bool, isEditorVisible: Bool,
 final class OutsideClickMonitor {
     private var localMonitor: Any?
     private var globalMonitor: Any?
+    private var shouldDismiss: ((NSPoint) -> Bool)?
+    private var dismiss: (() -> Void)?
 
-    func start(handler: @escaping (NSPoint) -> Void) {
+    /// `shouldDismiss` is evaluated when the click happens, against the
+    /// window as it is then. Evaluating it later saw the reader the click had
+    /// just opened (narrower than the ticker) and closed it again.
+    func start(shouldDismiss: @escaping (NSPoint) -> Bool, dismiss: @escaping () -> Void) {
         stop()
+        self.shouldDismiss = shouldDismiss
+        self.dismiss = dismiss
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { event in
-            handler(NSEvent.mouseLocation)
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            self?.handleClick(at: NSEvent.mouseLocation)
             return event
         }
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { _ in
-            handler(NSEvent.mouseLocation)
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] _ in
+            self?.handleClick(at: NSEvent.mouseLocation)
         }
+    }
+
+    func handleClick(at location: NSPoint) {
+        guard shouldDismiss?(location) == true, let dismiss else { return }
+        DispatchQueue.main.async(execute: dismiss)
     }
 
     func stop() {

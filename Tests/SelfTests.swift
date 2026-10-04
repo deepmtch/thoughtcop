@@ -1048,7 +1048,30 @@ if CommandLine.arguments.contains("--outside-click-selftest") {
         FileHandle.standardError.write("outside click self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("outside click: details=true editorProtected=true insideIgnored=true")
+    // The click that opens the reader is judged against the ticker it hit,
+    // not against the narrower reader it opens (BUG-099).
+    _ = NSApplication.shared
+    let monitor = OutsideClickMonitor()
+    var showingDetails = false
+    var windowFrame = NSRect(x: 880, y: 900, width: 560, height: 28)   // ticker
+    var dismissed = false
+    monitor.start(shouldDismiss: { location in
+        shouldDismissDetails(isShowingDetails: showingDetails, isEditorVisible: false,
+                             windowFrame: windowFrame, clickLocation: location)
+    }, dismiss: { dismissed = true })
+    monitor.handleClick(at: NSPoint(x: 900, y: 914))    // "2 active", left part
+    showingDetails = true                               // the click opened the reader
+    windowFrame = NSRect(x: 1060, y: 650, width: 380, height: 278)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+    let openingClickKept = !dismissed
+    monitor.handleClick(at: NSPoint(x: 200, y: 200))    // a real outside click
+    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+    monitor.stop()
+    guard openingClickKept, dismissed else {
+        FileHandle.standardError.write("outside click timing self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("outside click: details=true editorProtected=true insideIgnored=true openingClickKept=true")
     exit(0)
 }
 
