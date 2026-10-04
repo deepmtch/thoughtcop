@@ -19,6 +19,11 @@ final class ViolationBubble {
     var frame: NSRect { panel.frame }
     var contentView: NSView { content }
 
+    /// The view a click at `point` (in the bubble's coordinates) reaches.
+    func viewHit(at point: NSPoint) -> NSView? {
+        content.hitTest(content.convert(point, to: content.superview))
+    }
+
     init() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 72),
                         styleMask: [.borderless, .nonactivatingPanel],
@@ -148,6 +153,12 @@ private final class ViolationBubbleView: NSView {
     }
 
     override var wantsUpdateLayer: Bool { true }
+
+    /// The whole bubble is one button: its labels must not take the click
+    /// (only the empty bottom strip used to open it, BUG-101).
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        frame.contains(point) ? self : nil   // `point` is in the superview's space
+    }
 
     override func mouseDown(with event: NSEvent) { clicked?() }
 

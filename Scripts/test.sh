@@ -35,6 +35,7 @@ for test in \
     --interaction-selftest \
     --privacy-audit-selftest \
     --violation-store-selftest \
+    --violation-bubble-selftest \
     --usage-selftest \
     --checker-credentials-selftest \
     --ui-command-api-selftest \

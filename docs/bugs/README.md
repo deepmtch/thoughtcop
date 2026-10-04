@@ -105,3 +105,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-098](BUG-098-ticker-background-turned-red-on-violation.md) | The ticker background turned red when its message was judged a violation | Fixed |
 | [BUG-099](BUG-099-click-on-ticker-closed-the-reader-at-once.md) | Clicking the ticker opened the reader and closed it at once | Fixed |
 | [BUG-100](BUG-100-closing-a-violation-unhid-the-ticker.md) | Closing a violation opened from the bubble un-hid the ticker | Fixed |
+| [BUG-101](BUG-101-bubble-opened-only-from-its-bottom-strip.md) | The violation bubble opened only from its bottom strip | Fixed |

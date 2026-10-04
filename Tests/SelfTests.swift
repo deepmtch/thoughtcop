@@ -1471,6 +1471,28 @@ if CommandLine.arguments.contains("--privacy-audit-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--violation-bubble-selftest") {
+    // Every part of the bubble opens it, including its title and quote.
+    _ = NSApplication.shared
+    let bubble = ViolationBubble()
+    bubble.show(title: "Violation · research grants",
+                quote: "“sesame status still says locked, so the AI calls can't run.”",
+                below: nil)
+    let size = bubble.frame.size
+    let points = [NSPoint(x: 40, y: size.height - 14),     // title
+                  NSPoint(x: 120, y: size.height / 2),     // quote
+                  NSPoint(x: 30, y: 14),                   // "Click to open"
+                  NSPoint(x: size.width - 6, y: 3)]        // empty corner
+    let allOpen = points.allSatisfy { bubble.viewHit(at: $0) === bubble.contentView }
+    bubble.hide()
+    guard allOpen else {
+        FileHandle.standardError.write("violation bubble self-test failed\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("violation bubble: wholeBubbleOpens=true")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--violation-store-selftest") {
     // Violations vs Archive: exactly one hour from the record's timestamp.
     let archiveNow = parsedRecordTimestamp("2026-10-04T12:00:00.000Z")!
