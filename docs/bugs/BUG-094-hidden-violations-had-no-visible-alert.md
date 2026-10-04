@@ -92,3 +92,13 @@ under it.
   hide the icon, and changing system settings is not allowed here. The app
   also cannot render its own menu-bar icon faithfully. The red state is
   checked through `/ui` only.
+
+## Follow-up: "No violations yet." with active chats
+
+With chats running and no violations, the first build opened that note as a
+live reader on All. The next thought replaced it, and a later attempt showed
+"Paused · message 1 of 2" and cut the note off. A fixed note now does not
+follow live and shows no chips or status line (`readerShowsNote`). Moving to
+any message clears it. `capture_screens.py` adds
+`17b-reader-no-violations-with-chats`: it posts a thought after
+`/last-violation` and asserts that the note stays and no chips are shown.

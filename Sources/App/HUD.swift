@@ -208,6 +208,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let violationStore = ViolationStore()
     private var violationRecords: [ViolationRecord] = []
     private var historyFilter: HistoryFilter = .all
+    /// The reader shows a fixed note, not a chat message: no chips, no status.
+    private var readerShowsNote = false
     private var archiveBoundaryTimer: Timer?
     private var unacknowledgedViolationIndex: Int?
     private var violationsMenuItem: NSMenuItem?
@@ -1482,8 +1484,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard messageMode else { return }
         let sessions = readerSessions()
         // With no chat yet, a lone "All" chip and a Live line would describe
-        // nothing; the reader shows its single source line instead.
-        guard !sessions.isEmpty else {
+        // nothing, and a fixed note belongs to no chat; the reader shows its
+        // single source line instead.
+        guard !sessions.isEmpty, !readerShowsNote else {
             fullMessageView.setSessions([], selected: 0, status: "", live: false,
                                         showJump: false, width: detailWidth)
             return
@@ -1515,6 +1518,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Shows the newest message of the reader's session (or its activity when
     /// it has none yet) and follows it live.
     private func showReaderLatest() {
+        readerShowsNote = false
         readerLive = true
         if let session = readerSession { readerUnseen[session] = 0 } else { readerUnseen = [:] }
         if let latest = readerIndexes(readerSession).last {
@@ -1585,7 +1589,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     /// Opens the reader on `snapshot`; `openedIndex` is its history item, if any.
-    private func presentReader(_ snapshot: MessageReaderSnapshot, openedIndex: Int?) {
+    /// `followLive: false` keeps a fixed note (such as "No violations yet.")
+    /// on screen instead of following the newest message.
+    private func presentReader(_ snapshot: MessageReaderSnapshot, openedIndex: Int?,
+                               followLive: Bool = true) {
         if let openedIndex { markViolationReviewed(at: openedIndex) }
         // The reader opens on this message's session; it follows that session
         // live only when this is its newest message.
@@ -1594,7 +1601,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         readerSession = openedIndex.map { readerSessionKey(eventPreviews[$0].source) }
             ?? (operationState.activeSources.contains(snapshot.source)
                 ? readerSessionKey(snapshot.source) : nil)
-        readerLive = openedIndex == nil || openedIndex == readerIndexes(readerSession).last
+        readerShowsNote = !followLive
+        readerLive = followLive &&
+            (openedIndex == nil || openedIndex == readerIndexes(readerSession).last)
         readerUnseen = [:]
         messageReaderSnapshot = snapshot
         fullMessageView.show(source: snapshot.source, text: snapshot.text,
@@ -1699,6 +1708,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func selectedMessageChanged() {
+        readerShowsNote = false
         if messageMode, compactIndex >= 0, compactIndex < eventPreviews.count {
             let preview = eventPreviews[compactIndex]
             let snapshot = MessageReaderSnapshot(source: preview.displaySource,
@@ -2510,7 +2520,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             presentReader(MessageReaderSnapshot(source: "Thinkpeek", text: "No violations yet.",
                                                 kind: "activity", tone: .normal),
-                          openedIndex: nil)
+                          openedIndex: nil, followLive: false)
             revealForExplicitRequest()
         }
     }

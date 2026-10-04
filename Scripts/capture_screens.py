@@ -394,6 +394,30 @@ def main() -> None:
         finally:
             stop(process, port)
 
+    # Active chats but no violations: "No violations yet." must stay on
+    # screen when the next thought arrives (it is not a live view).
+    with tempfile.TemporaryDirectory(prefix="thinkpeek-capture-chats-") as temp:
+        root = Path(temp)
+        port = free_port()
+        process = launch(root, port, None, [])
+        capture_chats = Capture(out, port)
+        project = root / "claude" / "project"
+        grants = project / "11111111-1111-4111-8111-111111111111.jsonl"
+        brand = project / "44444444-4444-4444-8444-444444444444.jsonl"
+        try:
+            time.sleep(1.5)
+            think(grants, "I'll compare the NLnet and Prototype Fund deadlines.")
+            wait_ui(port, lambda s: "NLnet" in json.dumps(s.get("events", [])))
+            request(port, "POST", "/last-violation")
+            wait_ui(port, lambda s: s.get("messageMode") is True)
+            think(brand, "The brand matcher needs the EU trademark list.")
+            wait_ui(port, lambda s: "trademark" in json.dumps(s.get("events", [])))
+            entry = capture_chats.shot("17b-reader-no-violations-with-chats", "reader")
+            assert "No violations yet." in (entry["readerText"] or ""), entry
+            assert not entry["readerTabs"], entry
+        finally:
+            stop(process, port)
+
     with tempfile.TemporaryDirectory(prefix="thinkpeek-capture-empty-") as temp:
         root = Path(temp)
         port = free_port()
@@ -421,7 +445,7 @@ def main() -> None:
     subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek", "violationAlertsEnabled"],
                    capture_output=True)
 
-    manifest = capture.manifest + capture_empty.manifest
+    manifest = capture.manifest + capture_chats.manifest + capture_empty.manifest
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
     wrong = [m for m in manifest
              if m["kind"] in DETAIL_STATES and m["windowWidth"] != DETAIL_WIDTH]
