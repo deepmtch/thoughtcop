@@ -203,7 +203,8 @@ class Capture:
                  "visibleCardCount": state.get("visibleCardCount"),
                  "violationTabCounts": state.get("violationTabCounts"),
                  "emptyStateVisible": state.get("violationEmptyStateVisible"),
-                 "settingsTab": state.get("settingsTab")}
+                 "settingsTab": state.get("settingsTab"),
+                 "tickerToolbarTrailingGap": state.get("tickerToolbarTrailingGap")}
         self.manifest.append(entry)
         return entry
 
@@ -468,6 +469,9 @@ def main() -> None:
                     f"{entry['name']}: bubble is not below the menu-bar icon: {frame} {anchor}"
             continue
         if entry["kind"] == "ticker":
+            # Hide (✕) sits at the right edge, 10 pt in (BUG-096 follow-up).
+            assert entry["tickerToolbarTrailingGap"] <= 12, \
+                f"{entry['name']}: gap right of the toolbar: {entry['tickerToolbarTrailingGap']} pt"
             assert entry["windowHeight"] == TICKER_HEIGHT, \
                 f"{entry['name']}: ticker is {entry['windowHeight']} pt tall, not {TICKER_HEIGHT}"
         if entry["kind"] not in {"editor", "settings"}:

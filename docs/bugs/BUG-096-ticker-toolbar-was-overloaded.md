@@ -48,3 +48,12 @@ ticker's one job: showing the current thought.
 The compact-controls view is no longer reachable from the UI or the API, but
 its drawing code in `HUD.swift` remains. It is left for a separate cleanup, so
 this change stays within what the user approved.
+
+## Follow-up: the three icons floated mid-ticker
+
+The user's screenshot showed History, Settings and Hide in the middle of the
+ticker, with a wide empty gap to the right of ✕. VM screen 01 showed the same
+gap, and it was missed in review. The cause was the toolbar's fixed 214 pt
+width, sized for the old eight icons. The toolbar is now sized by its buttons.
+`/ui` reports `tickerToolbarTrailingGap`, and `capture_screens.py` asserts it
+is at most 12 pt on every ticker screen.

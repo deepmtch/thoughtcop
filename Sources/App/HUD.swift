@@ -369,7 +369,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekToolbar.translatesAutoresizingMaskIntoConstraints = false
         peekToolbar.setContentHuggingPriority(.required, for: .horizontal)
         peekToolbar.setContentCompressionResistancePriority(.required, for: .horizontal)
-        peekToolbar.widthAnchor.constraint(equalToConstant: 214).isActive = true
+        // Sized by its buttons; a fixed width (once 214 pt for eight icons)
+        // left the three actions floating away from the right edge.
         tickerAlarmColor = TickerBackgroundPreference.load()
         applyTickerAppearance(alarmActive: false)
         peekBar.addSubview(peekProviderIcon)
@@ -857,6 +858,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "doubleClickOpensControls": false,
             "tickerToolbarActions": peekPrimaryActions.accessibilityNames,
             "tickerToolbarAttached": tickerToolbarAttached,
+            "tickerToolbarTrailingGap": Int(peekBar.bounds.maxX -
+                peekPrimaryActions.convert(peekPrimaryActions.bounds, to: peekBar).maxX),
             "availableWindowPositions": ["top-left", "top-center", "top-right",
                                          "bottom-left", "bottom-center", "bottom-right"],
             "tickerPrimaryActions": peekPrimaryActions.accessibilityNames,
