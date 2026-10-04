@@ -29,3 +29,11 @@ like any detail view, so the earlier Hide was lost.
   - after Show Thinkpeek, opening and closing Violations keeps the ticker
     visible.
 - **Host run:** the full suite passes on the host.
+
+## Also: Hide now survives restarts
+
+`hiddenByUser` was in memory only, so every restart (each commit restarts the
+app) showed the ticker again. `HiddenPreference` (`tickerHidden`) saves Hide,
+and launch keeps a hidden Thinkpeek hidden. Show Thinkpeek clears it.
+Isolated tests neither read nor write it. `--settings-window-selftest`
+checks that it is off by default and remembered when set.

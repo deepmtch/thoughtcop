@@ -194,7 +194,9 @@ the reader returns to the ticker. The reader's History button opens history.
 Settings › General selects and remembers Slow, Normal, or
 Fast ticker movement and provides Top/Bottom × Left/Center/Right presets.
 The reader keeps **Done** visible. **Hide Thinkpeek** is the ticker's direct X
-action, and **Quit Thinkpeek** remains available from the menu bar.
+action and is remembered across restarts; a violation opened from the bubble
+or menu bar returns to hidden when closed, and menu bar › **Show Thinkpeek**
+shows the ticker again. **Quit Thinkpeek** remains available from the menu bar.
 Escape from the reader or history always returns directly to the one-line
 ticker. History uses the same lifecycle pattern: **Done** returns to the ticker
 without terminating the monitor. Settings › General offers **Ticker width:

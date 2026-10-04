@@ -99,6 +99,21 @@ enum ViolationBubblePreference {
     }
 }
 
+/// Hide survives restarts: a user who hid Thinkpeek is not shown the ticker
+/// again on the next launch. Isolated tests neither read nor write it.
+enum HiddenPreference {
+    static let defaultsKey = "tickerHidden"
+
+    static func load(defaults: UserDefaults = .standard) -> Bool {
+        !ISOLATED_E2E && defaults.bool(forKey: defaultsKey)
+    }
+
+    static func save(_ hidden: Bool, defaults: UserDefaults = .standard) {
+        guard !ISOLATED_E2E else { return }
+        defaults.set(hidden, forKey: defaultsKey)
+    }
+}
+
 /// The three history tabs. Violations lists those whose transcript record is
 /// less than `violationArchiveAge` old; older ones are under Archive.
 enum HistoryFilter: String {
@@ -718,7 +733,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             feedStack.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
         ])
 
-        panel.orderFrontRegardless()
+        if HiddenPreference.load() {
+            hiddenByUser = true
+        } else {
+            panel.orderFrontRegardless()
+        }
         applyPeekMode(true, animated: false)
 
         api.captureHandler = { [weak self] target in self?.captureWindowPNG(target: target) }
@@ -1205,6 +1224,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func hideHUD() {
         returnToHiddenOnClose = false
         hiddenByUser = true
+        HiddenPreference.save(true)
         panel.orderOut(nil)
         publishAPI()
     }
@@ -1213,6 +1233,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Show Thinkpeek undoes Hide for good.
         returnToHiddenOnClose = false
         hiddenByUser = false
+        HiddenPreference.save(false)
         panel.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
         publishAPI()

@@ -1236,6 +1236,9 @@ if CommandLine.arguments.contains("--settings-window-selftest") {
     let historyDefault = ViolationHistoryPreference.load(defaults: defaults)
     ViolationFlashPreference.save(false, defaults: defaults)
     ViolationBubblePreference.save(true, defaults: defaults)
+    let hiddenDefaultOff = !HiddenPreference.load(defaults: defaults)
+    HiddenPreference.save(true, defaults: defaults)
+    let hiddenRemembered = HiddenPreference.load(defaults: defaults)
     ViolationHistoryPreference.save(25, defaults: defaults)
     ViolationHistoryPreference.save(7, defaults: defaults)  // not a choice: ignored
     guard SettingsTab.allCases.map(\.title) == ["General", "Alerts", "Rules", "Keys"],
@@ -1246,6 +1249,7 @@ if CommandLine.arguments.contains("--settings-window-selftest") {
           requestedPosition == "bottom-right",
           alertsTab == .alerts, keysTab == .keys, windowWidth >= 500,
           flashDefaultOn, bubbleDefaultOff, verificationDefaultOn, historyDefault == 50,
+          hiddenDefaultOff, hiddenRemembered,
           !ViolationFlashPreference.load(defaults: defaults),
           ViolationBubblePreference.load(defaults: defaults),
           ViolationHistoryPreference.load(defaults: defaults) == 25,
