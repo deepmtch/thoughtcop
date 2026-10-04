@@ -6,8 +6,8 @@ running `/ui` inspection surface. A checked item is not merely planned.
 
 ## Window lifecycle and escape routes
 
-- [x] One-line ticker is the stable resting state (510 × 70 points), wide
-  enough to keep every primary action inside the visible panel.
+- [x] The ticker is one 28-point row (provider icon, chat name, text, History,
+  Settings, Hide) and the stable resting state.
 - [x] Full-message reader, controls, and history have a visible **Done** action
   that returns to the ticker.
 - [x] The ticker has a direct **Hide** action; **Quit Thinkpeek** is always in the
@@ -74,7 +74,8 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Position offers six Top/Bottom × Left/Center/Right presets.
 - [x] Six Top/Bottom × Left/Center/Right positions are in Settings › General;
   the ticker has no corner arrows.
-- [x] Top positions use the macOS visible frame below the menu bar.
+- [x] Top positions touch the menu bar (no gap), with only the bottom corners
+  rounded; bottom positions keep a 12-point margin.
 - [x] Ticker background uses the native color picker and persists opacity.
 - [x] Normal mode uses the semantic macOS window surface; first-run violation
   mode uses a dynamic critical-red light/dark surface.

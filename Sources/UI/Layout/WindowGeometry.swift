@@ -29,7 +29,9 @@ struct WindowPlacement {
         switch vertical {
         case .minimumEdge: verticalReference = frame.minY
         case .center: verticalReference = frame.midY
-        case .maximumEdge: verticalReference = frame.maxY
+        // Docked at the top, the window touches the menu bar (no inset), as
+        // the user asked for the one-line ticker.
+        case .maximumEdge: verticalReference = visible.maxY
         }
     }
 
@@ -62,7 +64,8 @@ private func resizeAnchor(minimum: CGFloat, maximum: CGFloat,
 }
 
 /// Resize without losing the placement chosen by the user. A window docked near
-/// an edge keeps that edge and its inset; a freely floating window keeps its center.
+/// the bottom, left or right edge keeps that edge and its inset; one docked at
+/// the top touches the menu bar; a freely floating window keeps its center.
 func resizedWindowFrame(_ frame: NSRect, toHeight height: CGFloat,
                         width: CGFloat? = nil, within visible: NSRect) -> NSRect {
     let size = NSSize(width: width ?? frame.width, height: height)
@@ -76,7 +79,8 @@ func movedWindowFrame(_ frame: NSRect, to corner: TickerWindowCorner,
     let minimumX = visible.minX + inset
     let maximumX = max(minimumX, visible.maxX - frame.width - inset)
     let minimumY = visible.minY + inset
-    let maximumY = max(minimumY, visible.maxY - frame.height - inset)
+    // Top corners touch the menu bar; the other edges keep the inset.
+    let maximumY = max(minimumY, visible.maxY - frame.height)
     switch corner {
     case .topLeft:
         result.origin = NSPoint(x: minimumX, y: maximumY)

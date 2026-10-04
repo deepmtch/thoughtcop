@@ -27,9 +27,11 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from e2e_defaults import configure_isolated_rules
+
 API_TOKEN = "capture-screens-token-0000000000000000000"
 DETAIL_WIDTH = 380
-TICKER_HEIGHT = 70
+TICKER_HEIGHT = 28
 DETAIL_STATES = {"reader", "history"}
 
 SESSIONS = {
@@ -204,7 +206,9 @@ class Capture:
                  "violationTabCounts": state.get("violationTabCounts"),
                  "emptyStateVisible": state.get("violationEmptyStateVisible"),
                  "settingsTab": state.get("settingsTab"),
-                 "tickerToolbarTrailingGap": state.get("tickerToolbarTrailingGap")}
+                 "tickerToolbarTrailingGap": state.get("tickerToolbarTrailingGap"),
+                 "windowAtTop": state.get("windowAtTop"),
+                 "windowRoundedTopCorners": state.get("windowRoundedTopCorners")}
         self.manifest.append(entry)
         return entry
 
@@ -247,6 +251,7 @@ def launch(root: Path, port: int, checker: int | None, violations: list) -> subp
     args = ["./.build/thinkpeek", "--isolated-e2e"]
     args += (["--dummy-checker-url", f"http://127.0.0.1:{checker}/v1/chat/completions"]
              if checker else ["--local-only"])
+    configure_isolated_rules()
     process = subprocess.Popen(args, env=environment, stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL)
     wait_ui(port, lambda state: state.get("initialScanComplete") is True, 20)
@@ -297,7 +302,12 @@ def main() -> None:
             think(grants, "I'll compare the NLnet and Prototype Fund deadlines and their "
                           "eligibility rules for open-source developer tools.")
             wait_ui(port, lambda s: "NLnet" in s.get("peekText", ""))
-            capture.shot("01-ticker", "ticker")
+            request(port, "POST", "/position/top-right")
+            entry = capture.shot("01-ticker", "ticker")
+            assert entry["windowAtTop"] is True, entry
+            assert entry["windowRoundedTopCorners"] is False, entry
+            shown = ui(port)["peekSourceShown"]
+            assert not shown.startswith("Claude · "), shown
             request(port, "POST", "/width/narrow")
             capture.shot("02-ticker-narrow", "ticker")
             request(port, "POST", "/width/standard")

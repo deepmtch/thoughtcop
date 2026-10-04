@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from real_structure import (  # noqa: E402
     FIXTURE_DIRECTORY, CanaryWriter, expected_outbound, expected_pairs,
     read_jsonl, real_claude_files, real_codex_files)
+from e2e_defaults import configure_isolated_rules  # noqa: E402
 
 CANARY = re.compile(r"CANARY_\d{6}")
 API_TOKEN = "real-structure-e2e-ui-token-00000000000"
@@ -183,6 +184,7 @@ def main() -> None:
             "THINKPEEK_UI_API_TOKEN": API_TOKEN,
             "THINKPEEK_HISTORY_COUNT": "0",
         })
+        configure_isolated_rules()
         process = subprocess.Popen(
             ["./.build/thinkpeek", "--isolated-e2e", "--dummy-checker-url",
              f"http://127.0.0.1:{checker_port}/v1/chat/completions"],

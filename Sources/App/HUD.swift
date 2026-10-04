@@ -160,6 +160,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var peekTicker: TickerView!
     private var peekPrimaryActions: TickerPrimaryActions!
     private var peekToolbar: NSStackView!
+    private let peekSeparator = NSTextField(labelWithString: "·")
+    private var peekSourceKey = "Thinkpeek"
+    /// Active only while the reader shows: hidden, its minimum height (about
+    /// 39 pt) would hold the 28-pt ticker taller than its window.
+    private var fullMessageBottom: NSLayoutConstraint!
     private var latestButton: NSButton!
     private var previousButton: NSButton!
     private var nextButton: NSButton!
@@ -189,7 +194,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var tickerWidth: CGFloat {
         max(CompactWindowSizing.narrowWidth, CompactWindowSizing.clamped(compactWidth))
     }
-    private let peekHeight: CGFloat = 70
+    /// One row, as the user asked (2026-10-04): icon, chat, text, actions.
+    private let peekHeight: CGFloat = 28
     private var compactWidth = CompactWindowSizing.savedWidth()
     private var expandedHeight: CGFloat = 480
     /// History is a list of compact rows. 400 points (the Narrow width) fits
@@ -375,6 +381,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         applyTickerAppearance(alarmActive: false)
         peekBar.addSubview(peekProviderIcon)
         peekBar.addSubview(peekSourceLabel)
+        peekSeparator.textColor = .secondaryLabelColor
+        peekSeparator.translatesAutoresizingMaskIntoConstraints = false
+        peekSeparator.setContentHuggingPriority(.required, for: .horizontal)
+        peekBar.addSubview(peekSeparator)
         peekBar.addSubview(checkerActivityIndicator)
         peekBar.addSubview(peekTicker)
         // Keep interactive controls above every text/image layer. AppKit's cached
@@ -527,6 +537,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         positionButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
         positionButton.heightAnchor.constraint(equalToConstant: 26).isActive = true
         settingsWindow = makeSettingsWindow()
+        fullMessageBottom = fullMessageView.bottomAnchor.constraint(
+            equalTo: panel.contentView!.bottomAnchor)
         updateSettingsMenuChecks(savedSpeed)
 
         navigationGroup = DetailToolbarGroup(
@@ -591,36 +603,39 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             tickerBackgroundView.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor),
             tickerBackgroundView.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor),
             tickerBackgroundView.bottomAnchor.constraint(equalTo: peekBar.bottomAnchor),
+            // One row: icon · chat name · text · checker light · actions.
             peekProviderIcon.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor,
-                                                       constant: 12),
-            peekProviderIcon.topAnchor.constraint(equalTo: peekBar.topAnchor, constant: 8),
-            peekProviderIcon.widthAnchor.constraint(equalToConstant: 20),
-            peekProviderIcon.heightAnchor.constraint(equalToConstant: 20),
+                                                       constant: 10),
+            peekProviderIcon.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
+            peekProviderIcon.widthAnchor.constraint(equalToConstant: 16),
+            peekProviderIcon.heightAnchor.constraint(equalToConstant: 16),
             peekSourceLabel.leadingAnchor.constraint(equalTo: peekProviderIcon.trailingAnchor,
                                                       constant: 6),
-            peekSourceLabel.trailingAnchor.constraint(
-                lessThanOrEqualTo: checkerActivityIndicator.leadingAnchor,
-                constant: -4),
-            peekSourceLabel.topAnchor.constraint(equalTo: peekBar.topAnchor, constant: 10),
-            peekSourceLabel.heightAnchor.constraint(equalToConstant: 16),
+            peekSourceLabel.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
+            // The chat name never takes more than a third of the row.
+            peekSourceLabel.widthAnchor.constraint(lessThanOrEqualTo: peekBar.widthAnchor,
+                                                   multiplier: 0.34),
+            peekSeparator.leadingAnchor.constraint(equalTo: peekSourceLabel.trailingAnchor,
+                                                    constant: 5),
+            peekSeparator.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
+            peekTicker.leadingAnchor.constraint(equalTo: peekSeparator.trailingAnchor,
+                                                constant: 5),
+            peekTicker.trailingAnchor.constraint(
+                equalTo: checkerActivityIndicator.leadingAnchor, constant: -6),
+            peekTicker.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
+            peekTicker.heightAnchor.constraint(equalToConstant: 22),
             checkerActivityIndicator.trailingAnchor.constraint(
-                equalTo: peekToolbar.leadingAnchor, constant: -6),
-            checkerActivityIndicator.topAnchor.constraint(
-                equalTo: peekBar.topAnchor, constant: 9),
+                equalTo: peekToolbar.leadingAnchor, constant: -4),
+            checkerActivityIndicator.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
             checkerActivityIndicator.widthAnchor.constraint(equalToConstant: 16),
             checkerActivityIndicator.heightAnchor.constraint(equalToConstant: 16),
-            peekTicker.leadingAnchor.constraint(equalTo: peekBar.leadingAnchor, constant: 14),
-            peekTicker.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor, constant: -14),
-            peekTicker.bottomAnchor.constraint(equalTo: peekBar.bottomAnchor, constant: -7),
-            peekTicker.heightAnchor.constraint(equalToConstant: 26),
             peekToolbar.trailingAnchor.constraint(equalTo: peekBar.trailingAnchor,
-                                                   constant: -10),
-            peekToolbar.topAnchor.constraint(equalTo: peekBar.topAnchor, constant: 7),
+                                                   constant: -6),
+            peekToolbar.centerYAnchor.constraint(equalTo: peekBar.centerYAnchor),
             peekToolbar.heightAnchor.constraint(equalToConstant: 24),
             fullMessageView.topAnchor.constraint(equalTo: content.topAnchor),
             fullMessageView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             fullMessageView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            fullMessageView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
 
             detailHeader.topAnchor.constraint(equalTo: content.topAnchor),
             detailHeader.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -821,7 +836,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "latestControlVisible": !detailHeader.isHidden &&
                 !latestButton.isHidden,
             "peekProvider": peekProviderIcon?.provider.rawValue ?? "unknown",
-            "peekSource": peekSourceLabel?.stringValue ?? "",
+            "peekSource": peekSourceKey,
+            "peekSourceShown": peekSourceLabel?.stringValue ?? "",
             "peekText": peekTicker?.text ?? "",
             "tickerOverflowing": peekTicker?.isOverflowing ?? false,
             "tickerPresentationOffset": Double(tickerPresentation.translation),
@@ -858,6 +874,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "doubleClickOpensControls": false,
             "tickerToolbarActions": peekPrimaryActions.accessibilityNames,
             "tickerToolbarAttached": tickerToolbarAttached,
+            "windowAtTop": windowAtTop,
+            "windowRoundedTopCorners": panel.contentView?.layer?.maskedCorners
+                .contains(.layerMinXMaxYCorner) ?? true,
             "tickerToolbarTrailingGap": Int(peekBar.bounds.maxX -
                 peekPrimaryActions.convert(peekPrimaryActions.bounds, to: peekBar).maxX),
             "availableWindowPositions": ["top-left", "top-center", "top-right",
@@ -907,6 +926,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func windowDidResize(_ notification: Notification) {
         guard panel != nil else { return }
+        updateWindowCorners()
         if peekMode {
             compactWidth = max(CompactWindowSizing.narrowWidth,
                                CompactWindowSizing.clamped(panel.frame.width))
@@ -930,7 +950,24 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func windowDidMove(_ notification: Notification) {
+        updateWindowCorners()
         publishAPI()
+    }
+
+    /// Flush against the menu bar, only the bottom corners are rounded, so the
+    /// window reads as attached to it.
+    private var windowAtTop: Bool {
+        guard let panel, let visible = (panel.screen ?? NSScreen.main)?.visibleFrame else {
+            return false
+        }
+        return abs(panel.frame.maxY - visible.maxY) < 1
+    }
+
+    private func updateWindowCorners() {
+        guard let layer = panel?.contentView?.layer else { return }
+        let bottom: CACornerMask = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        let all: CACornerMask = bottom.union([.layerMinXMaxYCorner, .layerMaxXMaxYCorner])
+        layer.maskedCorners = windowAtTop ? bottom : all
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -1360,7 +1397,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // The setting sizes the ticker; detail views keep their one width.
         guard peekMode else { publishAPI(); return }
         transitionPanel(to: peekHeight, width: tickerWidth,
-                        minSize: NSSize(width: CompactWindowSizing.narrowWidth, height: 54),
+                        minSize: NSSize(width: CompactWindowSizing.narrowWidth, height: peekHeight),
                         maxSize: NSSize(width: CompactWindowSizing.maximumWidth,
                                         height: peekHeight))
         publishAPI()
@@ -1373,7 +1410,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if preset.hasSuffix("left") { frame.origin.x = visible.minX + inset }
         else if preset.hasSuffix("right") { frame.origin.x = visible.maxX - frame.width - inset }
         else { frame.origin.x = visible.midX - frame.width / 2 }
-        if preset.hasPrefix("top") { frame.origin.y = visible.maxY - frame.height - inset }
+        // Top positions touch the menu bar.
+        if preset.hasPrefix("top") { frame.origin.y = visible.maxY - frame.height }
         else { frame.origin.y = visible.minY + inset }
         panel.setFrame(panel.constrainFrameRect(frame, to: panel.screen), display: true)
         publishAPI()
@@ -1398,6 +1436,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         (panel.contentView as? CompactInteractionView)?.dragOnly = peek
         peekBar.isHidden = !peek
         fullMessageView.isHidden = true
+        fullMessageBottom.isActive = false
         detailHeader.isHidden = peek
         scrollView.isHidden = !shouldShowHistoryFeed(peekMode: peek,
                                                      messageMode: messageMode,
@@ -1406,7 +1445,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if peek {
             detailHeaderLayout.setActive(false, width: detailWidth)
             transitionPanel(to: peekHeight, width: tickerWidth,
-                            minSize: NSSize(width: CompactWindowSizing.narrowWidth, height: 54),
+                            minSize: NSSize(width: CompactWindowSizing.narrowWidth, height: peekHeight),
                             maxSize: NSSize(width: CompactWindowSizing.maximumWidth,
                                             height: peekHeight),
                             animated: animated)
@@ -1639,6 +1678,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         refreshReaderChrome()
         (panel.contentView as? CompactInteractionView)?.dragOnly = false
         peekBar.isHidden = true
+        fullMessageBottom.isActive = true
         fullMessageView.isHidden = false
         detailHeader.isHidden = true
         scrollView.isHidden = true
@@ -1957,7 +1997,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func updatePeekHeader(source: String) {
         peekProviderIcon.update(source: source)
         // A sub-agent shows as its chat; the full source stays in the tooltip.
-        peekSourceLabel.stringValue = readerSessionKey(source)
+        // The icon names the provider, so the one-line ticker shows only the
+        // chat name (the app's own "Provider · Chat" label), as in the mockup.
+        peekSourceKey = readerSessionKey(source)
+        let chat = peekSourceKey.components(separatedBy: " · ").dropFirst()
+            .joined(separator: " · ")
+        peekSourceLabel.stringValue = chat.isEmpty ? peekSourceKey : chat
         peekSourceLabel.toolTip = source
         peekBar.layoutSubtreeIfNeeded()
         peekToolbar.needsDisplay = true

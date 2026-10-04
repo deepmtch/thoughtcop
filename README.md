@@ -156,8 +156,9 @@ optional stream.
 ## Native window
 
 The AppKit window is a resizable, always-on-top HUD rather than a terminal view.
-Its borderless resting state keeps a fixed 510 × 70-point frame: the exact source session on
-top and a single-line ticker below. Overflowing text pauses at the beginning,
+Its borderless resting state is one 28-point row: the provider icon, the chat
+name, the scrolling text, then History, Settings and Hide. At a top position it
+touches the menu bar, with only its bottom corners rounded. Overflowing text pauses at the beginning,
 moves horizontally, pauses at the end, and quickly returns. With macOS Reduce
 Motion enabled, it remains clipped and stationary. Hover never changes the UI.
 Every text replacement and reopen synchronously resets the ticker to position

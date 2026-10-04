@@ -14,6 +14,8 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from e2e_defaults import configure_isolated_rules
+
 
 def free_port() -> int:
     with socket.socket() as sock:
@@ -259,6 +261,7 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         "THINKPEEK_UI_API_TOKEN": API_TOKEN,
         "THINKPEEK_HISTORY_COUNT": "0",
     })
+    configure_isolated_rules()
     process = subprocess.Popen(
         ["./.build/thinkpeek", "--isolated-e2e", "--dummy-checker-url",
          f"http://127.0.0.1:{checker_port}/v1/chat/completions"],
@@ -815,6 +818,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         kept.parent.mkdir(exist_ok=True)
         if ui_log_path.exists():
             kept.write_text(ui_log_path.read_text())
+        if audit_path.exists():
+            (Path(".local") / "last-failed-e2e-audit.jsonl").write_text(audit_path.read_text())
         raise
     finally:
         try:

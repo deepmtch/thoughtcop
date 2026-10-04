@@ -19,6 +19,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from e2e_defaults import configure_isolated_rules
+
 RECORDS = 500          # ViolationStore.maximumRecords, the largest choice
 # Limits derived from BUG-086 measurements: empty history launches in 0.5 s and
 # renders a live record in 0.06–0.23 s; the fixed build launches 500 records in
@@ -140,6 +142,7 @@ def main() -> None:
         subprocess.run(["/usr/bin/defaults", "write", "thinkpeek",
                         "violationHistoryLimit", "-int", str(RECORDS)], check=True)
         started = time.monotonic()
+        configure_isolated_rules()
         process = subprocess.Popen(
             ["./.build/thinkpeek", "--isolated-e2e", "--local-only"],
             env=environment, stdout=subprocess.DEVNULL,

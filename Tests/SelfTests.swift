@@ -1091,8 +1091,15 @@ if CommandLine.arguments.contains("--window-position-selftest") {
     let floating = NSRect(x: 400, y: 300, width: 460, height: 70)
     let floatingExpanded = resizedWindowFrame(floating, toHeight: 210,
                                               width: 560, within: visible)
+    // Docked 20 pt below the top: the ticker and the reader touch the menu bar.
+    let topDocked = NSRect(x: 968, y: 900 - 28 - 20, width: 460, height: 28)
+    let topExpanded = resizedWindowFrame(topDocked, toHeight: 300, width: 380, within: visible)
+    let topCollapsed = resizedWindowFrame(topExpanded, toHeight: 28, width: 460,
+                                          within: visible)
     let close: (CGFloat, CGFloat) -> Bool = { abs($0 - $1) < 0.5 }
-    guard close(expanded.minY, 12), close(collapsed.minY, 12),
+    guard close(topExpanded.maxY, 900), close(topCollapsed.maxY, 900),
+          close(topCollapsed.height, 28),
+          close(expanded.minY, 12), close(collapsed.minY, 12),
           close(expanded.maxX, 1428), close(collapsed.maxX, 1428),
           close(floatingExpanded.midX, floating.midX),
           close(floatingExpanded.midY, floating.midY) else {
@@ -1101,7 +1108,7 @@ if CommandLine.arguments.contains("--window-position-selftest") {
                 .data(using: .utf8)!)
         exit(1)
     }
-    print("window position: bottom/right insets and floating center preserved")
+    print("window position: top flush, bottom/right insets and floating center preserved")
     exit(0)
 }
 
@@ -1113,8 +1120,9 @@ if CommandLine.arguments.contains("--ticker-corner-selftest") ||
     let topRight = movedWindowFrame(initial, to: .topRight, within: visible)
     let bottomLeft = movedWindowFrame(initial, to: .bottomLeft, within: visible)
     let bottomRight = movedWindowFrame(initial, to: .bottomRight, within: visible)
-    guard topLeft.origin == NSPoint(x: 12, y: 718),
-          topRight.origin == NSPoint(x: 528, y: 718),
+    // Top corners touch the menu bar (visible.maxY); the others keep 12 pt.
+    guard topLeft.origin == NSPoint(x: 12, y: 730),
+          topRight.origin == NSPoint(x: 528, y: 730),
           bottomLeft.origin == NSPoint(x: 12, y: 12),
           bottomRight.origin == NSPoint(x: 528, y: 12),
           TickerWindowCorner.allCases.map(\.routeName) ==

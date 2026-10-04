@@ -302,7 +302,7 @@ def verdict(label: str, count: int) -> str:
 
 MODES = os.environ.get("THINKPEEK_AI_TEST_MODES", "").split(",") if \
     os.environ.get("THINKPEEK_AI_TEST_MODES") else [None]
-RULES_SUITE = "com.thinkpeek.app"  # CheckRulesStore.suiteName
+RULES_SUITE = "com.thinkpeek.app.e2e"  # CheckRulesStore.suiteName under --isolated-e2e
 
 
 def set_mode(mode: str | None) -> str | None:

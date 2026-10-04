@@ -21,6 +21,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from e2e_defaults import configure_isolated_rules
+
 API_TOKEN = "violation-verification-e2e-token-0000000"
 DEFAULTS_DOMAIN = "thinkpeek"  # the bare test binary's preferences domain
 SEEDED = 60
@@ -156,6 +158,7 @@ def main() -> None:
             "THINKPEEK_UI_API_TOKEN": API_TOKEN,
             "THINKPEEK_HISTORY_COUNT": "0",
         })
+        configure_isolated_rules()
         process = subprocess.Popen(
             ["./.build/thinkpeek", "--isolated-e2e", "--dummy-checker-url",
              f"http://127.0.0.1:{checker_port}/v1/chat/completions"],

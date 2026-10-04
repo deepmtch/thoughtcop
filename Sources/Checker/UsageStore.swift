@@ -4,8 +4,11 @@
 import Foundation
 
 let USAGE_PATH = ProcessInfo.processInfo.environment["THINKPEEK_USAGE_PATH"]
-    ?? ("~/Library/Application Support/Thinkpeek/usage.json" as NSString)
-        .expandingTildeInPath
+    // An isolated test never writes the user's real usage and cost.
+    ?? (ISOLATED_E2E
+        ? NSTemporaryDirectory() + "thinkpeek-e2e-usage-\(getpid()).json"
+        : ("~/Library/Application Support/Thinkpeek/usage.json" as NSString)
+            .expandingTildeInPath)
 
 /// Tokens reported in one chat-completions response (`usage`).
 struct TokenUsage: Equatable {

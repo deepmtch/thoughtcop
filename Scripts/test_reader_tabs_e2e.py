@@ -17,6 +17,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from e2e_defaults import configure_isolated_rules
+
 API_TOKEN = "reader-tabs-e2e-token-000000000000000000"
 
 
@@ -101,6 +103,7 @@ def main() -> None:
             "THINKPEEK_HISTORY_COUNT": "0",
             "THINKPEEK_USAGE_PATH": str(root / "usage.json"),
         })
+        configure_isolated_rules()
         process = subprocess.Popen(["./.build/thinkpeek", "--isolated-e2e", "--local-only"],
                                    env=environment, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
