@@ -501,8 +501,8 @@ def main() -> None:
         for frame in frames:
             assert frame["x"] + frame["width"] <= area, \
                 f"{entry['name']}: tab chip runs past the reader: {frame} > {area}"
-            assert frame["width"] <= (area - 6) // 2 + 1, \
-                f"{entry['name']}: tab chip wider than half the row: {frame}"
+            # One row of tabs (the user's approved layout).
+            assert frame["y"] == 0, f"{entry['name']}: tabs wrap to a second row: {frame}"
             # Dot and title keep 10 pt to each chip edge (BUG-093).
             assert frame["contentX"] >= 10 and \
                 frame["contentX"] + frame["contentWidth"] <= frame["width"] - 10, \
@@ -511,7 +511,8 @@ def main() -> None:
             if a_["y"] == b_["y"]:
                 assert a_["x"] + a_["width"] < b_["x"], \
                     f"{entry['name']}: tab chips overlap: {a_} {b_}"
-        assert len(tabs) <= 4, f"{entry['name']}: more than 3 chat tabs + All: {tabs}"
+        assert len(tabs) <= 4, f"{entry['name']}: more than All + 2 chats + more: {tabs}"
+        assert not tabs or tabs[0] == "All", f"{entry['name']}: All is not first: {tabs}"
         assert not any(" · agent " in tab or "active" in tab for tab in tabs), \
             f"{entry['name']}: sub-agent or aggregate tab: {tabs}"
         assert "**" not in (entry.get("readerText") or ""), \

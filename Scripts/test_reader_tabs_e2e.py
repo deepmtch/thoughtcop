@@ -119,7 +119,7 @@ def main() -> None:
             opened = wait_ui(port, lambda ui: ui.get("messageMode") is True)
             assert opened["readerLive"] is True, opened["readerLive"]
             assert "Alpha" in opened["readerSelectedTab"], opened["readerSelectedTab"]
-            assert opened["readerTabs"][-1] == "All", opened["readerTabs"]
+            assert opened["readerTabs"][0] == "All", opened["readerTabs"]
             assert any("Beta" in tab for tab in opened["readerTabs"]), opened["readerTabs"]
 
             # Live: Alpha's next message replaces the reader.

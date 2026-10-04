@@ -249,6 +249,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var violationEmptyState: HistoryEmptyStateView!
     private var settingsWindow: SettingsWindow!
     private var isolatedInputMonitor: Any?
+    private var isolatedActivity: NSObjectProtocol?
     /// Set when a violation was opened (bubble, Show Last Violation, Open
     /// Violation History) while the user had hidden Thinkpeek (BUG-100).
     private var returnToHiddenOnClose = false
@@ -744,6 +745,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         api.actionHandler = { [weak self] command in self?.handleCommand(command) }
         api.start()
         if ISOLATED_E2E {
+            // Isolated tests assert timer-driven behavior (the one-hour Archive
+            // boundary); App Nap delayed those timers by about a minute while
+            // other apps were in front on the host. Test runs only.
+            isolatedActivity = ProcessInfo.processInfo.beginActivity(
+                options: .userInitiated, reason: "Isolated end-to-end test run")
             // Isolated tests drive Thinkpeek only through the command API.
             // Real keys and clicks (a person or another tool using the same
             // desktop) must not change the app mid-assertion.
@@ -894,6 +900,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 .contains(fullMessageView.selectedTab)
                 ? fullMessageView.tabTitles[fullMessageView.selectedTab] : NSNull(),
             "readerStatus": messageMode ? fullMessageView.statusText : "",
+            "readerOverflowTabs": messageMode ? fullMessageView.overflowMenuTitles : [],
             "readerTabFrames": messageMode ? zip(fullMessageView.tabFrames,
                                                  fullMessageView.tabContentFrames).map {
                 ["x": Int($0.minX), "y": Int($0.minY), "width": Int($0.width),
@@ -1650,8 +1657,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let unseen = readerUnseen[source, default: 0]
             return (name.isEmpty ? source : name) + (unseen > 0 ? " (\(unseen) new)" : "")
         }
-        let titles = sessions.map(title) + ["All"]
-        let selected = readerSession.flatMap { sessions.firstIndex(of: $0) } ?? sessions.count
+        let layout = readerTabLayout(sessions)
+        let titles = ["All"] + layout.shown.map(title) +
+            (layout.overflow.isEmpty ? [] : ["+\(layout.overflow.count) ▾"])
+        let selected = readerSession.flatMap { layout.shown.firstIndex(of: $0) }
+            .map { $0 + 1 } ?? 0
         let indexes = readerIndexes(readerSession)
         let status: String
         if readerLive {
@@ -1665,8 +1675,26 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         fullMessageView.setSessions(titles, selected: selected, status: status,
                                     live: readerLive, showJump: !readerLive,
                                     width: detailWidth,
-                                    toolTips: sessions + ["All sessions"],
-                                    working: sessions.map(readerSessionWorking) + [false])
+                                    toolTips: ["All sessions"] + layout.shown +
+                                        (layout.overflow.isEmpty ? [] : ["More chats"]),
+                                    working: [false] + layout.shown.map(readerSessionWorking) +
+                                        (layout.overflow.isEmpty ? [] : [false]),
+                                    overflowTitles: layout.overflow.map(title),
+                                    overflowWorking: layout.overflow.map(readerSessionWorking))
+    }
+
+    /// At most two chats fit one row beside All and "+N ▾"; the rest are in
+    /// the "+N" menu. The open chat is always shown, and order stays stable.
+    private static let readerShownTabLimit = 2
+
+    private func readerTabLayout(_ sessions: [String]) -> (shown: [String], overflow: [String]) {
+        var shown = Array(sessions.prefix(Self.readerShownTabLimit))
+        if let open = readerSession, sessions.contains(open), !shown.contains(open),
+           !shown.isEmpty {
+            shown[shown.count - 1] = open
+            shown.sort { sessions.firstIndex(of: $0)! < sessions.firstIndex(of: $1)! }
+        }
+        return (shown, sessions.filter { !shown.contains($0) })
     }
 
     /// Shows the newest message of the reader's session (or its activity when
@@ -1696,9 +1724,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return MessageReaderSnapshot(source: source, text: text, kind: "activity", tone: .normal)
     }
 
+    /// Tab 0 is All, then the shown chats, then the "+N" menu's chats.
     private func selectReaderTab(_ index: Int) {
-        let sessions = readerSessions()
-        readerSession = sessions.indices.contains(index) ? sessions[index] : nil
+        let layout = readerTabLayout(readerSessions())
+        let order = layout.shown + layout.overflow
+        readerSession = index >= 1 && order.indices.contains(index - 1) ? order[index - 1] : nil
         showReaderLatest()
     }
 

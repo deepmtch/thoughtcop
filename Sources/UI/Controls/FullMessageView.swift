@@ -94,12 +94,14 @@ final class FullMessageView: NSVisualEffectView {
         textView.textContainer?.containerSize = NSSize(
             width: 0, height: CGFloat.greatestFiniteMagnitude)
 
-        tabs.chipSelected = { [weak self] index in self?.tabSelected?(index) }
+        tabs.chipSelected = { [weak self] index in self?.chipPressed(index) }
         tabs.setAccessibilityLabel("Sessions")
         tabs.translatesAutoresizingMaskIntoConstraints = false
         tabs.isHidden = true
         addSubview(tabs)
         statusLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.isHidden = true
         addSubview(statusLabel)
@@ -144,15 +146,18 @@ final class FullMessageView: NSVisualEffectView {
             controlsButton.centerYAnchor.constraint(equalTo: exitControls.centerYAnchor),
             controlsButton.trailingAnchor.constraint(equalTo: exitControls.leadingAnchor,
                                                       constant: -6),
+            // One row of tabs under the header; the Live / Paused status sits
+            // in the header row beside History and Done.
             tabs.topAnchor.constraint(equalTo: exitControls.bottomAnchor, constant: 8),
-            // Same leading edge as the Live / Paused line below.
             tabs.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             tabs.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-            statusLabel.topAnchor.constraint(equalTo: tabs.bottomAnchor, constant: 7),
+            statusLabel.centerYAnchor.constraint(equalTo: exitControls.centerYAnchor),
             statusLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            jumpButton.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
-            jumpButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            statusLabel.trailingAnchor.constraint(lessThanOrEqualTo: jumpButton.leadingAnchor,
+            jumpButton.centerYAnchor.constraint(equalTo: exitControls.centerYAnchor),
+            jumpButton.leadingAnchor.constraint(equalTo: statusLabel.trailingAnchor, constant: 8),
+            jumpButton.trailingAnchor.constraint(lessThanOrEqualTo: controlsButton.leadingAnchor,
+                                                 constant: -8),
+            statusLabel.trailingAnchor.constraint(lessThanOrEqualTo: controlsButton.leadingAnchor,
                                                   constant: -8),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -161,7 +166,7 @@ final class FullMessageView: NSVisualEffectView {
         scrollTopToHeader = scrollView.topAnchor.constraint(
             equalTo: exitControls.bottomAnchor, constant: 10)
         scrollTopToStatus = scrollView.topAnchor.constraint(
-            equalTo: statusLabel.bottomAnchor, constant: 4)
+            equalTo: tabs.bottomAnchor, constant: 6)
         scrollTopToHeader.isActive = true
         applyTone(.normal)
     }
@@ -178,14 +183,20 @@ final class FullMessageView: NSVisualEffectView {
         applyTone(tone)
     }
 
-    /// Session tabs (titles already include any "N new" count) and the
-    /// Live / Paused status line. Empty titles hide both rows.
+    /// Session tabs in one row (titles already include any "N new" count):
+    /// All, the shown chats, then "+N ▾" when `overflowTitles` is not empty.
+    /// Picking chat k of the "+N" menu reports tab `titles.count - 1 + k`.
+    /// Empty titles hide the tabs and the Live / Paused status.
     func setSessions(_ titles: [String], selected: Int, status: String,
                      live: Bool, showJump: Bool, width: CGFloat,
-                     toolTips: [String] = [], working: [Bool] = []) {
+                     toolTips: [String] = [], working: [Bool] = [],
+                     overflowTitles: [String] = [], overflowWorking: [Bool] = []) {
         let visible = !titles.isEmpty
+        self.overflowTitles = overflowTitles
+        self.overflowWorking = overflowWorking
         tabs.update(titles: titles, toolTips: toolTips, working: working,
-                    selected: selected, width: width - 32)
+                    selected: selected, width: width - 32,
+                    lastIsOverflow: !overflowTitles.isEmpty)
         tabs.isHidden = !visible
         statusLabel.stringValue = status
         statusLabel.textColor = live ? .systemGreen : .secondaryLabelColor
@@ -200,6 +211,36 @@ final class FullMessageView: NSVisualEffectView {
 
     @objc private func jumpToLatest(_ sender: Any?) { jumpToLatestRequested?() }
 
+    private var overflowTitles: [String] = []
+    private var overflowWorking: [Bool] = []
+    var overflowMenuTitles: [String] { overflowTitles }
+
+    private func chipPressed(_ index: Int) {
+        guard !overflowTitles.isEmpty, index == tabs.titles.count - 1 else {
+            tabSelected?(index)
+            return
+        }
+        let menu = NSMenu()
+        for (k, title) in overflowTitles.enumerated() {
+            let item = NSMenuItem(title: title, action: #selector(overflowPicked(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.tag = index + k
+            if overflowWorking.indices.contains(k), overflowWorking[k] {
+                item.image = NSImage(systemSymbolName: "circle.fill",
+                                     accessibilityDescription: "Working")?
+                    .withSymbolConfiguration(.init(pointSize: 7, weight: .regular)
+                        .applying(.init(paletteColors: [.systemGreen])))
+            }
+            menu.addItem(item)
+        }
+        if let chip = tabs.chip(at: index) {
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: chip.bounds.maxY + 4), in: chip)
+        }
+    }
+
+    @objc private func overflowPicked(_ sender: NSMenuItem) { tabSelected?(sender.tag) }
+
     func preferredHeight(forWidth width: CGFloat) -> CGFloat {
         let storage = NSTextStorage(attributedString:
             textView.textStorage ?? NSAttributedString())
@@ -212,7 +253,7 @@ final class FullMessageView: NSVisualEffectView {
         storage.addLayoutManager(layout)
         layout.ensureLayout(for: container)
         let renderedHeight = ceil(layout.usedRect(for: container).height)
-        let sessionRows: CGFloat = tabs.isHidden ? 0 : tabs.contentHeight + 29
+        let sessionRows: CGFloat = tabs.isHidden ? 0 : tabs.contentHeight + 4
         return min(Self.maximumReaderHeight,
                    max(Self.minimumReaderHeight,
                        Self.headerAndMarginsHeight + sessionRows + renderedHeight))
@@ -242,8 +283,8 @@ final class FullMessageView: NSVisualEffectView {
     @objc private func showHistory(_ sender: Any?) { historyRequested?() }
 }
 
-/// Session chips: one rounded button per chat, as wide as its name (at most
-/// half the row, then truncated), wrapping to further rows. Replaces a
+/// Session chips in one row: All and "+N ▾" at their natural width, the chats
+/// sharing the rest (each as wide as its name, then truncated). Replaces a
 /// segmented control whose equal slices made long names unreadable.
 final class SessionChipsView: NSView {
     static let chipHeight: CGFloat = 22
@@ -254,6 +295,7 @@ final class SessionChipsView: NSView {
     private var chips: [NSButton] = []
     private var heightConstraint: NSLayoutConstraint!
     private var availableWidth: CGFloat = 0
+    private var lastIsOverflow = false
 
     override var isFlipped: Bool { true }
 
@@ -270,9 +312,10 @@ final class SessionChipsView: NSView {
     var contentHeight: CGFloat { heightConstraint.constant }
 
     func update(titles: [String], toolTips: [String], working: [Bool],
-                selected: Int, width: CGFloat) {
+                selected: Int, width: CGFloat, lastIsOverflow: Bool = false) {
         self.titles = titles
         self.selected = selected
+        self.lastIsOverflow = lastIsOverflow
         availableWidth = width
         chips.forEach { $0.removeFromSuperview() }
         chips = titles.enumerated().map { index, title in
@@ -309,31 +352,39 @@ final class SessionChipsView: NSView {
         layoutChips()
     }
 
-    private func chipWidth(_ chip: NSButton) -> CGFloat {
+    private func naturalWidth(_ chip: NSButton) -> CGFloat {
         let text = chip.attributedTitle.size().width
         let dot = (chip.cell as? ChipCell)?.showsDot == true ? ChipCell.dotSpace : 0
-        // At most half the row, so two chips always share a row.
-        let maximum = floor((availableWidth - Self.spacing) / 2)
-        return min(maximum,
-                   max(36, ceil(text + dot + ChipCell.padding * 2)))
+        return max(36, ceil(text + dot + ChipCell.padding * 2))
     }
 
-    /// Places chips left to right, wrapping when the next one does not fit,
-    /// and sets this view's height to the rows used.
+    /// All (first) and "+N ▾" (last, when present) keep their natural width;
+    /// the chats share what is left, none wider than its name.
     private func layoutChips() {
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        for chip in chips {
-            let width = min(chipWidth(chip), availableWidth)
-            if x > 0, x + width > availableWidth {
-                x = 0
-                y += Self.chipHeight + Self.spacing
-            }
-            chip.frame = NSRect(x: x, y: y, width: width, height: Self.chipHeight)
-            x += width + Self.spacing
+        let natural = chips.map(naturalWidth)
+        let fixed = Set([0] + (lastIsOverflow ? [chips.count - 1] : []))
+            .filter { chips.indices.contains($0) }
+        let flexible = chips.indices.filter { !fixed.contains($0) }
+        let spacing = Self.spacing * CGFloat(max(0, chips.count - 1))
+        var remaining = availableWidth - spacing - fixed.map { natural[$0] }.reduce(0, +)
+        var widths = natural
+        // Water-fill: narrow names keep their width, wide ones share the rest.
+        var open = flexible.sorted { natural[$0] < natural[$1] }
+        while !open.isEmpty {
+            let share = floor(max(0, remaining) / CGFloat(open.count))
+            let index = open.removeFirst()
+            widths[index] = min(natural[index], share)
+            remaining -= widths[index]
         }
-        heightConstraint.constant = chips.isEmpty ? 0 : y + Self.chipHeight
+        var x: CGFloat = 0
+        for (index, chip) in chips.enumerated() {
+            chip.frame = NSRect(x: x, y: 0, width: widths[index], height: Self.chipHeight)
+            x += widths[index] + Self.spacing
+        }
+        heightConstraint.constant = chips.isEmpty ? 0 : Self.chipHeight
     }
+
+    func chip(at index: Int) -> NSButton? { chips.indices.contains(index) ? chips[index] : nil }
 
     var chipFrames: [NSRect] { chips.map(\.frame) }
     /// Each chip's drawn content (dot through title end), in chip coordinates.

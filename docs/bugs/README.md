@@ -106,3 +106,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-099](BUG-099-click-on-ticker-closed-the-reader-at-once.md) | Clicking the ticker opened the reader and closed it at once | Fixed |
 | [BUG-100](BUG-100-closing-a-violation-unhid-the-ticker.md) | Closing a violation opened from the bubble un-hid the ticker | Fixed |
 | [BUG-101](BUG-101-bubble-opened-only-from-its-bottom-strip.md) | The violation bubble opened only from its bottom strip | Fixed |
+| [BUG-102](BUG-102-reader-tabs-took-three-rows.md) | Reader tabs took three rows, with All last | Fixed |

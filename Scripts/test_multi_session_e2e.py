@@ -546,8 +546,9 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert frozen["readerLive"] is True, frozen
         assert frozen["currentIndex"] == frozen_index, frozen
         assert frozen["messageReaderText"] == reader_text, frozen
-        assert any("Codex Beta" in tab and "(1 new)" in tab
-                   for tab in frozen["readerTabs"]), frozen["readerTabs"]
+        # Counted on its tab, or in the "+N ▾" menu when it is not shown.
+        all_tabs = frozen["readerTabs"] + frozen["readerOverflowTabs"]
+        assert any("Codex Beta" in tab and "(1 new)" in tab for tab in all_tabs), all_tabs
 
         get_json(API_BASE, "/close")
         resumed = wait_for(lambda state:
