@@ -347,7 +347,7 @@ def main() -> None:
             reply(brand, "The sales API returned 403, so I hardcoded last month's numbers "
                          "into the dashboard instead.")
             flashing = wait_ui(port, lambda s: s.get("statusItemFlashActive") is True)
-            assert flashing["statusItemTitleIsRed"] is True, flashing
+            assert flashing["statusItemDrawsFlashColor"] is True, flashing
             assert flashing["violationBubbleVisible"] is False, flashing
             wait_ui(port, lambda s: s.get("violationBubbleVisible") is True, 6)
             # The real menu bar is captured from the host (it cannot be
@@ -375,8 +375,15 @@ def main() -> None:
             assert entry["historyFilter"] == "archive", entry
             assert entry["visibleCardCount"] == 2, entry
             request(port, "POST", "/filter/violations")
-            moved = wait_ui(port, lambda s: s["violationTabCounts"]["archived"] == 3,
-                            BOUNDARY_SECONDS + 15)
+            try:
+                moved = wait_ui(port, lambda s: s["violationTabCounts"]["archived"] == 3,
+                                BOUNDARY_SECONDS + 15)
+            except AssertionError:
+                state = ui(port)
+                print("archive boundary not crossed:", state["violationTabCounts"],
+                      "now", datetime.now(timezone.utc).isoformat(),
+                      [(v["id"][-1], v["timestamp"]) for v in state["violations"]])
+                raise
             assert moved["visibleCardCount"] == 2, moved
             assert moved["historyFilter"] == "violations", moved
             request(port, "POST", "/toggle-selected-violation")

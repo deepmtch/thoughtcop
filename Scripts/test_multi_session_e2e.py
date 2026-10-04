@@ -681,13 +681,15 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         flash_only = wait_for(lambda state:
             state.get("violationCount") == 3 and
             state.get("statusItemFlashActive") is True)
-        assert flash_only["statusItemTitleIsRed"] is True, flash_only
+        assert flash_only["statusItemDrawsFlashColor"] is True, flash_only
+        assert flash_only["statusItemImageIsTemplate"] is False, flash_only
         assert flash_only["violationBubbleVisible"] is False, flash_only
         bubble_seen = []
         flash_done = wait_for(lambda state:
             bubble_seen.append(state.get("violationBubbleVisible")) or
             state.get("statusItemFlashActive") is False)
         assert flash_done["statusItemUsesNativeForeground"] is True, flash_done
+        assert flash_done["statusItemImageIsTemplate"] is True, flash_done
         time.sleep(0.5)
         assert not any(bubble_seen) and \
             get_json(API_BASE, "/ui")["violationBubbleVisible"] is False, bubble_seen
@@ -711,14 +713,15 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             state.get("violationCount") == 4 and
             state.get("statusItemFlashActive") is True)
         assert flashing["violationBubbleVisible"] is False, flashing
-        assert flashing["statusItemTitleIsRed"] is True, flashing
-        assert flashing["statusItemUsesNativeForeground"] is False, flashing
+        assert flashing["statusItemDrawsFlashColor"] is True, flashing
+        # The flash is a regular (non-template) image in the violation color.
+        assert flashing["statusItemImageIsTemplate"] is False, flashing
         assert flashing["windowVisible"] is False, flashing
         bubble = wait_for(lambda state:
             state.get("violationBubbleVisible") is True)
         assert bubble["statusItemFlashActive"] is False, bubble
         assert bubble["statusItemUsesNativeForeground"] is True, bubble
-        assert bubble["statusItemTitleIsRed"] is False, bubble
+        assert bubble["statusItemDrawsFlashColor"] is False, bubble
         assert bubble["violationBubbleTitle"].startswith("Violation · "), bubble
         # The dummy checker quotes "ALERT" as its evidence.
         assert bubble["violationBubbleQuote"] == "\u201cALERT\u201d", bubble

@@ -1748,13 +1748,22 @@ if CommandLine.arguments.contains("--status-item-foreground-selftest") {
         : nil
     let usesNativeForeground = button.contentTintColor == nil &&
         (titleColor as? NSColor) != NSColor.systemRed && button.title == " 2"
+    // The flash is a regular image that really draws the chosen color
+    // (a template image or tint would be redrawn black or white).
+    let redFlash = statusFlashImage(count: "2", color: .systemRed)
+    let customColor = NSColor(srgbRed: 0.1, green: 0.4, blue: 0.9, alpha: 1)
+    let customFlash = statusFlashImage(count: "12", color: customColor)
+    let flashDrawsColor = !redFlash.isTemplate && imageDrawsColor(redFlash, .systemRed) &&
+        !customFlash.isTemplate && imageDrawsColor(customFlash, customColor) &&
+        !imageDrawsColor(redFlash, customColor) && customFlash.size.width > redFlash.size.width
     NSStatusBar.system.removeStatusItem(item)
-    guard usesNativeForeground else {
+    guard usesNativeForeground, flashDrawsColor else {
         FileHandle.standardError.write(
             "status item foreground self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    print("status item foreground: native=true titleNative=true customBackground=false")
+    print("status item foreground: native=true titleNative=true flashDrawsColor=true " +
+          "customBackground=false")
     exit(0)
 }
 }

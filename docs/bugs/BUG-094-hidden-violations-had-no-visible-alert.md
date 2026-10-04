@@ -127,3 +127,20 @@ keys into the isolated test app and opened its reader (`appKit`-origin
 "message" commands in the kept command log). Isolated mode now drops all real
 keyboard and mouse input, and the restore test asserts its command log has no
 `appKit`-origin commands.
+
+## Follow-up: the flash was black, not red
+
+In the user's first real violation (2026-10-04) the icon changed color, but to
+black. macOS redraws template status-item images, their `contentTintColor`
+and the title color in the menu bar's own foreground. The tests had only
+checked that the tint was set.
+
+- **Fix.** The flash is now a regular, non-template image: the shield and the
+  count are drawn in the violation color from Settings › General (default
+  red) by `statusFlashImage`.
+- **Real check.** `imageDrawsColor` renders the image and requires pixels in
+  that color. The status-item self-test runs it for red and for a custom
+  color, and the e2e checks that the icon is non-template and drawn in the
+  color during the flash, and a template again afterwards.
+- **Speed.** The pixel check runs once per drawn image. Running it on every
+  publish slowed launch with 500 stored violations past the 5 s limit.

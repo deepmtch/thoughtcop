@@ -4,6 +4,62 @@ import AppKit
 import Foundation
 import QuartzCore
 
+/// The flash icon: the shield and the count drawn in `color` as a regular
+/// (non-template) image, which the menu bar shows exactly as drawn. A template
+/// image, its tint and the title color are redrawn by macOS in the menu bar's
+/// own color, so the first flash showed black instead of red.
+func statusFlashImage(count: String, color: NSColor) -> NSImage {
+    let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+    let shield = NSImage(systemSymbolName: "exclamationmark.shield.fill",
+                         accessibilityDescription: nil)?
+        .withSymbolConfiguration(config) ?? NSImage()
+    let text = NSAttributedString(string: count, attributes: [
+        .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .bold),
+        .foregroundColor: color])
+    let textSize = count.isEmpty ? .zero : text.size()
+    let height = ceil(max(shield.size.height, textSize.height, 18))
+    let width = ceil(shield.size.width + (count.isEmpty ? 0 : 3 + textSize.width))
+    let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
+        shield.draw(in: NSRect(x: 0, y: (rect.height - shield.size.height) / 2,
+                               width: shield.size.width, height: shield.size.height))
+        if !count.isEmpty {
+            text.draw(at: NSPoint(x: shield.size.width + 3,
+                                  y: (rect.height - textSize.height) / 2))
+        }
+        return true
+    }
+    image.isTemplate = false
+    return image
+}
+
+/// True when some opaque pixel of `image` is within 0.2 of `color` in every
+/// RGB channel (evidence that the color is actually drawn).
+func imageDrawsColor(_ image: NSImage, _ color: NSColor) -> Bool {
+    guard let target = color.usingColorSpace(.sRGB),
+          let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
+                                     pixelsWide: Int(image.size.width * 2),
+                                     pixelsHigh: Int(image.size.height * 2),
+                                     bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                     isPlanar: false, colorSpaceName: .deviceRGB,
+                                     bytesPerRow: 0, bitsPerPixel: 0) else { return false }
+    rep.size = image.size
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    image.draw(in: NSRect(origin: .zero, size: image.size))
+    NSGraphicsContext.restoreGraphicsState()
+    for x in 0..<rep.pixelsWide {
+        for y in 0..<rep.pixelsHigh {
+            guard let pixel = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
+                  pixel.alphaComponent > 0.8 else { continue }
+            if abs(pixel.redComponent - target.redComponent) < 0.2,
+               abs(pixel.greenComponent - target.greenComponent) < 0.2,
+               abs(pixel.blueComponent - target.blueComponent) < 0.2 { return true }
+        }
+    }
+    return false
+}
+
 func restoreNativeStatusItemForeground(_ button: NSStatusBarButton) {
     button.contentTintColor = nil
     // The flash sets a red attributed count; a plain title takes the native
@@ -255,6 +311,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let launchedAt = Date()
     /// While set, the menu-bar icon and count are red.
     private var statusFlashActive = false
+    private var statusFlashImageDrawsColor = false
+    /// The flash uses the violation color chosen in Settings › General
+    /// (default red).
+    private var statusFlashColor: NSColor {
+        (tickerAlarmColor ?? .systemRed).withAlphaComponent(1)
+    }
     private let violationBubble = ViolationBubble()
     private var bubbleViolationID: String?
     /// Invalidates pending flash/bubble steps when a newer violation arrives.
@@ -743,11 +805,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "statusItemWindowFrame": statusItem?.button?.window.map { [
                 "x": Int($0.frame.minX), "y": Int($0.frame.minY),
                 "width": Int($0.frame.width), "height": Int($0.frame.height)] } ?? [:],
-            "statusItemTitleIsRed": statusItem?.button.map { button in
-                button.attributedTitle.length > 0 &&
-                    (button.attributedTitle.attribute(.foregroundColor, at: 0,
-                                                      effectiveRange: nil) as? NSColor)
-                    == NSColor.systemRed } ?? false,
+            "statusItemDrawsFlashColor": statusFlashActive && statusFlashImageDrawsColor,
+            "statusItemImageIsTemplate": statusItem?.button?.image?.isTemplate ?? false,
             "lastViolationMenuTitle": lastViolationMenuItem?.title ?? "",
             "violationTabCounts": violationTabCountsJSON(),
             "menuBarViolationAlertActive": violationRecords.contains {
@@ -2254,11 +2313,17 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if statusFlashActive {
                 // The flash colors the shield and the count; it ends after
                 // `flashDuration`, then the native foreground returns.
-                button.contentTintColor = .systemRed
-                button.attributedTitle = NSAttributedString(
-                    string: button.title, attributes: [
-                        .foregroundColor: NSColor.systemRed,
-                        .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .bold)])
+                button.contentTintColor = nil
+                let image = statusFlashImage(
+                    count: violationStatusBadgeTitle(unreviewed: newCount)
+                        .trimmingCharacters(in: .whitespaces),
+                    color: statusFlashColor)
+                button.image = image
+                // Checked once per drawn image (scanning pixels on every
+                // publish slowed launch with 500 stored violations).
+                statusFlashImageDrawsColor = !image.isTemplate &&
+                    imageDrawsColor(image, statusFlashColor)
+                button.title = ""
             } else {
                 restoreNativeStatusItemForeground(button)
             }
