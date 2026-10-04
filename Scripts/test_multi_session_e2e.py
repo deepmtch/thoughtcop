@@ -759,6 +759,12 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "TRANSIENT_ALERT" in (state.get("messageReaderText") or ""))
         assert last["windowVisible"] is True, last
         assert last["hiddenByUser"] is False, last
+        # Opened while hidden: closing returns to hidden (BUG-100).
+        assert last["returnsToHiddenOnClose"] is True, last
+        get_json(API_BASE, "/close")
+        rehidden = wait_for(lambda state: state.get("uiStyle") == "single-line-ticker")
+        assert rehidden["windowVisible"] is False, rehidden
+        assert rehidden["hiddenByUser"] is True, rehidden
 
         # Bubble only: no red step; clicking the bubble opens that violation.
         get_json(API_BASE, "/violation-flash/off")
@@ -784,6 +790,16 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             "BUBBLE_ALERT" in (state.get("messageReaderText") or ""))
         assert opened["violationBubbleVisible"] is False, opened
         assert opened["windowVisible"] is True, opened
+        get_json(API_BASE, "/close")
+        closed_bubble = wait_for(lambda state: state.get("uiStyle") == "single-line-ticker")
+        assert closed_bubble["windowVisible"] is False, closed_bubble
+        assert closed_bubble["hiddenByUser"] is True, closed_bubble
+        # Show Thinkpeek undoes Hide for good: closing details keeps it shown.
+        get_json(API_BASE, "/show")
+        get_json(API_BASE, "/violations")
+        get_json(API_BASE, "/close")
+        shown = wait_for(lambda state: state.get("uiStyle") == "single-line-ticker")
+        assert shown["windowVisible"] is True and shown["hiddenByUser"] is False, shown
         get_json(API_BASE, "/violation-bubble/off")
 
         print(json.dumps({

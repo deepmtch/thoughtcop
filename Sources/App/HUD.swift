@@ -234,6 +234,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var violationEmptyState: HistoryEmptyStateView!
     private var settingsWindow: SettingsWindow!
     private var isolatedInputMonitor: Any?
+    /// Set when a violation was opened (bubble, Show Last Violation, Open
+    /// Violation History) while the user had hidden Thinkpeek (BUG-100).
+    private var returnToHiddenOnClose = false
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
     private var eventPreviews: [MessagePreview] = []
@@ -786,6 +789,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "windowVisible": panel.isVisible,
             "hiddenByUser": hiddenByUser,
             "isolatedInputIgnored": isolatedInputMonitor != nil,
+            "returnsToHiddenOnClose": returnToHiddenOnClose,
             "violationFlashEnabled": violationFlashEnabled,
             "violationBubbleEnabled": violationBubbleEnabled,
             "statusItemFlashActive": statusFlashActive,
@@ -1199,12 +1203,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func hideHUD() {
+        returnToHiddenOnClose = false
         hiddenByUser = true
         panel.orderOut(nil)
         publishAPI()
     }
 
     @objc private func showHUDFromMenu(_ sender: Any?) {
+        // Show Thinkpeek undoes Hide for good.
+        returnToHiddenOnClose = false
         hiddenByUser = false
         panel.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
@@ -1560,6 +1567,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         applyPeekMode(true)
         updateCardVisibility()
         updateWindowTitle()
+        if returnToHiddenOnClose {
+            returnToHiddenOnClose = false
+            hideHUD()
+        }
     }
 
     private func quitApplication() {
@@ -1863,6 +1874,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func showViolations() {
+        if hiddenByUser { returnToHiddenOnClose = true }
         hiddenByUser = false
         historyFilter = .violations
         unacknowledgedViolationIndex = nil
@@ -2684,6 +2696,9 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// An explicit Show/Open action is the only thing that undoes Hide.
     private func revealForExplicitRequest() {
+        // Opened from the bubble or the menu bar while hidden: closing it
+        // returns to hidden (the user's Hide is remembered).
+        if hiddenByUser { returnToHiddenOnClose = true }
         hiddenByUser = false
         panel.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
