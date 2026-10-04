@@ -86,7 +86,6 @@ enum UICommand {
     case historyFilter(String)
     case restartTicker
     case showMessage
-    case showControls
     case showHUD
     case hideHUD
     case close
@@ -130,7 +129,6 @@ enum UICommand {
         case .historyFilter(let value): return "filter/\(value)"
         case .restartTicker: return "restart-ticker"
         case .showMessage: return "message"
-        case .showControls: return "controls"
         case .showHUD: return "show"
         case .hideHUD: return "hide"
         case .close: return "close"
@@ -352,7 +350,6 @@ final class UIStateServer {
         case "/violation-bubble/open": return .openViolationBubble
         case "/restart-ticker": return .restartTicker
         case "/message": return .showMessage
-        case "/controls", "/reveal": return .showControls
         case "/show": return .showHUD
         case "/close": return .close
         case "/hide": return .hideHUD

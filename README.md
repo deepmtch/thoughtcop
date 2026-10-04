@@ -166,9 +166,10 @@ Ticker movement redraws the attributed string directly inside the clipped viewpo
 on every frame instead of translating a partially rasterized text-field bitmap.
 A formatting-only or empty summary is discarded and cannot replace the last
 visible message.
-The ticker's compact toolbar keeps the four corner-placement arrows and the
-primary actions visible. Six precise window positions also remain available in
-**Settings › General › Position**.
+The ticker's toolbar has three actions: **History** (all items, violations and
+archive, with the session picker), **Settings** and **Hide**. Clicking the text
+opens the reader. Six window positions are in **Settings › General ›
+Position**, and the window can be dragged.
 
 All settings are in one **Settings** window: **Settings… (⌘,)** in the menu-bar
 menu, or either ⚙ button. Its tabs are **General** (scroll speed, ticker
@@ -189,25 +190,16 @@ the icon (a full menu bar), the bubble appears at the top right below the menu
 bar. The ticker selection, a hidden window, and open detail views are never
 changed by the alert. There is no sound.
 A single click opens a dedicated full-message reader; **Done** or a click outside
-the reader returns to the ticker. The visible controls button opens the separate
-navigation/settings view. The **↤** control returns directly to the
-ticker's beginning. Settings › General selects and remembers Slow, Normal, or
+the reader returns to the ticker. The reader's History button opens history.
+Settings › General selects and remembers Slow, Normal, or
 Fast ticker movement and provides Top/Bottom × Left/Center/Right presets.
 The reader keeps **Done** visible. **Hide Thinkpeek** is the ticker's direct X
 action, and **Quit Thinkpeek** remains available from the menu bar.
-Escape from the reader, controls, or full history always returns directly to the
-one-line ticker.
-Controls and full history use the same lifecycle pattern: **Done** returns to the
-ticker without terminating the monitor.
-The controls and full-message views can be resized horizontally from 380 to 560
-points. Their width is remembered; below 500 points the header stacks into two
-rows so the session selector and controls remain usable. Settings › General also
-offers **Ticker width: Narrow** and **Standard**.
-Compact controls show the currently selected message beneath the toolbar in a
-content-sized viewport capped at 210 points. Clicking the ticker opens the
-dedicated reader, while **Show all** displays the complete history.
-**Show all** opens the full scrollable feed. It has no intermediate **Collapse**
-action; Escape returns directly to the ticker. Compact and full-feed widths are
+Escape from the reader or history always returns directly to the one-line
+ticker. History uses the same lifecycle pattern: **Done** returns to the ticker
+without terminating the monitor. Settings › General offers **Ticker width:
+Narrow** and **Standard**. History has no intermediate **Collapse** action;
+Escape returns directly to the ticker. Compact and full-feed widths are
 hard-capped at 560 and 700 points, so
 long reasoning wraps and scrolls vertically instead of stretching the window.
 The expanded header uses a native **All | Violations N** segmented filter.
@@ -287,8 +279,7 @@ drive the same actions without clicking the UI.
 There is no file-backed configuration. The next response or reasoning block uses
 the saved rules without restarting Thinkpeek.
 
-The ticker's 💬 button opens **Settings › Rules** directly in one click; ⚙ opens
-Settings › General.
+Every ⚙ button and menu bar › **Settings…** open the same window.
 
 ### Privacy audit log
 

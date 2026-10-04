@@ -275,7 +275,8 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         # timestamp, so every record below is stamped after readiness.
         test_started_at = datetime.now(timezone.utc)
         assert api_request(API_BASE, "/ui", "GET", token=None)[0] == 401
-        assert api_request(API_BASE, "/controls", "GET")[0] == 405
+        assert api_request(API_BASE, "/close", "GET")[0] == 405
+        assert api_request(API_BASE, "/controls", "POST")[0] == 404
         assert api_request(API_BASE, "/ui", "POST")[0] == 405
         assert api_request(API_BASE, "/not-a-route", "GET")[0] == 404
         listener = subprocess.run(

@@ -30,7 +30,7 @@ from pathlib import Path
 API_TOKEN = "capture-screens-token-0000000000000000000"
 DETAIL_WIDTH = 380
 TICKER_HEIGHT = 70
-DETAIL_STATES = {"controls", "reader", "history"}
+DETAIL_STATES = {"reader", "history"}
 
 SESSIONS = {
     "11111111-1111-4111-8111-111111111111": "research grants for the guidelet open-source launch",
@@ -315,10 +315,9 @@ def main() -> None:
             finish(codex)
             time.sleep(0.6)
 
-            request(port, "POST", "/controls")
-            capture.shot("05-controls", "controls")
-            request(port, "POST", "/close")
-            time.sleep(0.4)
+            state = ui(port)
+            assert state["tickerToolbarActions"] == ["Open history", "Settings",
+                                                     "Hide Thinkpeek"], state
             request(port, "POST", "/message")
             wait_ui(port, lambda s: s.get("messageMode") is True)
             capture.shot("06-reader-live-tabs", "reader")

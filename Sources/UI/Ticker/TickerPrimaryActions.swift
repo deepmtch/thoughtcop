@@ -1,15 +1,14 @@
-// One-click commands for the ticker's primary task and secondary controls.
+// The ticker's three actions: History, Settings and Hide. Clicking the text
+// opens the reader.
 
 import AppKit
 
 final class TickerPrimaryActions: NSStackView {
-    var checkRulesRequested: (() -> Void)?
-    var controlsRequested: (() -> Void)?
+    var historyRequested: (() -> Void)?
     var hideRequested: (() -> Void)?
 
-    private let checkRulesButton: NSButton
+    private let historyButton: NSButton
     private(set) var displaySettingsButton: NSButton
-    private let controlsButton: NSButton
     private let hideButton: NSButton
 
     var accessibilityNames: [String] {
@@ -18,23 +17,18 @@ final class TickerPrimaryActions: NSStackView {
 
     var foregroundColor: NSColor? {
         didSet {
-            checkRulesButton.contentTintColor = foregroundColor
+            historyButton.contentTintColor = foregroundColor
             displaySettingsButton.contentTintColor = foregroundColor
-            controlsButton.contentTintColor = foregroundColor
             hideButton.contentTintColor = foregroundColor
         }
     }
 
     override init(frame frameRect: NSRect) {
-        checkRulesButton = NSButton(
-            image: NSImage(systemSymbolName: "text.bubble",
-                           accessibilityDescription: "Edit check prompt") ?? NSImage(),
+        historyButton = NSButton(
+            image: NSImage(systemSymbolName: "clock.arrow.circlepath",
+                           accessibilityDescription: "Open history") ?? NSImage(),
             target: nil, action: nil)
         displaySettingsButton = NSButton(frame: .zero)
-        controlsButton = NSButton(
-            image: NSImage(systemSymbolName: "rectangle.grid.1x2",
-                           accessibilityDescription: "Open controls") ?? NSImage(),
-            target: nil, action: nil)
         hideButton = NSButton(
             image: NSImage(systemSymbolName: "xmark",
                            accessibilityDescription: "Hide Thinkpeek") ?? NSImage(),
@@ -44,7 +38,7 @@ final class TickerPrimaryActions: NSStackView {
         orientation = .horizontal
         alignment = .centerY
         spacing = 4
-        for button in [checkRulesButton, displaySettingsButton, controlsButton, hideButton] {
+        for button in [historyButton, displaySettingsButton, hideButton] {
             button.bezelStyle = .accessoryBarAction
             button.isBordered = false
             button.translatesAutoresizingMaskIntoConstraints = false
@@ -52,16 +46,12 @@ final class TickerPrimaryActions: NSStackView {
             button.heightAnchor.constraint(equalToConstant: 28).isActive = true
             addArrangedSubview(button)
         }
-        checkRulesButton.target = self
-        checkRulesButton.action = #selector(openCheckRules(_:))
-        checkRulesButton.toolTip = "Edit check prompt"
-        checkRulesButton.setAccessibilityLabel("Edit check prompt")
+        historyButton.target = self
+        historyButton.action = #selector(openHistory(_:))
+        historyButton.toolTip = "History: all items, violations and archive"
+        historyButton.setAccessibilityLabel("Open history")
         displaySettingsButton.toolTip = "Settings"
         displaySettingsButton.setAccessibilityLabel("Settings")
-        controlsButton.target = self
-        controlsButton.action = #selector(openControls(_:))
-        controlsButton.toolTip = "Open message navigation"
-        controlsButton.setAccessibilityLabel("Open message navigation")
         hideButton.target = self
         hideButton.action = #selector(hideTicker(_:))
         hideButton.toolTip = "Hide Thinkpeek — show it again from the menu bar"
@@ -70,11 +60,9 @@ final class TickerPrimaryActions: NSStackView {
 
     required init?(coder: NSCoder) { nil }
 
-    @objc private func openCheckRules(_ sender: Any?) { checkRulesRequested?() }
-    @objc private func openControls(_ sender: Any?) { controlsRequested?() }
+    @objc private func openHistory(_ sender: Any?) { historyRequested?() }
     @objc private func hideTicker(_ sender: Any?) { hideRequested?() }
 
-    func requestCheckRulesForTest() { openCheckRules(nil) }
-    func requestControlsForTest() { openControls(nil) }
+    func requestHistoryForTest() { openHistory(nil) }
     func requestHideForTest() { hideTicker(nil) }
 }

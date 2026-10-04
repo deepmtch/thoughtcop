@@ -15,7 +15,7 @@ final class FullMessageView: NSVisualEffectView {
     private let scrollView = NSScrollView()
     private let exitControls = DetailExitControls(frame: .zero)
     var closeRequested: (() -> Void)?
-    var controlsRequested: (() -> Void)?
+    var historyRequested: (() -> Void)?
     var tabSelected: ((Int) -> Void)?
     var jumpToLatestRequested: (() -> Void)?
     /// One tab per recent session plus All; empty hides the row.
@@ -66,15 +66,15 @@ final class FullMessageView: NSVisualEffectView {
         addSubview(sourceLabel)
 
         let controlsButton = NSButton(
-            image: NSImage(systemSymbolName: "rectangle.grid.1x2",
-                           accessibilityDescription: "Show controls") ?? NSImage(),
-            target: self, action: #selector(showControls(_:)))
+            image: NSImage(systemSymbolName: "clock.arrow.circlepath",
+                           accessibilityDescription: "Open history") ?? NSImage(),
+            target: self, action: #selector(showHistory(_:)))
         controlsButton.bezelStyle = .accessoryBarAction
         controlsButton.isBordered = false
         controlsButton.controlSize = .small
         controlsButton.imagePosition = .imageOnly
-        controlsButton.toolTip = "Show navigation and history controls"
-        controlsButton.setAccessibilityLabel("Show navigation and history controls")
+        controlsButton.toolTip = "History: all items, violations and archive"
+        controlsButton.setAccessibilityLabel("Open history")
         controlsButton.translatesAutoresizingMaskIntoConstraints = false
         controlsButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
         addSubview(controlsButton)
@@ -239,7 +239,7 @@ final class FullMessageView: NSVisualEffectView {
         }
     }
 
-    @objc private func showControls(_ sender: Any?) { controlsRequested?() }
+    @objc private func showHistory(_ sender: Any?) { historyRequested?() }
 }
 
 /// Session chips: one rounded button per chat, as wide as its name (at most

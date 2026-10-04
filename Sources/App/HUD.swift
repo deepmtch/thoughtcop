@@ -158,7 +158,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var peekSourceLabel: NSTextField!
     private var checkerActivityIndicator: CheckerActivityIndicator!
     private var peekTicker: TickerView!
-    private var peekCornerControls: TickerCornerControls!
     private var peekPrimaryActions: TickerPrimaryActions!
     private var peekToolbar: NSStackView!
     private var latestButton: NSButton!
@@ -357,20 +356,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekTicker.speed = savedSpeed
         peekTicker.text = "Watching Claude and Codex…"
 
-        peekCornerControls = TickerCornerControls(frame: .zero)
-        peekCornerControls.cornerRequested = { [weak self] corner in
-            self?.api.perform(.corner(corner.routeName), origin: .appKit)
-        }
         peekPrimaryActions = TickerPrimaryActions(frame: .zero)
-        peekPrimaryActions.checkRulesRequested = { [weak self] in
-            self?.api.perform(.editCheckRules, origin: .appKit)
-        }
-        peekPrimaryActions.controlsRequested = { [weak self] in
-            self?.api.perform(.showControls, origin: .appKit)
+        peekPrimaryActions.historyRequested = { [weak self] in
+            self?.api.perform(.showHistory, origin: .appKit)
         }
         peekPrimaryActions.hideRequested = { [weak self] in self?.hideHUD() }
         configureSettingsButton(peekPrimaryActions.displaySettingsButton)
-        peekToolbar = NSStackView(views: [peekCornerControls, peekPrimaryActions])
+        peekToolbar = NSStackView(views: [peekPrimaryActions])
         peekToolbar.orientation = .horizontal
         peekToolbar.alignment = .centerY
         peekToolbar.spacing = 2
@@ -398,8 +390,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         fullMessageView.closeRequested = { [weak self] in
             self?.api.perform(.close, origin: .appKit)
         }
-        fullMessageView.controlsRequested = { [weak self] in
-            self?.api.perform(.showControls, origin: .appKit)
+        fullMessageView.historyRequested = { [weak self] in
+            self?.api.perform(.showHistory, origin: .appKit)
         }
         content.addSubview(fullMessageView)
 
@@ -702,9 +694,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if usageWindow?.isVisible == true { usageWindow?.refresh(backends: driftBackends()) }
         let visibleFrame = (panel.screen ?? NSScreen.main)?.visibleFrame
         let tickerPresentation = peekTicker.presentationMetrics
-        let tickerToolbarAttached = peekToolbar.arrangedSubviews.count == 2 &&
-            peekToolbar.arrangedSubviews[0] === peekCornerControls &&
-            peekToolbar.arrangedSubviews[1] === peekPrimaryActions
+        let tickerToolbarAttached = peekToolbar.arrangedSubviews.count == 1 &&
+            peekToolbar.arrangedSubviews[0] === peekPrimaryActions
         api.publish([
             "schemaVersion": 1,
             "ready": true,
@@ -864,12 +855,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "hoverDisclosure": false,
             "singleClickOpensMessage": true,
             "doubleClickOpensControls": false,
-            "tickerCornerButtons": peekCornerControls.accessibilityNames,
-            "tickerCornerControlsVisible": peekMode &&
-                tickerToolbarAttached &&
-                !peekCornerControls.isHidden,
-            "tickerToolbarActions": peekCornerControls.accessibilityNames +
-                peekPrimaryActions.accessibilityNames,
+            "tickerToolbarActions": peekPrimaryActions.accessibilityNames,
+            "tickerToolbarAttached": tickerToolbarAttached,
             "availableWindowPositions": ["top-left", "top-center", "top-right",
                                          "bottom-left", "bottom-center", "bottom-right"],
             "tickerPrimaryActions": peekPrimaryActions.accessibilityNames,
@@ -1015,7 +1002,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             showExpandedFeed()
         case .restartTicker: restartTickerAtBeginning()
         case .showMessage: showCurrentMessage()
-        case .showControls: showControlsFromMessageReader()
         case .showHUD: showHUDFromMenu(nil)
         case .hideHUD: hideHUD()
         case .close: dismissDetailsToTicker()
@@ -1285,7 +1271,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekTicker?.foregroundColor = foreground
         peekSourceLabel?.textColor = foreground.withAlphaComponent(0.72)
         peekPrimaryActions?.foregroundColor = foreground.withAlphaComponent(0.78)
-        peekCornerControls?.foregroundColor = foreground.withAlphaComponent(0.78)
     }
 
     /// The single refresh point for every settings control.
@@ -1480,11 +1465,6 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func quitApplication() {
         NSApp.terminate(nil)
-    }
-
-    private func showControlsFromMessageReader() {
-        applyPeekMode(false)
-        updateCardVisibility()
     }
 
     /// Recent sessions for the reader tabs: working ones first, then by the

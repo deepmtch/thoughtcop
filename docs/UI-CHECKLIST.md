@@ -30,16 +30,13 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Full message renders supported inline Markdown.
 - [x] Overflowing ticker text remains rendered throughout the scroll cycle.
 - [x] Reduce Motion produces stationary clipped text.
-- [x] Current mode is inspectable as ticker, message, controls, or history.
-- [x] Compact controls contain no message card or clipped content preview.
+- [x] Current mode is inspectable as ticker, message, or history.
+- [x] The ticker toolbar is History, Settings and Hide; clicking the text opens
+  the reader, whose History button opens history.
 
 ## Navigation and history
 
-- [x] Previous and Next expose disabled states at boundaries.
-- [x] Position indicator identifies selected message and total count.
-- [x] **Show all** opens full history once and disappears there.
 - [x] **Latest** returns full history to new content.
-- [x] Restart returns ticker to the beginning and then closes controls.
 - [x] Session picker supports automatic and explicit-session selection.
 - [x] Unseen/history state is labeled instead of silently changing selection.
 - [x] Expanded history has a visible selected row and supports Up/Down, J/K,
@@ -75,8 +72,8 @@ running `/ui` inspection surface. A checked item is not merely planned.
 - [x] Ticker speed offers Slow, Normal, and Fast and persists the choice.
 - [x] Width offers Narrow and Standard, supports drag resize, and persists.
 - [x] Position offers six Top/Bottom × Left/Center/Right presets.
-- [x] Four direct corner-placement arrows stay visible in the ticker; six
-  Top/Bottom × Left/Center/Right positions also remain in Settings › General.
+- [x] Six Top/Bottom × Left/Center/Right positions are in Settings › General;
+  the ticker has no corner arrows.
 - [x] Top positions use the macOS visible frame below the menu bar.
 - [x] Ticker background uses the native color picker and persists opacity.
 - [x] Normal mode uses the semantic macOS window surface; first-run violation

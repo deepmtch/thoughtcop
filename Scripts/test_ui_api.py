@@ -57,7 +57,7 @@ else:
     raise AssertionError("unauthenticated UI state request succeeded")
 
 try:
-    request("/controls")
+    request("/close")
 except urllib.error.HTTPError as error:
     assert error.code == 405, error.code
 else:
@@ -72,21 +72,6 @@ while time.monotonic() < deadline:
 else:
     raise AssertionError("initial transcript scan did not complete")
 
-post("/controls")
-controls = wait_state(lambda value: value.get("uiStyle") == "compact-controls")
-assert controls["uiStyle"] == "compact-controls", controls["uiStyle"]
-assert 0 < controls["viewportHeight"] <= 210, controls["viewportHeight"]
-assert controls["contentHeight"] > 0, controls["contentHeight"]
-assert abs(controls["viewportHeight"] - min(210, controls["contentHeight"])) <= 1
-assert controls["cardCount"] > 0, controls["cardCount"]
-assert controls["closeControlVisible"] is True
-assert controls["quitControlVisible"] is False
-assert controls["quitControlInOverflow"] is False
-assert controls["detailCheckRulesControlVisible"] is True
-assert controls["detailSettingsControlVisible"] is True
-assert controls["latestControlVisible"] is False
-selected_index = controls["currentIndex"]
-
 post("/message")
 reader = wait_state(lambda value: value.get("uiStyle") == "full-message")
 assert reader["uiStyle"] == "full-message", reader["uiStyle"]
@@ -95,20 +80,6 @@ assert 118 <= reader["windowHeight"] <= 420, reader["windowHeight"]
 assert reader["closeControlVisible"] is True
 assert reader["quitControlVisible"] is False
 assert reader["quitControlInOverflow"] is False
-reader_index = reader["messageReaderIndex"]
-
-post("/controls")
-returned = wait_state(lambda value: value.get("uiStyle") == "compact-controls")
-assert returned["uiStyle"] == "compact-controls"
-assert returned["currentIndex"] == reader_index
-assert 0 < returned["viewportHeight"] <= 210
-selected_index = returned["currentIndex"]
-
-if selected_index > 0:
-    post("/previous")
-    previous = wait_state(
-        lambda value: value.get("currentIndex") == selected_index - 1)
-    assert previous["currentIndex"] == selected_index - 1
 
 post("/toggle-expanded")
 history = wait_state(lambda value: value.get("uiStyle") == "expanded-card-feed")
@@ -142,18 +113,9 @@ closed = wait_state(lambda value: value.get("uiStyle") == "single-line-ticker")
 assert closed["uiStyle"] == "single-line-ticker"
 assert closed["tickerSettingsControlVisible"] is True
 assert closed["windowWidth"] == closed["contentViewWidth"] == 510
-assert closed["tickerCornerControlsVisible"] is True
-assert closed["tickerCornerButtons"] == [
-    "Move window to top left corner", "Move window to top right corner",
-    "Move window to bottom left corner", "Move window to bottom right corner",
-]
-assert closed["tickerPrimaryActions"] == [
-    "Edit check prompt", "Settings",
-    "Open message navigation", "Hide Thinkpeek",
-]
-assert closed["tickerToolbarActions"] == [
-    *closed["tickerCornerButtons"], *closed["tickerPrimaryActions"],
-]
+assert closed["tickerToolbarAttached"] is True
+assert closed["tickerPrimaryActions"] == ["Open history", "Settings", "Hide Thinkpeek"]
+assert closed["tickerToolbarActions"] == closed["tickerPrimaryActions"]
 
 records = [json.loads(line) for line in LOG.read_text().splitlines() if line.strip()]
 allowed = {
@@ -168,22 +130,17 @@ http_commands = [
     record["command"] for record in records
     if record["event"] == "command" and record["origin"] == "http"
 ]
-for expected in ["controls", "message", "previous", "show-history",
+for expected in ["message", "show-history",
                  "filter/violations", "check-rules", "check-rules/close", "close"]:
-    if expected == "previous" and selected_index == 0:
-        continue
     assert expected in http_commands, (expected, http_commands)
 
 print(json.dumps({
-    "controlsHeight": controls["windowHeight"],
-    "controlsViewport": controls["viewportHeight"],
     "readerHeight": reader["windowHeight"],
     "selectedIndexPreserved": returned["currentIndex"] == reader_index,
     "expandedHistory": history["uiStyle"] == "expanded-card-feed",
     "violationEmptyState": violations["violationEmptyStateVisible"],
     "checkPromptAPI": True,
     "tickerContentWidthMatched": closed["windowWidth"] == closed["contentViewWidth"],
-    "tickerCornerButtonsVisible": closed["tickerCornerControlsVisible"],
     "screenshotBytes": len(png),
     "loggedHTTPCommands": http_commands,
     "unauthenticatedStateRejected": True,

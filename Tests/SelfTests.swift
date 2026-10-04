@@ -1055,19 +1055,15 @@ if CommandLine.arguments.contains("--outside-click-selftest") {
 if CommandLine.arguments.contains("--ticker-actions-selftest") {
     let actions = TickerPrimaryActions(frame: .zero)
     let activity = CheckerActivityIndicator(frame: .zero)
-    var checkRules = false
-    var controls = false
+    var history = false
     var hidden = false
-    actions.checkRulesRequested = { checkRules = true }
-    actions.controlsRequested = { controls = true }
+    actions.historyRequested = { history = true }
     actions.hideRequested = { hidden = true }
-    actions.requestCheckRulesForTest()
-    actions.requestControlsForTest()
+    actions.requestHistoryForTest()
     actions.requestHideForTest()
     activity.begin(destination: "Groq · Test")
-    guard actions.accessibilityNames == ["Edit check prompt", "Settings",
-                                         "Open message navigation", "Hide Thinkpeek"],
-          checkRules, controls, hidden,
+    guard actions.accessibilityNames == ["Open history", "Settings", "Hide Thinkpeek"],
+          history, hidden,
           activity.isChecking, !activity.isHidden,
           activity.destination == "Groq · Test",
           activity.accessibilityLabel() == "Checking reasoning with Groq · Test" else {
@@ -1080,7 +1076,7 @@ if CommandLine.arguments.contains("--ticker-actions-selftest") {
             .data(using: .utf8)!)
         exit(1)
     }
-    print("ticker actions: checkRules=oneClick settings=oneClick controls=oneClick hide=oneClick " +
+    print("ticker actions: history=oneClick settings=oneClick hide=oneClick " +
           "checkerLight=true accessible=true")
     exit(0)
 }
@@ -1117,19 +1113,12 @@ if CommandLine.arguments.contains("--ticker-corner-selftest") ||
     let topRight = movedWindowFrame(initial, to: .topRight, within: visible)
     let bottomLeft = movedWindowFrame(initial, to: .bottomLeft, within: visible)
     let bottomRight = movedWindowFrame(initial, to: .bottomRight, within: visible)
-    let controls = TickerCornerControls(frame: .zero)
-    var requested: [TickerWindowCorner] = []
-    controls.cornerRequested = { requested.append($0) }
-    TickerWindowCorner.allCases.forEach(controls.request)
     guard topLeft.origin == NSPoint(x: 12, y: 718),
           topRight.origin == NSPoint(x: 528, y: 718),
           bottomLeft.origin == NSPoint(x: 12, y: 12),
           bottomRight.origin == NSPoint(x: 528, y: 12),
-          requested == TickerWindowCorner.allCases,
-          controls.accessibilityNames == ["Move window to top left corner",
-                                          "Move window to top right corner",
-                                          "Move window to bottom left corner",
-                                          "Move window to bottom right corner"] else {
+          TickerWindowCorner.allCases.map(\.routeName) ==
+            ["top-left", "top-right", "bottom-left", "bottom-right"] else {
         FileHandle.standardError.write(
             "ticker position self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -1659,7 +1648,7 @@ if CommandLine.arguments.contains("--ui-command-api-selftest") {
     var handled: [String] = []
     api.actionHandler = { handled.append($0.name) }
     api.perform(.first, origin: .appKit)
-    api.perform(.showControls, origin: .appKit)
+    api.perform(.showHistory, origin: .appKit)
     api.perform(.hideHUD, origin: .http)
     api.perform(.showViolations, origin: .http)
     api.perform(.closeCheckRules, origin: .http)
@@ -1673,7 +1662,7 @@ if CommandLine.arguments.contains("--ui-command-api-selftest") {
         completion: { _ in }), origin: .appKit)
     let log = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
     try? FileManager.default.removeItem(at: logURL)
-    guard handled == ["first", "controls", "hide", "show-violations",
+    guard handled == ["first", "show-history", "hide", "show-violations",
                       "check-rules/close",
                       "filter/violations", "violation-bubble/on",
                       "violation-bubble/off", "next",

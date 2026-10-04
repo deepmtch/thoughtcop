@@ -7,6 +7,8 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- Ticker toolbar: **History · Settings · Hide**. The corner arrows, the 💬 rules
+  button and the navigation view are gone; position is in Settings › General.
 - One **Settings** window (menu bar › Settings… ⌘,, or ⚙) with General, Alerts,
   Rules and Keys tabs; replaces the nested ⚙ menus and the separate Edit Rules
   and Provider Keys windows.
