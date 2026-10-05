@@ -217,7 +217,8 @@ final class CompactInteractionView: NSView {
 }
 
 func renderedBody(_ text: String, kind: String) -> NSAttributedString {
-    let size: CGFloat = kind == "analysis" ? 15 : 13
+    // "violation" is an analysis whose bold (the one-line summary) is kept.
+    let size: CGFloat = kind == "analysis" || kind == "violation" ? 15 : 13
     let weight: NSFont.Weight = kind == "activity" ? .semibold : .regular
     let baseFont = NSFont.systemFont(ofSize: size, weight: weight)
     let color: NSColor = kind == "omitted-analysis" ? .secondaryLabelColor : .labelColor
@@ -226,7 +227,7 @@ func renderedBody(_ text: String, kind: String) -> NSAttributedString {
     paragraph.lineBreakMode = .byWordWrapping
 
     let result: NSMutableAttributedString
-    if kind == "analysis" {
+    if kind == "analysis" || kind == "violation" {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace)
         if let parsed = try? AttributedString(markdown: text, options: options) {
@@ -648,6 +649,18 @@ final class EventCard: NSView {
         (violationEvidence.stringValue, violationReason.stringValue,
          violationDetail.stringValue, body.isHidden, !violationReason.isHidden,
          !violationDetailRow.isHidden, violationEvidence.maximumNumberOfLines)
+    }
+
+    /// The one-line summary takes the row's second line; the quote moves into
+    /// the expanded part above Why.
+    func setViolationSummary(_ summary: String) {
+        guard isViolationRow, !summary.isEmpty,
+              violationEvidence.stringValue != summary else { return }
+        let quote = violationEvidence.stringValue
+        violationEvidence.stringValue = summary
+        violationReason.stringValue = [quote, violationReason.stringValue]
+            .filter { !$0.isEmpty }.joined(separator: "\n")
+        applyRowLayout()
     }
 
     func setViolationReviewed(_ reviewed: Bool) {

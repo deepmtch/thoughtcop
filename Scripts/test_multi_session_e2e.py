@@ -26,6 +26,7 @@ def free_port() -> int:
 class DummyChecker(BaseHTTPRequestHandler):
     requests: list[str] = []
     verifications: list[str] = []
+    summaries: list[str] = []
     lock = threading.Lock()
 
     def do_POST(self) -> None:  # noqa: N802
@@ -33,6 +34,12 @@ class DummyChecker(BaseHTTPRequestHandler):
         payload = json.loads(self.rfile.read(size))
         envelope = json.loads(payload["messages"][1]["content"])
         content = envelope["EVIDENCE_RECORD"]["content"]
+        if "VIOLATION" in envelope:
+            # The one-line summary, requested after a violation is recorded.
+            with self.lock:
+                self.summaries.append(content)
+            self.respond({"summary": "Dummy summary of " + content.split(":")[0]})
+            return
         if "CLAIM" in envelope:
             # Second check of a violation claim: this suite confirms every one.
             with self.lock:
@@ -727,8 +734,10 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
         assert bubble["statusItemUsesNativeForeground"] is True, bubble
         assert bubble["statusItemDrawsFlashColor"] is False, bubble
         assert bubble["violationBubbleTitle"].startswith("Violation · "), bubble
-        # The dummy checker quotes "ALERT" as its evidence.
-        assert bubble["violationBubbleQuote"] == "\u201cALERT\u201d", bubble
+        # The summary replaces the quote once it arrives; until then the quote
+        # (the dummy checker quotes "ALERT") stands in (BUG-104).
+        assert bubble["violationBubbleQuote"] in [
+            "\u201cALERT\u201d", "Dummy summary of TRANSIENT_ALERT"], bubble
         assert bubble["windowVisible"] is False, bubble
         assert bubble["hiddenByUser"] is True, bubble
         assert bubble["violationBubbleOnScreen"] is True, bubble
@@ -759,6 +768,13 @@ with tempfile.TemporaryDirectory(prefix="thinkpeek-e2e-") as temporary:
             state.get("uiStyle") == "full-message" and
             "TRANSIENT_ALERT" in (state.get("messageReaderText") or ""))
         assert last["windowVisible"] is True, last
+        # Each recorded violation gets its one-line summary afterwards (BUG-104).
+        summarized = wait_for(lambda state: state.get("violations") and
+            state["violations"][-1].get("summary") == "Dummy summary of TRANSIENT_ALERT")
+        assert summarized["messageReaderText"].startswith(
+            "**Dummy summary of TRANSIENT_ALERT**"), summarized["messageReaderText"]
+        with DummyChecker.lock:
+            assert "TRANSIENT_ALERT: show briefly when opted in" in DummyChecker.summaries
         assert last["hiddenByUser"] is False, last
         # Opened while hidden: closing returns to hidden (BUG-100).
         assert last["returnsToHiddenOnClose"] is True, last

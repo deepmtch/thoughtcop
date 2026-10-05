@@ -40,7 +40,9 @@ class DummyChecker(BaseHTTPRequestHandler):
         system = payload["messages"][0]["content"]
         envelope = json.loads(payload["messages"][1]["content"])
         content = envelope["EVIDENCE_RECORD"]["content"]
-        if "CLAIM" in envelope:
+        if "VIOLATION" in envelope:
+            answer = {"summary": "Dummy summary"}
+        elif "CLAIM" in envelope:
             with self.lock:
                 self.verifications.append({"system": system, "envelope": envelope})
             answer = {"confirmed": "FALSE_ALARM" not in content,

@@ -86,6 +86,9 @@ VIOLATIONS = [
 ]
 
 
+SUMMARY = "The AI hardcoded last month's numbers after the sales API failed."
+
+
 class Checker(BaseHTTPRequestHandler):
     """Loopback checker: 'hardcoded' is a violation (confirmed), else clean."""
 
@@ -95,6 +98,8 @@ class Checker(BaseHTTPRequestHandler):
         text = envelope["EVIDENCE_RECORD"]["content"]
         if "CLAIM" in envelope:
             answer = {"confirmed": True, "reason": "The quote is in the record."}
+        elif "VIOLATION" in envelope:
+            answer = {"summary": SUMMARY}
         elif "hardcoded" in text:
             answer = {"alert": True,
                       "reason": "The assistant replaced live data with hardcoded numbers "
@@ -353,6 +358,8 @@ def main() -> None:
             # The real menu bar is captured from the host (it cannot be
             # rendered from inside the app); see BUG-094.
             entry = capture.shot("08-violation-bubble", "bubble", settle=0.2)
+            # The one-line summary replaces the quote once it arrives (BUG-104).
+            assert ui(port)["violationBubbleQuote"] == SUMMARY, ui(port)["violationBubbleQuote"]
             assert entry["bubbleFrame"]["width"] == 300, entry
             assert ui(port)["violationBubbleTitle"] == "Violation · EU brand finder app mockup"
             # The quote is longer than one line, so the bubble shows two
@@ -400,7 +407,16 @@ def main() -> None:
             request(port, "POST", "/toggle-selected-violation")
             capture.shot("11-violation-expanded", "history")
             request(port, "POST", "/message")
-            capture.shot("12-reader-violation", "reader")
+            entry = capture.shot("12-reader-violation", "reader")
+            assert entry["readerText"].startswith(SUMMARY), entry["readerText"]
+            assert "Why and full message ▸" in entry["readerText"], entry["readerText"]
+            assert "Why:" not in entry["readerText"], entry["readerText"]
+            request(port, "POST", "/reader/violation-details")
+            expanded = wait_ui(port, lambda s: "Why:" in (s.get("messageReaderRenderedText") or ""))
+            assert "Full message" in expanded["messageReaderRenderedText"], expanded
+            # The reader grows to show the details (up to its 420-point maximum).
+            assert expanded["windowHeight"] > entry["windowHeight"], (expanded["windowHeight"], entry)
+            capture.shot("12c-reader-violation-details", "reader")
             request(port, "POST", "/close")
             time.sleep(0.4)
             request(port, "POST", "/last-violation")

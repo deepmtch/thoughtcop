@@ -149,6 +149,11 @@ final class MessagePreview {
     var evaluation: MessageEvaluationState = .pending
     var violationID: String?
     var violationReviewed = false
+    /// The violation's one-line summary (BUG-104), when it has arrived.
+    var violationSummary: String?
+    /// The reader shows Why and the full message only after "Why and full
+    /// message ▸" when a summary is shown.
+    var violationDetailsExpanded = false
 
     init(source: String, text: String, kind: String) {
         self.source = source
@@ -175,7 +180,9 @@ final class MessagePreview {
     /// renders it as formatted text whatever kind the original record was.
     var readerKind: String {
         switch evaluation {
-        case .alert, .failed: return "analysis"
+        // "violation" renders the summary bold; without one, the earlier style.
+        case .alert: return violationSummary == nil ? "analysis" : "violation"
+        case .failed: return "analysis"
         default: return kind
         }
     }
@@ -201,6 +208,13 @@ final class MessagePreview {
             let quote = decision.evidence.isEmpty ? "" : "“\(decision.evidence)”\n\n"
             let full = text == decision.evidence ? ""
                 : "\n\n**Full message**\n\(text)"
+            if let summary = violationSummary {
+                // The summary first; Why and the full message one click away.
+                let rest = violationDetailsExpanded
+                    ? "Why: \(decision.reason)\(full)"
+                    : "[Why and full message ▸](thinkpeek://violation-details)"
+                return "**\(summary)**\n\n\(quote)\(rest)"
+            }
             return "**Violation**\n\(quote)Why: \(decision.reason)\(full)"
         case .failed(let message):
             return "**Check unavailable**\nThis message was not evaluated.\n" +
@@ -490,6 +504,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         fullMessageView.closeRequested = { [weak self] in
             self?.api.perform(.close, origin: .appKit)
+        }
+        fullMessageView.linkRequested = { [weak self] url in
+            if url.host == "violation-details" {
+                self?.api.perform(.expandViolationDetails, origin: .appKit)
+            }
         }
         fullMessageView.historyRequested = { [weak self] in
             self?.api.perform(.showHistory, origin: .appKit)
@@ -1185,6 +1204,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .closeUsage: usageWindow?.close()
         case .showLastViolation: showLastViolation()
         case .statusItemHover(let inside): statusItemHoverChanged(inside)
+        case .expandViolationDetails: expandReaderViolationDetails()
         case .openViolationBubble: openBubbleViolation()
         case .toggleSelectedViolation:
             guard !compactMode, eventCards.indices.contains(compactIndex) else { break }
@@ -1830,10 +1850,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         detailHeaderLayout.setActive(false, width: detailWidth)
         peekTicker.setActive(false)
         panel.becomesKeyOnlyIfNeeded = false
-        let readerHeight = fullMessageView.preferredHeight(forWidth: detailWidth)
-        transitionPanel(to: readerHeight, width: detailWidth,
-                        minSize: NSSize(width: detailWidth, height: 118),
-                        maxSize: NSSize(width: detailWidth, height: 420))
+        fitReaderToText()
         focusDetails()
         publishAPI()
     }
@@ -2370,6 +2387,10 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                               provider: record.provider, latencyMs: record.latencyMs,
                               checkPrompt: record.checkPrompt)
             card.setViolationReviewed(record.reviewedAt != nil)
+            if let summary = record.summary {
+                preview.violationSummary = summary
+                card.setViolationSummary(summary)
+            }
         }
         if !violationRecords.isEmpty {
             compactIndex = eventCards.count - 1
@@ -2612,7 +2633,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func showAlert(_ decision: EvaluationDecision, provider: String,
                            _ ms: Double, timestamp: String, card: EventCard,
-                           preview: MessagePreview) {
+                           preview: MessagePreview, evidence: EvaluationRecord) {
         let priorSelection = compactIndex
         var restoreSelection = priorSelection
         preview.evaluation = .alert(decision)
@@ -2641,6 +2662,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         compactIndex = restoreSelection
         updateCardVisibility()
+        requestViolationSummary(decision, record: record, evidence: evidence,
+                                card: card, preview: preview)
         if violationFlashEnabled || violationBubbleEnabled {
             NSAccessibility.post(element: panel as Any,
                                  notification: .announcementRequested,
@@ -2716,8 +2739,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let session = record.source.components(separatedBy: " · ").dropFirst()
             .joined(separator: " · ")
         let title = "Violation · " + (session.isEmpty ? record.source : session)
-        let quote = record.evidence.isEmpty ? "Why: \(record.reason)"
-            : "“\(record.evidence)”"
+        let quote = violationRecords.first { $0.id == record.id }?.summary ??
+            (record.evidence.isEmpty ? "Why: \(record.reason)" : "“\(record.evidence)”")
         // A status item macOS hid (full menu bar) is not a usable anchor.
         violationBubble.show(title: title, quote: quote, below: statusIconAnchor())
         publishAPI()
@@ -2737,6 +2760,55 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             updateViolationMenu()
         }
         publishAPI()
+    }
+
+    /// The one-line summary arrives after the violation is shown (about
+    /// 0.4 s); the quote stands in until then and when the request fails.
+    private func requestViolationSummary(_ decision: EvaluationDecision,
+                                         record: ViolationRecord,
+                                         evidence: EvaluationRecord,
+                                         card: EventCard, preview: MessagePreview) {
+        summarizeViolation(decision, evidence: evidence, source: preview.source) {
+            [weak self] summary in
+            guard let self, let summary else { return }
+            self.violationRecords = self.violationStore.setSummary(id: record.id,
+                                                                   summary: summary)
+            preview.violationSummary = summary
+            card.setViolationSummary(summary)
+            if self.messageMode, self.eventPreviews.indices.contains(self.compactIndex),
+               self.eventPreviews[self.compactIndex] === preview {
+                self.selectedMessageChanged()
+                self.fitReaderToText()
+            }
+            if self.violationBubble.isVisible,
+               (self.bubbleMode == .alert && self.bubbleViolationID == record.id) ||
+               (self.bubbleMode == .hover && self.violationRecords.last?.id == record.id) {
+                self.violationBubble.show(title: self.violationBubble.title, quote: summary,
+                                          below: self.statusIconAnchor(),
+                                          hint: self.violationBubble.hint)
+            }
+            self.apiEvents.append(["kind": "violation-summary", "source": preview.source,
+                                   "text": summary])
+            self.publishAPI()
+        }
+    }
+
+    /// "Why and full message ▸" in the reader: the reader grows to show them.
+    private func expandReaderViolationDetails() {
+        guard messageMode, eventPreviews.indices.contains(compactIndex),
+              eventPreviews[compactIndex].alarmActive else { return }
+        eventPreviews[compactIndex].violationDetailsExpanded = true
+        selectedMessageChanged()
+        fitReaderToText()
+    }
+
+    /// The reader's height follows its text, between 118 and 420 points.
+    private func fitReaderToText() {
+        guard messageMode else { return }
+        let readerHeight = fullMessageView.preferredHeight(forWidth: detailWidth)
+        transitionPanel(to: readerHeight, width: detailWidth,
+                        minSize: NSSize(width: detailWidth, height: 118),
+                        maxSize: NSSize(width: detailWidth, height: 420))
     }
 
     /// A status item macOS hid (full menu bar) is not a usable anchor.
@@ -2782,8 +2854,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let session = record.source.components(separatedBy: " · ").dropFirst()
                 .joined(separator: " · ")
             let title = "Last violation · " + (session.isEmpty ? record.source : session)
-            let quote = record.evidence.isEmpty ? "Why: \(record.reason)"
-                : "“\(record.evidence)”"
+            let quote = record.summary ??
+                (record.evidence.isEmpty ? "Why: \(record.reason)" : "“\(record.evidence)”")
             // The time stays readable on the last line, however long the chat name.
             violationBubble.show(title: title, quote: quote, below: statusIconAnchor(),
                                  hint: displayTime(record.timestamp) + " · Click to open")
@@ -2976,7 +3048,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
                 guard let card, let preview else { return }
                 self.showAlert(decision, provider: provider, ms,
-                               timestamp: block.ts, card: card, preview: preview)
+                               timestamp: block.ts, card: card, preview: preview,
+                               evidence: block.evaluationRecord)
             case .scored(let decision, let provider):
                 existingPreview?.evaluation = .clear
                 existingCard?.setFooter("No violation",

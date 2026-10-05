@@ -270,7 +270,11 @@ The menu-bar shield carries the new-violation count. **Open Violation History…
 opens the violation list even after the ticker has been hidden or the app has
 restarted; **Show Last Violation**, directly below it, opens the newest
 violation in the reader. Resting the mouse on the menu-bar icon for half a
-second shows the last violation in the bubble; click it to open it. History has three tabs: **All**, **Violations** (those
+second shows the last violation in the bubble; click it to open it.
+Each violation gets a one-line summary from a separate request after it is
+recorded (it never affects the decision). The reader, the bubble and the
+history row show the summary first; the reader keeps the quote below and
+"Why and full message ▸" one click away. History has three tabs: **All**, **Violations** (those
 whose transcript record is less than one hour old) and **Archive** (older ones,
 moved there at the exact one-hour mark even while history is open). The
 retention limit covers both tabs together, and archiving does not mark a

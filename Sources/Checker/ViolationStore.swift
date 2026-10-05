@@ -29,10 +29,14 @@ struct ViolationRecord: Codable, Equatable {
     let latencyMs: Int
     let checkPrompt: String
     var reviewedAt: String?
+    /// One plain sentence from a separate request after the violation was
+    /// recorded; nil until it arrives, or when that request failed.
+    var summary: String?
 
     init(id: String = UUID().uuidString, timestamp: String, source: String,
          content: String, reason: String, evidence: String, provider: String,
-         latencyMs: Int, checkPrompt: String, reviewedAt: String? = nil) {
+         latencyMs: Int, checkPrompt: String, reviewedAt: String? = nil,
+         summary: String? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.source = source
@@ -43,6 +47,7 @@ struct ViolationRecord: Codable, Equatable {
         self.latencyMs = latencyMs
         self.checkPrompt = checkPrompt
         self.reviewedAt = reviewedAt
+        self.summary = summary
     }
 
     var json: [String: Any] {
@@ -53,6 +58,7 @@ struct ViolationRecord: Codable, Equatable {
             "checkPrompt": checkPrompt,
         ]
         if let reviewedAt { value["reviewedAt"] = reviewedAt }
+        if let summary { value["summary"] = summary }
         return value
     }
 }
@@ -137,6 +143,16 @@ final class ViolationStore {
         var records = loadUnlocked()
         guard let index = records.firstIndex(where: { $0.id == id }) else { return records }
         records[index].reviewedAt = timestamp
+        saveUnlocked(records)
+        return records
+    }
+
+    func setSummary(id: String, summary: String) -> [ViolationRecord] {
+        lock.lock()
+        defer { lock.unlock() }
+        var records = loadUnlocked()
+        guard let index = records.firstIndex(where: { $0.id == id }) else { return records }
+        records[index].summary = summary
         saveUnlocked(records)
         return records
     }

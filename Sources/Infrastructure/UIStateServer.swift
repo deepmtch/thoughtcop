@@ -115,6 +115,7 @@ enum UICommand {
     case closeUsage
     case showLastViolation
     case statusItemHover(Bool)
+    case expandViolationDetails
     case showSettings(String)
     case closeSettings
     case openViolationBubble
@@ -161,6 +162,7 @@ enum UICommand {
         case .readerLatest: return "reader-latest"
         case .closeUsage: return "usage/close"
         case .showLastViolation: return "last-violation"
+        case .expandViolationDetails: return "reader/violation-details"
         case .statusItemHover(let inside): return inside
             ? "status-item/hover/on" : "status-item/hover/off"
         case .showSettings(let tab): return "settings/\(tab)"
@@ -350,6 +352,7 @@ final class UIStateServer {
         case "/filter/violations": return .historyFilter("violations")
         case "/filter/archive": return .historyFilter("archive")
         case "/last-violation": return .showLastViolation
+        case "/reader/violation-details": return .expandViolationDetails
         case "/status-item/hover/on": return .statusItemHover(true)
         case "/status-item/hover/off": return .statusItemHover(false)
         case "/violation-bubble/open": return .openViolationBubble

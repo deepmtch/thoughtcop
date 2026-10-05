@@ -18,8 +18,10 @@ characters. A longer message is cut to its first and last 1,000 characters with
 a marker stating how many were removed. When **Confirm with Second Check** is
 on (the default), each reported violation is sent once more to the same
 provider and model together with the claim's reason and quoted evidence, to
-ask whether the claim is true. Those providers process the requests under their
-own terms and privacy policies.
+ask whether the claim is true. After a violation is recorded, its record, your
+rules, and the violation's reason and quote are sent once more, without your
+request, to ask for a one-line summary. Those providers process the requests
+under their own terms and privacy policies.
 
 Thinkpeek does not send tool calls, tool results, other user-role records
 (task notifications, injected context, meta messages), readable Codex provider

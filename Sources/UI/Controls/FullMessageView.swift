@@ -3,7 +3,7 @@
 
 import AppKit
 
-final class FullMessageView: NSVisualEffectView {
+final class FullMessageView: NSVisualEffectView, NSTextViewDelegate {
     private static let minimumReaderHeight: CGFloat = 118
     private static let maximumReaderHeight: CGFloat = 420
     private static let headerAndMarginsHeight: CGFloat = 62
@@ -16,6 +16,8 @@ final class FullMessageView: NSVisualEffectView {
     private let exitControls = DetailExitControls(frame: .zero)
     var closeRequested: (() -> Void)?
     var historyRequested: (() -> Void)?
+    /// A thinkpeek:// link in the text, such as "Why and full message ▸".
+    var linkRequested: ((URL) -> Void)?
     var tabSelected: ((Int) -> Void)?
     var jumpToLatestRequested: (() -> Void)?
     /// One tab per recent session plus All; empty hides the row.
@@ -82,6 +84,7 @@ final class FullMessageView: NSVisualEffectView {
         exitControls.closeRequested = { [weak self] in self?.closeRequested?() }
         addSubview(exitControls)
 
+        textView.delegate = self
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
@@ -281,6 +284,13 @@ final class FullMessageView: NSVisualEffectView {
     }
 
     @objc private func showHistory(_ sender: Any?) { historyRequested?() }
+
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:))
+        guard let url, url.scheme == "thinkpeek" else { return false }
+        linkRequested?(url)
+        return true
+    }
 }
 
 /// Session chips in one row: All and "+N ▾" at their natural width, the chats

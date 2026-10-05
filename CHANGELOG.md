@@ -7,6 +7,8 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- A one-line summary for each violation, shown first in the reader, bubble and
+  history (a separate request that cannot change the decision).
 - Resting the mouse on the menu-bar icon shows the last violation in the bubble.
 - The ticker is one 28-point row that touches the menu bar at top positions.
 - Ticker toolbar: **History · Settings · Hide**. The corner arrows, the 💬 rules

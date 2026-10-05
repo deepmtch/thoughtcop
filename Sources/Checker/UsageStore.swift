@@ -105,15 +105,17 @@ final class UsageStore {
         return formatter.string(from: date)
     }
 
+    /// `counted: false` adds only the tokens (the one-line violation summary
+    /// is neither a check nor a second check).
     func record(model: String, usage: TokenUsage, secondCheck: Bool,
-                at date: Date = Date()) {
+                counted: Bool = true, at date: Date = Date()) {
         lock.lock()
         defer { lock.unlock() }
         loadLocked()
         let key = Self.day(date)
         var totals = days[key, default: [:]][model, default: UsageTotals()]
-        totals.checks += secondCheck ? 0 : 1
-        totals.secondChecks += secondCheck ? 1 : 0
+        totals.checks += counted && !secondCheck ? 1 : 0
+        totals.secondChecks += counted && secondCheck ? 1 : 0
         totals.inputTokens += usage.input
         totals.outputTokens += usage.output
         days[key, default: [:]][model] = totals
