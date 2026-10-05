@@ -249,6 +249,15 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var violationEmptyState: HistoryEmptyStateView!
     private var settingsWindow: SettingsWindow!
     private var isolatedInputMonitor: Any?
+    /// What the bubble shows now: a new violation's alert, or the last
+    /// violation while the mouse rests on the menu-bar icon.
+    private enum BubbleMode: String { case none, alert, hover }
+    private var bubbleMode: BubbleMode = .none
+    private let statusHover = StatusItemHoverTracker()
+    private var hoverWork: DispatchWorkItem?
+    private var pointerOnIcon = false
+    private var pointerOnBubble = false
+    private static let hoverDelay: TimeInterval = 0.5
     private var isolatedActivity: NSObjectProtocol?
     /// Set when a violation was opened (bubble, Show Last Violation, Open
     /// Violation History) while the user had hidden Thinkpeek (BUG-100).
@@ -815,12 +824,14 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "hiddenByUser": hiddenByUser,
             "isolatedInputIgnored": isolatedInputMonitor != nil,
             "returnsToHiddenOnClose": returnToHiddenOnClose,
+            "violationBubbleMode": bubbleMode.rawValue,
             "violationFlashEnabled": violationFlashEnabled,
             "violationBubbleEnabled": violationBubbleEnabled,
             "statusItemFlashActive": statusFlashActive,
             "violationBubbleVisible": violationBubble.isVisible,
             "violationBubbleTitle": violationBubble.isVisible ? violationBubble.title : "",
             "violationBubbleQuote": violationBubble.isVisible ? violationBubble.quote : "",
+            "violationBubbleHint": violationBubble.isVisible ? violationBubble.hint : "",
             "violationBubblePlacement": violationBubble.isVisible ? violationBubble.placement : "",
             "violationBubbleOnScreen": violationBubble.isVisible && violationBubble.isOnScreen,
             "statusItemVisible": statusItem?.button?.window?.occlusionState
@@ -1173,6 +1184,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .showUsage: showUsage()
         case .closeUsage: usageWindow?.close()
         case .showLastViolation: showLastViolation()
+        case .statusItemHover(let inside): statusItemHoverChanged(inside)
         case .openViolationBubble: openBubbleViolation()
         case .toggleSelectedViolation:
             guard !compactMode, eventCards.indices.contains(compactIndex) else { break }
@@ -1225,6 +1237,20 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         quit.target = self
         menu.addItem(quit)
         item.menu = menu
+        menu.delegate = self
+        if let button = item.button {
+            statusHover.changed = { [weak self] inside in
+                // Isolated tests ignore real input (BUG-094 follow-up).
+                guard !ISOLATED_E2E else { return }
+                self?.api.perform(.statusItemHover(inside), origin: .appKit)
+            }
+            statusHover.install(on: button)
+        }
+        violationBubble.hoverChanged = { [weak self] inside in
+            guard !ISOLATED_E2E else { return }
+            self?.pointerOnBubble = inside
+            self?.updateHoverBubble()
+        }
         statusItem = item
     }
 
@@ -2680,6 +2706,8 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func showViolationBubble(_ record: ViolationRecord, generation: Int,
                                      duration: TimeInterval) {
+        hoverWork?.cancel()
+        bubbleMode = .alert
         violationBubble.clicked = { [weak self] in
             self?.api.perform(.openViolationBubble, origin: .appKit)
         }
@@ -2691,10 +2719,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let quote = record.evidence.isEmpty ? "Why: \(record.reason)"
             : "“\(record.evidence)”"
         // A status item macOS hid (full menu bar) is not a usable anchor.
-        let iconWindow = statusItem?.button?.window
-        let anchor = iconWindow.flatMap { window in
-            window.occlusionState.contains(.visible) ? window.frame : nil }
-        violationBubble.show(title: title, quote: quote, below: anchor)
+        violationBubble.show(title: title, quote: quote, below: statusIconAnchor())
         publishAPI()
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             guard let self, generation == self.violationAlertGeneration else { return }
@@ -2705,11 +2730,76 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func endViolationAlert() {
         violationAlertGeneration += 1
         violationBubble.hide()
+        bubbleMode = .none
         bubbleViolationID = nil
         if statusFlashActive {
             statusFlashActive = false
             updateViolationMenu()
         }
+        publishAPI()
+    }
+
+    /// A status item macOS hid (full menu bar) is not a usable anchor.
+    private func statusIconAnchor() -> NSRect? {
+        statusItem?.button?.window.flatMap { window in
+            window.occlusionState.contains(.visible) ? window.frame : nil }
+    }
+
+    private func statusItemHoverChanged(_ inside: Bool) {
+        pointerOnIcon = inside
+        updateHoverBubble()
+    }
+
+    /// Resting on the icon for `hoverDelay` shows the last violation; it
+    /// stays while the mouse is on the icon or the bubble and hides
+    /// `hoverDelay` after it leaves both. A new violation's alert wins.
+    private func updateHoverBubble() {
+        hoverWork?.cancel()
+        hoverWork = nil
+        guard bubbleMode != .alert else { return }
+        let showing = bubbleMode == .hover && violationBubble.isVisible
+        let work: DispatchWorkItem
+        if pointerOnIcon || (showing && pointerOnBubble) {
+            guard !showing else { return }
+            work = DispatchWorkItem { [weak self] in self?.showHoverBubble() }
+        } else if showing {
+            work = DispatchWorkItem { [weak self] in self?.hideHoverBubble() }
+        } else {
+            return
+        }
+        hoverWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.hoverDelay, execute: work)
+    }
+
+    private func showHoverBubble() {
+        guard pointerOnIcon, bubbleMode != .alert else { return }
+        bubbleMode = .hover
+        violationBubble.clicked = { [weak self] in
+            self?.hideHoverBubble()
+            self?.api.perform(.showLastViolation, origin: .appKit)
+        }
+        if let record = violationRecords.last {
+            let session = record.source.components(separatedBy: " · ").dropFirst()
+                .joined(separator: " · ")
+            let title = "Last violation · " + (session.isEmpty ? record.source : session)
+            let quote = record.evidence.isEmpty ? "Why: \(record.reason)"
+                : "“\(record.evidence)”"
+            // The time stays readable on the last line, however long the chat name.
+            violationBubble.show(title: title, quote: quote, below: statusIconAnchor(),
+                                 hint: displayTime(record.timestamp) + " · Click to open")
+        } else {
+            violationBubble.show(title: "Thinkpeek", quote: "No violations yet.",
+                                 below: statusIconAnchor())
+        }
+        publishAPI()
+    }
+
+    private func hideHoverBubble() {
+        hoverWork?.cancel()
+        hoverWork = nil
+        guard bubbleMode == .hover else { return }
+        violationBubble.hide()
+        bubbleMode = .none
         publishAPI()
     }
 
@@ -3077,5 +3167,13 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         if monitorsReady { initialScanComplete = true }
         publishAPI()
+    }
+}
+
+extension HUD: NSMenuDelegate {
+    /// Clicking the icon opens its menu; the hover bubble gives way.
+    func menuWillOpen(_ menu: NSMenu) {
+        pointerOnIcon = false
+        hideHoverBubble()
     }
 }

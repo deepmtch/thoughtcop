@@ -7,6 +7,7 @@ All notable user-facing changes will be recorded here. The project follows
 
 ### Added
 
+- Resting the mouse on the menu-bar icon shows the last violation in the bubble.
 - The ticker is one 28-point row that touches the menu bar at top positions.
 - Ticker toolbar: **History · Settings · Hide**. The corner arrows, the 💬 rules
   button and the navigation view are gone; position is in Settings › General.

@@ -107,3 +107,4 @@ fix boundaries, and verification. A bug document is committed with its fix.
 | [BUG-100](BUG-100-closing-a-violation-unhid-the-ticker.md) | Closing a violation opened from the bubble un-hid the ticker | Fixed |
 | [BUG-101](BUG-101-bubble-opened-only-from-its-bottom-strip.md) | The violation bubble opened only from its bottom strip | Fixed |
 | [BUG-102](BUG-102-reader-tabs-took-three-rows.md) | Reader tabs took three rows, with All last | Fixed |
+| [BUG-103](BUG-103-no-quick-look-at-the-last-violation.md) | No quick look at the last violation from the menu bar | Fixed |

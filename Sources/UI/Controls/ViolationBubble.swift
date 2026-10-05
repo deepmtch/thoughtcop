@@ -16,8 +16,14 @@ final class ViolationBubble {
     var isVisible: Bool { panel.isVisible }
     var title: String { content.titleLabel.stringValue }
     var quote: String { content.quoteLabel.stringValue }
+    var hint: String { content.hint }
     var frame: NSRect { panel.frame }
     var contentView: NSView { content }
+    /// The mouse entering (true) or leaving (false) the bubble.
+    var hoverChanged: ((Bool) -> Void)? {
+        get { content.hoverChanged }
+        set { content.hoverChanged = newValue }
+    }
 
     /// The view a click at `point` (in the bubble's coordinates) reaches.
     func viewHit(at point: NSPoint) -> NSView? {
@@ -47,8 +53,9 @@ final class ViolationBubble {
     /// Shows the bubble below `anchor` (the status item's window frame, in
     /// screen coordinates) when that is visible on a screen, otherwise at the
     /// top right of the main screen below the menu bar; always inside it.
-    func show(title: String, quote: String, below anchor: NSRect?) {
-        content.set(title: title, quote: quote, width: Self.width)
+    func show(title: String, quote: String, below anchor: NSRect?,
+              hint: String = "Click to open") {
+        content.set(title: title, quote: quote, width: Self.width, hint: hint)
         let size = NSSize(width: Self.width, height: content.fittingHeight(width: Self.width))
         let anchorScreen = anchor.flatMap { rect in
             NSScreen.screens.first { $0.frame.contains(NSPoint(x: rect.midX, y: rect.midY)) }
@@ -86,6 +93,8 @@ private final class ViolationBubbleView: NSView {
     private let stripe = NSView()
     private let stack: NSStackView
     var clicked: (() -> Void)?
+    var hoverChanged: ((Bool) -> Void)?
+    var hint: String { hintLabel.stringValue }
 
     override init(frame frameRect: NSRect) {
         stack = NSStackView(views: [titleLabel, quoteLabel, hintLabel])
@@ -132,7 +141,8 @@ private final class ViolationBubbleView: NSView {
 
     required init?(coder: NSCoder) { nil }
 
-    func set(title: String, quote: String, width: CGFloat) {
+    func set(title: String, quote: String, width: CGFloat, hint: String) {
+        hintLabel.stringValue = hint
         titleLabel.stringValue = title
         quoteLabel.stringValue = quote
         quoteLabel.preferredMaxLayoutWidth = width - 26
@@ -162,10 +172,37 @@ private final class ViolationBubbleView: NSView {
 
     override func mouseDown(with event: NSEvent) { clicked?() }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero,
+                                       options: [.mouseEnteredAndExited, .activeAlways,
+                                                 .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hoverChanged?(true) }
+    override func mouseExited(with event: NSEvent) { hoverChanged?(false) }
+
     override func accessibilityPerformPress() -> Bool {
         clicked?()
         return true
     }
 
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+}
+
+/// Reports the mouse entering and leaving the menu-bar icon.
+final class StatusItemHoverTracker: NSResponder {
+    var changed: ((Bool) -> Void)?
+
+    func install(on view: NSView) {
+        view.addTrackingArea(NSTrackingArea(rect: .zero,
+                                            options: [.mouseEnteredAndExited, .activeAlways,
+                                                      .inVisibleRect],
+                                            owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { changed?(true) }
+    override func mouseExited(with event: NSEvent) { changed?(false) }
 }

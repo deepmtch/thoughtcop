@@ -89,6 +89,10 @@ running `/ui` inspection surface. A checked item is not merely planned.
   ticker selection or a hidden window.
 - [x] Show Last Violation sits directly below Open Violation History… and opens
   the newest violation in the reader ("No violations yet." when none).
+- [x] Resting the mouse on the menu-bar icon for 0.5 s shows the last violation
+  in the bubble (time on its last line); it stays while the mouse is on the
+  icon or bubble, hides 0.5 s after, gives way to the menu and to a new
+  violation's alert, and opens the violation on click.
 - [x] History tabs All | Violations | Archive: Violations holds the last hour
   by record timestamp; older ones move to Archive at the exact boundary, each
   tab with its own empty state.

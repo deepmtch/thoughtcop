@@ -360,6 +360,17 @@ def main() -> None:
             assert entry["bubbleFrame"]["height"] >= 80, entry
             request(port, "POST", "/violation-bubble/off")
             wait_ui(port, lambda s: s.get("violationBubbleVisible") is False)
+            # Resting on the menu-bar icon shows the last violation (BUG-103).
+            request(port, "POST", "/status-item/hover/on")
+            hovered = wait_ui(port, lambda s: s.get("violationBubbleMode") == "hover" and
+                              s.get("violationBubbleVisible") is True, 3)
+            assert hovered["violationBubbleTitle"] == \
+                "Last violation · EU brand finder app mockup", hovered["violationBubbleTitle"]
+            assert hovered["violationBubbleHint"].endswith(" · Click to open"), hovered
+            capture.shot("08b-hover-last-violation", "bubble", settle=0.2)
+            request(port, "POST", "/status-item/hover/off")
+            wait_ui(port, lambda s: s.get("violationBubbleVisible") is False and
+                    s.get("violationBubbleMode") == "none", 3)
 
             request(port, "POST", "/filter/all")
             wait_ui(port, lambda s: s.get("compactMode") is False)
@@ -453,6 +464,11 @@ def main() -> None:
         try:
             request(port, "POST", "/violations")
             wait_ui(port, lambda s: s.get("compactMode") is False)
+            request(port, "POST", "/status-item/hover/on")
+            empty_hover = wait_ui(port, lambda s: s.get("violationBubbleMode") == "hover", 3)
+            assert empty_hover["violationBubbleQuote"] == "No violations yet.", empty_hover
+            request(port, "POST", "/status-item/hover/off")
+            wait_ui(port, lambda s: s.get("violationBubbleVisible") is False, 3)
             entry = capture_empty.shot("16-violations-empty", "history")
             assert entry["emptyStateVisible"] is True, entry
             request(port, "POST", "/filter/archive")
