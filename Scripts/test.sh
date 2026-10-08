@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 
 for test in \
     --config-path-selftest \
+    --legacy-migration-selftest \
     --selftest \
     --session-discovery-selftest \
     --transcript-monitor-selftest \

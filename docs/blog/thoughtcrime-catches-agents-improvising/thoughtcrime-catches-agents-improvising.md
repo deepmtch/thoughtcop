@@ -63,7 +63,7 @@ Hover the brain and you get the last catch without opening anything.
 
 ![Hovering the menu-bar icon shows the last violation](images/menubar-hover.png)
 
-Click it and the reader opens on that exact message, with the quote that matched and the checker's reason, like the first screenshot above.
+Click it and the reader opens on that exact message, with the quote that matched and the checker's reason.
 
 The rule is yours. Thoughtcrime sends it to the checker exactly as you typed it. No keyword matching, no "smart" rewriting, no built-in list of bad behaviours. Here is mine, typos included, because that is what it was running with:
 
@@ -83,6 +83,8 @@ History keeps every catch with the session name, the time and the quote, so you 
 
 Top right: the menu-bar count goes from 5 to 6 while the agent is still editing. That is the moment it decided to make the edit first.
 
+(Recorded before the menu-bar icon changed from a shield to the brain; the behaviour is the same.)
+
 ## How to run it yourself
 
 Thoughtcrime is open source. Build it from the repository and start it:
@@ -95,7 +97,7 @@ brew install zstd
 open .build/Thoughtcrime.app
 ```
 
-Put a Groq or Cerebras key in **Provider Credentials…** (it goes into the macOS Keychain), write your rules in **Settings › Rules**, done.
+Put a Groq or Cerebras key in **Settings › Keys** (it goes into the macOS Keychain), write your rules in **Settings › Rules**, done.
 
 One thing you need on the Claude Code side: by default the newest models store no readable reasoning in the session file at all, only an opaque signature. Add this to `~/.claude/settings.json` and Claude Code asks for summaries:
 

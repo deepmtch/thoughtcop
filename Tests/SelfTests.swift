@@ -141,6 +141,47 @@ if CommandLine.arguments.contains("--claude-desktop-conversation-selftest") {
     exit(0)
 }
 
+if CommandLine.arguments.contains("--legacy-migration-selftest") {
+    // Throwaway domains and folders; the user's real domains are never touched.
+    let legacySuite = "com.thoughtcrime.selftest.legacy." + UUID().uuidString
+    let currentSuite = "com.thoughtcrime.selftest.current." + UUID().uuidString
+    let legacy = UserDefaults(suiteName: legacySuite)!
+    let current = UserDefaults(suiteName: currentSuite)!
+    legacy.set("legacy rules", forKey: "runtimeCheckRules")
+    legacy.set("eachLine", forKey: "runtimeCheckInstructionMode")
+    current.set("current rules", forKey: "runtimeCheckRules")
+    LegacyMigration.copyDefaults(from: legacySuite, to: current)
+    let keptCurrent = current.string(forKey: "runtimeCheckRules") == "current rules"
+    let filledGap = current.string(forKey: "runtimeCheckInstructionMode") == "eachLine"
+    legacy.removePersistentDomain(forName: legacySuite)
+    current.removePersistentDomain(forName: currentSuite)
+
+    let base = FileManager.default.temporaryDirectory
+        .appendingPathComponent("thoughtcrime-migration-" + UUID().uuidString)
+    let legacyDir = base.appendingPathComponent("Thinkpeek").path
+    let currentDir = base.appendingPathComponent("Thoughtcrime").path
+    try? FileManager.default.createDirectory(atPath: legacyDir, withIntermediateDirectories: true)
+    FileManager.default.createFile(atPath: legacyDir + "/violations.json", contents: Data("[]".utf8))
+    LegacyMigration.moveDataDirectory(legacy: legacyDir, current: currentDir)
+    let moved = FileManager.default.fileExists(atPath: currentDir + "/violations.json")
+        && !FileManager.default.fileExists(atPath: legacyDir)
+    // A second legacy folder must not replace an existing current one.
+    try? FileManager.default.createDirectory(atPath: legacyDir, withIntermediateDirectories: true)
+    FileManager.default.createFile(atPath: legacyDir + "/marker", contents: Data())
+    LegacyMigration.moveDataDirectory(legacy: legacyDir, current: currentDir)
+    let untouched = !FileManager.default.fileExists(atPath: currentDir + "/marker")
+        && FileManager.default.fileExists(atPath: legacyDir + "/marker")
+    try? FileManager.default.removeItem(at: base)
+
+    guard keptCurrent, filledGap, moved, untouched else {
+        FileHandle.standardError.write(
+            "legacy migration self-test failed: keptCurrent=\(keptCurrent) filledGap=\(filledGap) moved=\(moved) untouched=\(untouched)\n".data(using: .utf8)!)
+        exit(1)
+    }
+    print("legacy migration: current wins, gaps filled, folder moved once")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--config-path-selftest") {
     let repo = "/Users/example/src/thoughtcrime"
     guard projectRoot(executablePath: repo + "/.build/thoughtcrime",

@@ -48,6 +48,9 @@ The whole run, from task to catch, in 40 seconds:
 
 ![Thoughtcrime catches Haiku deciding to make the edit first](docs/blog/thoughtcrime-catches-agents-improvising/images/run4-thoughtcrime-catches-haiku.gif)
 
+(Recorded before the menu-bar icon changed from a shield to the brain; the
+behaviour is the same.)
+
 The full story is in
 [docs/blog/thoughtcrime-catches-agents-improvising](docs/blog/thoughtcrime-catches-agents-improvising/thoughtcrime-catches-agents-improvising.md).
 
@@ -96,9 +99,8 @@ open .build/Thoughtcrime.app
 ```
 
 The development bundle is ad-hoc signed for the local Mac. It is not the
-notarized distribution artifact. In the running app, choose **Provider
-Credentials…** from the menu bar to save Groq or Cerebras keys in the macOS
-login Keychain. The secure fields are never prefilled; leaving one blank keeps
+notarized distribution artifact. In the running app, open **Settings › Keys** to save Groq or Cerebras keys in
+the macOS login Keychain. The secure fields are never prefilled; leaving one blank keeps
 its saved value. `--local-only` disables external checking entirely.
 
 See [PRIVACY.md](PRIVACY.md) before enabling external checking and
@@ -339,7 +341,7 @@ Alert when Claude misunderstood the request and is solving a different problem.
 
 The integrated window calls providers directly: Groq first, then Cerebras as a
 fallback when both are configured. There is no OpenRouter intermediary. For an
-installed app, use the menu-bar **Provider Credentials…** editor. For a
+installed app, use the menu-bar **Settings › Keys** editor. For a
 development checkout, environment variables or the ignored `.env` file are
 explicit overrides:
 
