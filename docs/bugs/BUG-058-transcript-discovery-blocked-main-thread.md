@@ -2,7 +2,7 @@
 
 ## User-visible failure
 
-Thoughtcrime could hang at startup and periodically stop responding after launch,
+Doublethink could hang at startup and periodically stop responding after launch,
 especially with a large Claude or Codex transcript history.
 
 ## Cause

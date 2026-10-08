@@ -25,7 +25,7 @@ available from the ticker itself.
 
 ## Verification
 
-`./.build/thoughtcrime --ticker-position-selftest` verifies all callbacks, accessibility
+`./.build/doublethink --ticker-position-selftest` verifies all callbacks, accessibility
 names, exact 12-point screen insets, and preservation of the orthogonal axis.
 The installed `/edge/*` actions and `/screenshot` verify each real placement and
 that toolbar icons do not overlap source or message text.

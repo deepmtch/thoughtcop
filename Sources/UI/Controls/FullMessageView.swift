@@ -16,7 +16,7 @@ final class FullMessageView: NSVisualEffectView, NSTextViewDelegate {
     private let exitControls = DetailExitControls(frame: .zero)
     var closeRequested: (() -> Void)?
     var historyRequested: (() -> Void)?
-    /// A thoughtcrime:// link in the text, such as "Why and full message ▸".
+    /// A doublethink:// link in the text, such as "Why and full message ▸".
     var linkRequested: ((URL) -> Void)?
     var tabSelected: ((Int) -> Void)?
     var jumpToLatestRequested: (() -> Void)?
@@ -287,7 +287,7 @@ final class FullMessageView: NSVisualEffectView, NSTextViewDelegate {
 
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
         let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:))
-        guard let url, url.scheme == "thoughtcrime" else { return false }
+        guard let url, url.scheme == "doublethink" else { return false }
         linkRequested?(url)
         return true
     }

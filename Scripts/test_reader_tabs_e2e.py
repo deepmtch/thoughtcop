@@ -70,7 +70,7 @@ def think(path: Path, text: str) -> None:
 
 def main() -> None:
     port = free_port()
-    with tempfile.TemporaryDirectory(prefix="thoughtcrime-reader-tabs-") as temp:
+    with tempfile.TemporaryDirectory(prefix="doublethink-reader-tabs-") as temp:
         root = Path(temp)
         project = root / "claude" / "project"
         project.mkdir(parents=True)
@@ -89,22 +89,22 @@ def main() -> None:
         (root / "codex-index.jsonl").write_text("")
         environment = os.environ.copy()
         environment.update({
-            "THOUGHTCRIME_API_PORT": str(port),
-            "THOUGHTCRIME_CLAUDE_PROJECTS": str(root / "claude"),
-            "THOUGHTCRIME_CODEX_SESSIONS": str(root / "codex"),
-            "THOUGHTCRIME_CODEX_INDEX": str(root / "codex-index.jsonl"),
-            "THOUGHTCRIME_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
-            "THOUGHTCRIME_CLAUDE_CACHE": str(root / "cache"),
-            "THOUGHTCRIME_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
-            "THOUGHTCRIME_PRIVACY_AUDIT_PATH": str(root / "audit.jsonl"),
-            "THOUGHTCRIME_VIOLATIONS_PATH": str(root / "violations.json"),
-            "THOUGHTCRIME_UI_API_LOG": str(root / "ui-api.jsonl"),
-            "THOUGHTCRIME_UI_API_TOKEN": API_TOKEN,
-            "THOUGHTCRIME_HISTORY_COUNT": "0",
-            "THOUGHTCRIME_USAGE_PATH": str(root / "usage.json"),
+            "DOUBLETHINK_API_PORT": str(port),
+            "DOUBLETHINK_CLAUDE_PROJECTS": str(root / "claude"),
+            "DOUBLETHINK_CODEX_SESSIONS": str(root / "codex"),
+            "DOUBLETHINK_CODEX_INDEX": str(root / "codex-index.jsonl"),
+            "DOUBLETHINK_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
+            "DOUBLETHINK_CLAUDE_CACHE": str(root / "cache"),
+            "DOUBLETHINK_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
+            "DOUBLETHINK_PRIVACY_AUDIT_PATH": str(root / "audit.jsonl"),
+            "DOUBLETHINK_VIOLATIONS_PATH": str(root / "violations.json"),
+            "DOUBLETHINK_UI_API_LOG": str(root / "ui-api.jsonl"),
+            "DOUBLETHINK_UI_API_TOKEN": API_TOKEN,
+            "DOUBLETHINK_HISTORY_COUNT": "0",
+            "DOUBLETHINK_USAGE_PATH": str(root / "usage.json"),
         })
         configure_isolated_rules()
-        process = subprocess.Popen(["./.build/thoughtcrime", "--isolated-e2e", "--local-only"],
+        process = subprocess.Popen(["./.build/doublethink", "--isolated-e2e", "--local-only"],
                                    env=environment, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
         try:

@@ -8,7 +8,7 @@ instead of readable body text.
 ## Evidence
 
 The selected `2026-08-15T17:22:10.707Z` transcript record contains exactly three
-`summary_text` entries, and all three values are wrapped in `**…**`. Thoughtcrime
+`summary_text` entries, and all three values are wrapped in `**…**`. Doublethink
 preserved and displayed all three entries; the defect was presentation, not
 missing transcript content. A later `17:22:24.925Z` record contains four entries
 and remains a separate reasoning item.
@@ -22,7 +22,7 @@ card was rendered bold.
 ## Fix
 
 Analysis summaries keep their complete parsed text and paragraph boundaries but
-use Thoughtcrime's regular reasoning-body font. This is an explicit policy for the
+use Doublethink's regular reasoning-body font. This is an explicit policy for the
 `analysis` event kind, not a content-dependent heuristic. Other presentation
 kinds retain their existing font policy.
 

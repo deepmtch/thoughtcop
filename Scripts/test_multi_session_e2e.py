@@ -126,7 +126,7 @@ def wait_for(predicate, timeout: float = 12.0,
         if process is not None and process.poll() is not None:
             error = process.stderr.read() if process.stderr else ""
             raise AssertionError(
-                f"Thoughtcrime exited {process.returncode} before API readiness: {error}")
+                f"Doublethink exited {process.returncode} before API readiness: {error}")
         try:
             latest = get_json(API_BASE)
             if predicate(latest):
@@ -199,14 +199,14 @@ API_BASE = f"http://127.0.0.1:{ui_port}"
 # This suite expects the default violation settings of the test binary.
 for key in ["violationHistoryLimit", "violationVerificationEnabled",
             "violationFlashEnabled", "violationAlertsEnabled"]:
-    subprocess.run(["/usr/bin/defaults", "delete", "thoughtcrime", key],
+    subprocess.run(["/usr/bin/defaults", "delete", "doublethink", key],
                    capture_output=True, check=False)
 
 server = ThreadingHTTPServer(("127.0.0.1", checker_port), DummyChecker)
 server_thread = threading.Thread(target=server.serve_forever, daemon=True)
 server_thread.start()
 
-with tempfile.TemporaryDirectory(prefix="thoughtcrime-e2e-") as temporary:
+with tempfile.TemporaryDirectory(prefix="doublethink-e2e-") as temporary:
     root = Path(temporary)
     claude_root = root / "claude"
     codex_root = root / "codex"
@@ -254,23 +254,23 @@ with tempfile.TemporaryDirectory(prefix="thoughtcrime-e2e-") as temporary:
         "cse_0123456789/events/stream?from_sequence_num=1\n")
     environment = os.environ.copy()
     environment.update({
-        "THOUGHTCRIME_API_PORT": str(ui_port),
-        "THOUGHTCRIME_CLAUDE_PROJECTS": str(claude_root),
-        "THOUGHTCRIME_CODEX_SESSIONS": str(codex_root),
-        "THOUGHTCRIME_CODEX_INDEX": str(codex_index),
-        "THOUGHTCRIME_CLAUDE_DESKTOP_SESSIONS": str(
+        "DOUBLETHINK_API_PORT": str(ui_port),
+        "DOUBLETHINK_CLAUDE_PROJECTS": str(claude_root),
+        "DOUBLETHINK_CODEX_SESSIONS": str(codex_root),
+        "DOUBLETHINK_CODEX_INDEX": str(codex_index),
+        "DOUBLETHINK_CLAUDE_DESKTOP_SESSIONS": str(
             root / "claude-desktop-sessions"),
-        "THOUGHTCRIME_CLAUDE_CACHE": str(claude_cache),
-        "THOUGHTCRIME_CLAUDE_DESKTOP_CACHE": str(claude_cache),
-        "THOUGHTCRIME_PRIVACY_AUDIT_PATH": str(audit_path),
-        "THOUGHTCRIME_VIOLATIONS_PATH": str(violations_path),
-        "THOUGHTCRIME_UI_API_LOG": str(ui_log_path),
-        "THOUGHTCRIME_UI_API_TOKEN": API_TOKEN,
-        "THOUGHTCRIME_HISTORY_COUNT": "0",
+        "DOUBLETHINK_CLAUDE_CACHE": str(claude_cache),
+        "DOUBLETHINK_CLAUDE_DESKTOP_CACHE": str(claude_cache),
+        "DOUBLETHINK_PRIVACY_AUDIT_PATH": str(audit_path),
+        "DOUBLETHINK_VIOLATIONS_PATH": str(violations_path),
+        "DOUBLETHINK_UI_API_LOG": str(ui_log_path),
+        "DOUBLETHINK_UI_API_TOKEN": API_TOKEN,
+        "DOUBLETHINK_HISTORY_COUNT": "0",
     })
     configure_isolated_rules()
     process = subprocess.Popen(
-        ["./.build/thoughtcrime", "--isolated-e2e", "--dummy-checker-url",
+        ["./.build/doublethink", "--isolated-e2e", "--dummy-checker-url",
          f"http://127.0.0.1:{checker_port}/v1/chat/completions"],
         env=environment,
         stdout=subprocess.DEVNULL,
@@ -281,7 +281,7 @@ with tempfile.TemporaryDirectory(prefix="thoughtcrime-e2e-") as temporary:
         initial = wait_for(lambda state: state.get("initialScanComplete") is True,
                            timeout=20, process=process,
                            diagnostic_log=ui_log_path)
-        # Thoughtcrime checks only records written after it started, by their own
+        # Doublethink checks only records written after it started, by their own
         # timestamp, so every record below is stamped after readiness.
         test_started_at = datetime.now(timezone.utc)
         assert api_request(API_BASE, "/ui", "GET", token=None)[0] == 401
@@ -811,7 +811,7 @@ with tempfile.TemporaryDirectory(prefix="thoughtcrime-e2e-") as temporary:
         closed_bubble = wait_for(lambda state: state.get("uiStyle") == "single-line-ticker")
         assert closed_bubble["windowVisible"] is False, closed_bubble
         assert closed_bubble["hiddenByUser"] is True, closed_bubble
-        # Show Thoughtcrime undoes Hide for good: closing details keeps it shown.
+        # Show Doublethink undoes Hide for good: closing details keeps it shown.
         get_json(API_BASE, "/show")
         get_json(API_BASE, "/violations")
         get_json(API_BASE, "/close")
@@ -878,4 +878,4 @@ with tempfile.TemporaryDirectory(prefix="thoughtcrime-e2e-") as temporary:
         server.server_close()
         if process.returncode not in (0, None):
             error = process.stderr.read() if process.stderr else ""
-            raise AssertionError(f"isolated Thoughtcrime exited {process.returncode}: {error}")
+            raise AssertionError(f"isolated Doublethink exited {process.returncode}: {error}")

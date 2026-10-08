@@ -26,7 +26,7 @@ result.
 
 There were three independent boundaries:
 
-1. Thoughtcrime added semantic policy (“be strict”) and numbered the user's text.
+1. Doublethink added semantic policy (“be strict”) and numbered the user's text.
 2. It checked only reasoning summaries, not the structured tool evidence already
    present in Claude and Codex transcripts.
 3. Asynchronous results mutated card footers but were not part of the message

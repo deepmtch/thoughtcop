@@ -11,7 +11,7 @@ reasoning outcomes. The provider callback later produced the missing outcome.
 
 ## Root cause
 
-Thoughtcrime added an evaluation token only inside the asynchronous
+Doublethink added an evaluation token only inside the asynchronous
 `requestStarted` callback. Evidence had already been accepted and displayed before
 that callback reached the main queue, creating a false-idle window.
 

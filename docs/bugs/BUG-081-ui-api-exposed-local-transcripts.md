@@ -15,7 +15,7 @@ not explicitly require a loopback endpoint.
 
 ## Fix
 
-Thoughtcrime creates a random bearer capability in a `0600` application-support
+Doublethink creates a random bearer capability in a `0600` application-support
 file, requires it on every request, explicitly binds `127.0.0.1`, keeps `/ui`
 and `/screenshot` read-only, and requires `POST` for actions. Responses are
 marked `no-store` and the command log remains content-free.

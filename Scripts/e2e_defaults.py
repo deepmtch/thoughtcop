@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import subprocess
 
-E2E_RULES_SUITE = "com.thoughtcrime.app.e2e"
+E2E_RULES_SUITE = "com.doublethink.app.e2e"
 E2E_RULES = "Report every record the test checker marks as a violation."
 
 

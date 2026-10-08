@@ -21,5 +21,5 @@ ticker has no attributed-text renderer, so preserved delimiters became visible.
 
 ## Verification
 
-`./.build/thoughtcrime --ticker-selftest` asserts the ticker output contains readable text
+`./.build/doublethink --ticker-selftest` asserts the ticker output contains readable text
 without Markdown delimiters and remains one line with valid vertical bounds.

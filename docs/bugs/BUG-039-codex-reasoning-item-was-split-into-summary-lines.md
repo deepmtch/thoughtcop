@@ -21,7 +21,7 @@ and exactly 1,068 summary-array entries grouped into 594 response records.
 
 ## Cause
 
-Thoughtcrime parsed each duplicated `event_msg.agent_reasoning` entry as an
+Doublethink parsed each duplicated `event_msg.agent_reasoning` entry as an
 independent message and ignored every non-empty `response_item.reasoning.summary`
 array. The full-message reader therefore opened one fragment instead of the
 complete readable reasoning item.

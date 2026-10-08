@@ -2,14 +2,14 @@
 
 ## User-visible failure
 
-Thoughtcrime repeatedly disappeared, returned in its empty startup state, and then
+Doublethink repeatedly disappeared, returned in its empty startup state, and then
 disappeared again without any new commit.
 
 ## Evidence and root cause
 
 The local app log contained thirteen consecutive `replaced 1 running instance`
 records. `launchctl list` showed two separately labelled post-commit jobs. Each
-job was treated as restartable: the newer Thoughtcrime process terminated the older
+job was treated as restartable: the newer Doublethink process terminated the older
 one through `SingleInstance`, launchd restarted the terminated job, and the two
 jobs continuously replaced each other.
 
@@ -24,5 +24,5 @@ jobs continuously replaced each other.
 ## Verification
 
 The hook test checks that one process remains, no
-`com.thoughtcrime.postcommit.*` launch jobs exist, and the replacement app answers
+`com.doublethink.postcommit.*` launch jobs exist, and the replacement app answers
 its local UI API without producing additional replacement records.

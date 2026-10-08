@@ -1,4 +1,4 @@
-# Thoughtcrime UI release checklist
+# Doublethink UI release checklist
 
 This is the release gate for the borderless macOS HUD. Every applicable control
 must be implemented, discoverable, accessible, and covered by a self-test or the
@@ -10,7 +10,7 @@ running `/ui` inspection surface. A checked item is not merely planned.
   Settings, Hide) and the stable resting state.
 - [x] Full-message reader, controls, and history have a visible **Done** action
   that returns to the ticker.
-- [x] The ticker has a direct **Hide** action; **Quit Thoughtcrime** is always in the
+- [x] The ticker has a direct **Hide** action; **Quit Doublethink** is always in the
   menu-bar menu.
 - [x] Escape from reader, controls, or history returns directly to ticker.
 - [x] Command-Q activates Quit while a detail view owns focus.

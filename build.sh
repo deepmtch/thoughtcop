@@ -8,7 +8,7 @@ mkdir -p "$module_cache"
 
 swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
     -framework Security \
-    -module-cache-path "$module_cache" -o "$build_dir/thoughtcrime" \
+    -module-cache-path "$module_cache" -o "$build_dir/doublethink" \
     Sources/App/Config.swift \
     Sources/App/LegacyMigration.swift \
     Sources/Checker/CheckRulesStore.swift \
@@ -48,16 +48,16 @@ swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
 
 # A minimal app bundle lets LaunchServices own the GUI process. Launching a raw
 # executable from a Git hook leaves it tied to the hook's process lifetime.
-app_contents="$build_dir/Thoughtcrime.app/Contents"
+app_contents="$build_dir/Doublethink.app/Contents"
 mkdir -p "$app_contents/MacOS"
-cp "$build_dir/thoughtcrime" "$app_contents/MacOS/thoughtcrime"
-cp "Resources/Thoughtcrime-Info.plist" "$app_contents/Info.plist"
+cp "$build_dir/doublethink" "$app_contents/MacOS/doublethink"
+cp "Resources/Doublethink-Info.plist" "$app_contents/Info.plist"
 mkdir -p "$app_contents/Resources"
-cp "Resources/Thoughtcrime.icns" "$app_contents/Resources/Thoughtcrime.icns"
-/usr/bin/codesign --force --deep --sign - "$build_dir/Thoughtcrime.app"
+cp "Resources/Doublethink.icns" "$app_contents/Resources/Doublethink.icns"
+/usr/bin/codesign --force --deep --sign - "$build_dir/Doublethink.app"
 /usr/bin/touch "$build_dir/build.stamp"
 
-if /usr/bin/pgrep -x thoughtcrime >/dev/null 2>&1; then
-    echo "build complete; a running Thoughtcrime still uses its old binary"
+if /usr/bin/pgrep -x doublethink >/dev/null 2>&1; then
+    echo "build complete; a running Doublethink still uses its old binary"
     echo "run ./restart.sh to replace it with this build"
 fi

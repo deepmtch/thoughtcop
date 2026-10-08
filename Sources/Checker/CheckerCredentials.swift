@@ -39,7 +39,7 @@ enum CredentialAccessError: Error, LocalizedError {
 
 final class KeychainCredentialStore: CredentialAccess {
     // The Keychain service keeps the pre-rename identifier so existing
-    // installs keep their saved provider keys after the Thoughtcrime rename.
+    // installs keep their saved provider keys after the Doublethink rename.
     static let service = "com.thinkpeek.desktop.provider-credentials"
 
     private func baseQuery(account: String) -> [String: Any] {

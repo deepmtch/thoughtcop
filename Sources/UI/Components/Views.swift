@@ -688,7 +688,7 @@ final class EventCard: NSView {
     }
 }
 
-/// Compact check details from the checker label Thoughtcrime writes:
+/// Compact check details from the checker label Doublethink writes:
 /// "<Provider> · <model>[ · confirmed by second check]".
 func violationDetailText(provider: String, latencyMs: Int) -> String {
     let parts = provider.components(separatedBy: " · ")

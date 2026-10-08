@@ -4,7 +4,7 @@
 
 The user (2026-10-04): clicking "2 active" on the ticker showed the reader
 for a moment, then the ticker came back. The live command log
-(`~/Library/Logs/Thoughtcrime/ui-api.jsonl`) showed every click as an `appKit`
+(`~/Library/Logs/Doublethink/ui-api.jsonl`) showed every click as an `appKit`
 "message" command followed by "close" in the same second.
 
 ## Root cause

@@ -13,7 +13,7 @@ The live API reported `Claude · cloud chat gHJ6Wk` as waiting. The matching
 Claude cache file was last modified on August 13, while the app was running on
 August 16. `ClaudeCloudActivityMonitor` discovered every persistent SSE cache
 file and initialized its read offset to zero, replaying the entire historical
-stream after every Thoughtcrime launch.
+stream after every Doublethink launch.
 
 ## Fix
 
@@ -22,5 +22,5 @@ the exact file size at discovery. Only bytes appended afterward can produce
 live activity. There is no age threshold, timeout, or content heuristic.
 
 The existing black-box cloud test creates the cache header before launching
-Thoughtcrime and appends lifecycle events afterward, so it verifies the same
+Doublethink and appends lifecycle events afterward, so it verifies the same
 tail-from-EOF contract used in production.

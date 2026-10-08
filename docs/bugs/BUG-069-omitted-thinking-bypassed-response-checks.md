@@ -2,7 +2,7 @@
 
 ## Symptom
 
-Claude Desktop showed that a task was working, but Thoughtcrime displayed only
+Claude Desktop showed that a task was working, but Doublethink displayed only
 `Working…` and recorded no violation after Claude returned a response that the
 user expected the configured check instruction to flag.
 
@@ -14,7 +14,7 @@ The live Claude Desktop child process for the affected session was launched with
 `thinking` blocks whose `thinking` field was empty, followed by ordinary
 assistant `text` blocks containing the response.
 
-Thoughtcrime's parser accepted only non-empty `thinking` records for evaluation.
+Doublethink's parser accepted only non-empty `thinking` records for evaluation.
 The privacy audit therefore recorded `encrypted_reasoning_not_sent` and no
 external request for the response. No later write populated the empty field.
 

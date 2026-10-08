@@ -20,7 +20,7 @@ but the deployment handoff left the stale process running.
 - Replaced the stale process with the rebuilt executable.
 - Added `restart.sh`, which builds first and then starts the new binary; the
   single-instance policy terminates the old process only after a successful build.
-- Made `build.sh` warn when an existing Thoughtcrime process still needs replacement.
+- Made `build.sh` warn when an existing Doublethink process still needs replacement.
 - Documented the rebuild-and-replace command in the main usage block.
 
 ## Verification

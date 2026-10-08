@@ -1,24 +1,33 @@
-// One-time carry-over of settings and data from the pre-rename app
-// identifiers (Thinkpeek) to the current ones (Thoughtcrime).
+// One-time carry-over of settings and data from the app's previous
+// identifiers to the current ones (Doublethink).
 
 import Foundation
 
 enum LegacyMigration {
-    static let legacyRulesSuite = "com.thinkpeek.app"
-    static let legacyDesktopSuite = "com.thinkpeek.desktop"
-    static let legacyDataDirectory =
-        ("~/Library/Application Support/Thinkpeek" as NSString).expandingTildeInPath
+    /// Oldest first; a newer legacy domain wins over an older one because the
+    /// copy fills only keys the target does not have yet.
+    static let legacyRulesSuites = ["com.thinkpeek.app", "com.thoughtcrime.app"]
+    static let legacyDesktopSuites = ["com.thinkpeek.desktop", "com.thoughtcrime.desktop"]
+    static let legacyDataDirectories = ["Thinkpeek", "Thoughtcrime"].map {
+        ("~/Library/Application Support/" + $0 as NSString).expandingTildeInPath
+    }
     static let currentDataDirectory =
-        ("~/Library/Application Support/Thoughtcrime" as NSString).expandingTildeInPath
+        ("~/Library/Application Support/Doublethink" as NSString).expandingTildeInPath
 
-    /// Copies every key of the legacy preferences domain that the current
-    /// domain does not have yet, and moves the legacy data folder when the
-    /// current one does not exist. Existing current values always win, so a
-    /// second run changes nothing.
+    /// Copies every key of each legacy preferences domain that the current
+    /// domain does not have yet, and moves the newest legacy data folder when
+    /// the current one does not exist. Existing current values always win, so
+    /// a second run changes nothing.
     static func run(fileManager: FileManager = .default) {
-        copyDefaults(from: legacyRulesSuite, to: UserDefaults(suiteName: CheckRulesStore.suiteName)!)
-        copyDefaults(from: legacyDesktopSuite, to: .standard)
-        moveDataDirectory(fileManager: fileManager)
+        for suite in legacyRulesSuites.reversed() {
+            copyDefaults(from: suite, to: UserDefaults(suiteName: CheckRulesStore.suiteName)!)
+        }
+        for suite in legacyDesktopSuites.reversed() {
+            copyDefaults(from: suite, to: .standard)
+        }
+        for legacy in legacyDataDirectories.reversed() {
+            moveDataDirectory(fileManager: fileManager, legacy: legacy, current: currentDataDirectory)
+        }
     }
 
     static func copyDefaults(from legacySuite: String, to target: UserDefaults) {
@@ -31,8 +40,7 @@ enum LegacyMigration {
     }
 
     static func moveDataDirectory(fileManager: FileManager = .default,
-                                  legacy: String = legacyDataDirectory,
-                                  current: String = currentDataDirectory) {
+                                  legacy: String, current: String = currentDataDirectory) {
         guard fileManager.fileExists(atPath: legacy),
               !fileManager.fileExists(atPath: current) else { return }
         try? fileManager.moveItem(atPath: legacy, toPath: current)

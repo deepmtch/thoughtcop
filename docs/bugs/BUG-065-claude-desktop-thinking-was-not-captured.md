@@ -4,7 +4,7 @@ Status: Fixed
 
 ## User-visible failure
 
-Claude Desktop displayed a long plaintext thinking block while Thoughtcrime stayed
+Claude Desktop displayed a long plaintext thinking block while Doublethink stayed
 on `Watching Claude and Codex…` or showed an unrelated Claude Code session. The
 ticker therefore omitted the exact reasoning the user could see in Claude.
 
@@ -24,7 +24,7 @@ assistant content entries. The reported 3,811-character text was present under
 `content[].type == "thinking"` in the conversation named
 `AI grounding levels: from ungrounded to deep web access`.
 
-Thoughtcrime did not read this data source at all. It was therefore impossible for
+Doublethink did not read this data source at all. It was therefore impossible for
 the ticker to show that Desktop thinking, regardless of polling frequency.
 
 ## Fix boundary

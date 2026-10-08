@@ -13,8 +13,8 @@ The supplied menu screenshot showed both rows. `installStatusMenu()` created a
 separate actionless `NSMenuItem`, while `updateViolationMenu()` wrote counts to
 that disabled item and left the actionable title unchanged.
 
-The black strip above the menu is the macOS menu bar, not a Thoughtcrime-owned
-surface. A live `/screenshot` of the actual Thoughtcrime ticker measured a white
+The black strip above the menu is the macOS menu bar, not a Doublethink-owned
+surface. A live `/screenshot` of the actual Doublethink ticker measured a white
 background with dark foreground (`tickerBackgroundRGBA: [1, 1, 1, 1]`).
 
 ## Fix and verification
@@ -27,8 +27,8 @@ the glanceable menu-bar indicator.
 
 The violation-store self-test covers all four exact titles. Final verification
 ran the full suite successfully. The rebuilt live app exposed exactly four
-non-separator menu items through `/ui`: `Show Thoughtcrime`,
+non-separator menu items through `/ui`: `Show Doublethink`,
 `Open Violation History (15 New)…`, `Edit Check Prompt…`, and
-`Quit Thoughtcrime`. Its rendered ticker remained white
+`Quit Doublethink`. Its rendered ticker remained white
 (`tickerBackgroundRGBA: [1, 1, 1, 1]`) with dark foreground and was fully
 on-screen.

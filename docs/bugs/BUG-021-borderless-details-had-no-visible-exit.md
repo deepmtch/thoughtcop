@@ -28,7 +28,7 @@ title bar, but its custom header did not replace them.
 
 ## Verification
 
-`./.build/thoughtcrime --exit-controls-selftest` checks labels, accessibility names, and
+`./.build/doublethink --exit-controls-selftest` checks labels, accessibility names, and
 both callbacks. End-to-end UI checks verify `closeControlVisible` and
 `quitControlVisible` in compact controls and full history, then `/close` must
 restore a 460 × 70 ticker.

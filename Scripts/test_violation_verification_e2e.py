@@ -24,7 +24,7 @@ from pathlib import Path
 from e2e_defaults import configure_isolated_rules
 
 API_TOKEN = "violation-verification-e2e-token-0000000"
-DEFAULTS_DOMAIN = "thoughtcrime"  # the bare test binary's preferences domain
+DEFAULTS_DOMAIN = "doublethink"  # the bare test binary's preferences domain
 SEEDED = 60
 LIMIT = 15.0
 
@@ -128,7 +128,7 @@ def main() -> None:
     ui_port, checker_port = free_port(), free_port()
     server = ThreadingHTTPServer(("127.0.0.1", checker_port), DummyChecker)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    with tempfile.TemporaryDirectory(prefix="thoughtcrime-verification-") as temp:
+    with tempfile.TemporaryDirectory(prefix="doublethink-verification-") as temp:
         root = Path(temp)
         violations_path = root / "violations.json"
         violations_path.write_text(json.dumps([{
@@ -147,22 +147,22 @@ def main() -> None:
         (root / "codex-index.jsonl").write_text("")
         environment = os.environ.copy()
         environment.update({
-            "THOUGHTCRIME_API_PORT": str(ui_port),
-            "THOUGHTCRIME_CLAUDE_PROJECTS": str(root / "claude"),
-            "THOUGHTCRIME_CODEX_SESSIONS": str(root / "codex"),
-            "THOUGHTCRIME_CODEX_INDEX": str(root / "codex-index.jsonl"),
-            "THOUGHTCRIME_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
-            "THOUGHTCRIME_CLAUDE_CACHE": str(root / "cache"),
-            "THOUGHTCRIME_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
-            "THOUGHTCRIME_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
-            "THOUGHTCRIME_VIOLATIONS_PATH": str(violations_path),
-            "THOUGHTCRIME_UI_API_LOG": str(root / "ui-api.jsonl"),
-            "THOUGHTCRIME_UI_API_TOKEN": API_TOKEN,
-            "THOUGHTCRIME_HISTORY_COUNT": "0",
+            "DOUBLETHINK_API_PORT": str(ui_port),
+            "DOUBLETHINK_CLAUDE_PROJECTS": str(root / "claude"),
+            "DOUBLETHINK_CODEX_SESSIONS": str(root / "codex"),
+            "DOUBLETHINK_CODEX_INDEX": str(root / "codex-index.jsonl"),
+            "DOUBLETHINK_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
+            "DOUBLETHINK_CLAUDE_CACHE": str(root / "cache"),
+            "DOUBLETHINK_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
+            "DOUBLETHINK_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
+            "DOUBLETHINK_VIOLATIONS_PATH": str(violations_path),
+            "DOUBLETHINK_UI_API_LOG": str(root / "ui-api.jsonl"),
+            "DOUBLETHINK_UI_API_TOKEN": API_TOKEN,
+            "DOUBLETHINK_HISTORY_COUNT": "0",
         })
         configure_isolated_rules()
         process = subprocess.Popen(
-            ["./.build/thoughtcrime", "--isolated-e2e", "--dummy-checker-url",
+            ["./.build/doublethink", "--isolated-e2e", "--dummy-checker-url",
              f"http://127.0.0.1:{checker_port}/v1/chat/completions"],
             env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:

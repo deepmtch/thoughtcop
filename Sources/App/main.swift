@@ -1,4 +1,4 @@
-// Thoughtcrime application and command-line entry point.
+// Doublethink application and command-line entry point.
 
 import AppKit
 import Foundation

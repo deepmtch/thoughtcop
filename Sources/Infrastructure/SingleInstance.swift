@@ -1,11 +1,11 @@
-// Ensures only one thoughtcrime window runs at a time.
+// Ensures only one doublethink window runs at a time.
 
 import Foundation
 
-/// Terminate any other running thoughtcrime before this one opens a window.
+/// Terminate any other running doublethink before this one opens a window.
 ///
 /// Matches on process *name* (`pgrep -x`), never the full command line: a
-/// `-f thoughtcrime` match would also hit the shell that launched us and kill the
+/// `-f doublethink` match would also hit the shell that launched us and kill the
 /// user's terminal session.
 func killOtherInstances() {
     let me = getpid()
@@ -13,7 +13,7 @@ func killOtherInstances() {
     pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
     // The pre-rename process name is included so an old Thinkpeek that is
     // still running is replaced too (a rebuild after the rename left both).
-    pgrep.arguments = ["-x", "thoughtcrime|thinkpeek"]
+    pgrep.arguments = ["-x", "doublethink|thinkpeek"]
     let pipe = Pipe()
     pgrep.standardOutput = pipe
     pgrep.standardError = Pipe()
@@ -36,5 +36,5 @@ func killOtherInstances() {
     usleep(300_000)
     for pid in others where kill(pid, 0) == 0 { kill(pid, SIGKILL) }
     FileHandle.standardError.write(
-        "thoughtcrime: replaced \(others.count) running instance(s)\n".data(using: .utf8)!)
+        "doublethink: replaced \(others.count) running instance(s)\n".data(using: .utf8)!)
 }

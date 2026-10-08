@@ -1,4 +1,4 @@
-# Thoughtcrime engineering rules
+# Doublethink engineering rules
 
 ## Non-negotiable: no heuristics
 

@@ -10,7 +10,7 @@ Save, or Cancel could make the editor disappear behind the previously active app
 The main HUD's global outside-click monitor remained active while the separate
 prompt editor was visible. An editor click is outside the HUD's frame, so the HUD
 ran its Close transition and reactivated the application that had focus before
-Thoughtcrime. That focus transfer hid the editor.
+Doublethink. That focus transfer hid the editor.
 
 ## Fix
 

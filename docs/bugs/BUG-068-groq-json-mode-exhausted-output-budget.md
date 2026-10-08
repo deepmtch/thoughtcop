@@ -3,7 +3,7 @@
 ## Symptom
 
 A plaintext reasoning record was captured and audited as sent, but the ticker
-showed `Thoughtcrime check failed` with `Groq: HTTP 400` instead of a decision.
+showed `Doublethink check failed` with `Groq: HTTP 400` instead of a decision.
 
 ## Evidence
 

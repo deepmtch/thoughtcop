@@ -26,7 +26,7 @@ to one truncated line.
 
 ## Verification
 
-`./.build/thoughtcrime --layout-selftest` lays out a real card at the fixed compact width.
+`./.build/doublethink --layout-selftest` lays out a real card at the fixed compact width.
 The verified result was:
 
 ```text

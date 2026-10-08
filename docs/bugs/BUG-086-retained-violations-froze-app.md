@@ -6,7 +6,7 @@ On 2026-10-02 the running app (commit `a154abf`) showed the macOS spinning
 cursor on every click. `/usr/bin/sample` of the live process:
 `HUD.applicationDidFinishLaunching` → `HUD.restoreViolationCards` →
 `HUD.addCard` → Auto Layout `NSISEngine` constraint solving, 100% CPU for more
-than two minutes. `~/Library/Application Support/Thoughtcrime/violations.json`
+than two minutes. `~/Library/Application Support/Doublethink/violations.json`
 held 388 records (383 from 2026-09-19/20, none reviewed). The app had not
 launched successfully since 2026-09-04, so the stored history had not been
 restored by any earlier build.

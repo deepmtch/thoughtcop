@@ -93,7 +93,7 @@ if CommandLine.arguments.contains("--claude-desktop-conversation-selftest") {
     }
 
     let directory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("thoughtcrime-claude-desktop-\(UUID().uuidString)")
+        .appendingPathComponent("doublethink-claude-desktop-\(UUID().uuidString)")
     try? FileManager.default.createDirectory(at: directory,
                                              withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -143,8 +143,8 @@ if CommandLine.arguments.contains("--claude-desktop-conversation-selftest") {
 
 if CommandLine.arguments.contains("--legacy-migration-selftest") {
     // Throwaway domains and folders; the user's real domains are never touched.
-    let legacySuite = "com.thoughtcrime.selftest.legacy." + UUID().uuidString
-    let currentSuite = "com.thoughtcrime.selftest.current." + UUID().uuidString
+    let legacySuite = "com.doublethink.selftest.legacy." + UUID().uuidString
+    let currentSuite = "com.doublethink.selftest.current." + UUID().uuidString
     let legacy = UserDefaults(suiteName: legacySuite)!
     let current = UserDefaults(suiteName: currentSuite)!
     legacy.set("legacy rules", forKey: "runtimeCheckRules")
@@ -157,9 +157,9 @@ if CommandLine.arguments.contains("--legacy-migration-selftest") {
     current.removePersistentDomain(forName: currentSuite)
 
     let base = FileManager.default.temporaryDirectory
-        .appendingPathComponent("thoughtcrime-migration-" + UUID().uuidString)
+        .appendingPathComponent("doublethink-migration-" + UUID().uuidString)
     let legacyDir = base.appendingPathComponent("Thinkpeek").path
-    let currentDir = base.appendingPathComponent("Thoughtcrime").path
+    let currentDir = base.appendingPathComponent("Doublethink").path
     try? FileManager.default.createDirectory(atPath: legacyDir, withIntermediateDirectories: true)
     FileManager.default.createFile(atPath: legacyDir + "/violations.json", contents: Data("[]".utf8))
     LegacyMigration.moveDataDirectory(legacy: legacyDir, current: currentDir)
@@ -183,12 +183,12 @@ if CommandLine.arguments.contains("--legacy-migration-selftest") {
 }
 
 if CommandLine.arguments.contains("--config-path-selftest") {
-    let repo = "/Users/example/src/thoughtcrime"
-    guard projectRoot(executablePath: repo + "/.build/thoughtcrime",
+    let repo = "/Users/example/src/doublethink"
+    guard projectRoot(executablePath: repo + "/.build/doublethink",
                       appBundlePath: nil) == repo,
           projectRoot(
-            executablePath: repo + "/.build/Thoughtcrime.app/Contents/MacOS/thoughtcrime",
-            appBundlePath: repo + "/.build/Thoughtcrime.app") == repo else {
+            executablePath: repo + "/.build/Doublethink.app/Contents/MacOS/doublethink",
+            appBundlePath: repo + "/.build/Doublethink.app") == repo else {
         FileHandle.standardError.write(
             "config path self-test failed\n".data(using: .utf8)!)
         exit(1)
@@ -199,7 +199,7 @@ if CommandLine.arguments.contains("--config-path-selftest") {
 
 if CommandLine.arguments.contains("--selftest") {
     let path = FileManager.default.temporaryDirectory
-        .appendingPathComponent("thoughtcrime-selftest-\(UUID().uuidString).jsonl").path
+        .appendingPathComponent("doublethink-selftest-\(UUID().uuidString).jsonl").path
     let fixture = #"{"timestamp":"2026-08-15T10:00:00Z","type":"assistant","message":{"content":[{"type":"thinking","thinking":"Complete deterministic reasoning fixture.","signature":"sealed"}]}}"# + "\n"
     try? fixture.write(toFile: path, atomically: true, encoding: .utf8)
     defer { try? FileManager.default.removeItem(atPath: path) }
@@ -219,7 +219,7 @@ if CommandLine.arguments.contains("--selftest") {
 
 if CommandLine.arguments.contains("--session-discovery-selftest") {
     let indexedRoot = FileManager.default.temporaryDirectory
-        .appendingPathComponent("thoughtcrime-path-index-\(UUID().uuidString)")
+        .appendingPathComponent("doublethink-path-index-\(UUID().uuidString)")
     try? FileManager.default.createDirectory(at: indexedRoot,
                                              withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: indexedRoot) }
@@ -303,7 +303,7 @@ if CommandLine.arguments.contains("--transcript-monitor-selftest") {
         return Tailer(path: path, backfill: backfill, startOffset: offset)
     })
     let path = FileManager.default.temporaryDirectory
-        .appendingPathComponent("thoughtcrime-monitor-\(UUID().uuidString).jsonl").path
+        .appendingPathComponent("doublethink-monitor-\(UUID().uuidString).jsonl").path
     try? "".write(toFile: path, atomically: true, encoding: .utf8)
     defer { try? FileManager.default.removeItem(atPath: path) }
     var completed = false
@@ -490,7 +490,7 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
 
     // Pairing: each evaluable block carries the latest request before it in the
     // same transcript, including one written before the tailer started.
-    let pairingPath = NSTemporaryDirectory() + "thoughtcrime-pairing-\(UUID().uuidString).jsonl"
+    let pairingPath = NSTemporaryDirectory() + "doublethink-pairing-\(UUID().uuidString).jsonl"
     FileManager.default.createFile(atPath: pairingPath, contents: Data(
         (claudeHumanLine + "\n" + claudeToolResultLine + "\n").utf8))
     defer { try? FileManager.default.removeItem(atPath: pairingPath) }
@@ -505,14 +505,14 @@ if CommandLine.arguments.contains("--evaluator-selftest") {
     }
     let latePaired = lateTailer.drain().filter { $0.externallyEvaluable }
     let freshPaired = freshTailer.drain().filter { $0.externallyEvaluable }
-    let emptyTailerPath = NSTemporaryDirectory() + "thoughtcrime-pairing-\(UUID().uuidString).jsonl"
+    let emptyTailerPath = NSTemporaryDirectory() + "doublethink-pairing-\(UUID().uuidString).jsonl"
     FileManager.default.createFile(atPath: emptyTailerPath,
                                    contents: Data((messageLine + "\n").utf8))
     defer { try? FileManager.default.removeItem(atPath: emptyTailerPath) }
     let unpaired = Tailer(path: emptyTailerPath, backfill: 0, startOffset: 0)
         .drain().filter { $0.externallyEvaluable }
     // A request more than one 256 KiB read chunk before the tail.
-    let longPath = NSTemporaryDirectory() + "thoughtcrime-pairing-\(UUID().uuidString).jsonl"
+    let longPath = NSTemporaryDirectory() + "doublethink-pairing-\(UUID().uuidString).jsonl"
     let filler = String(repeating: unrelatedMetadataLine + "\n", count: 8_000)
     FileManager.default.createFile(atPath: longPath, contents: Data(
         ("ü" + "\n" + claudeHumanLine + "\n" + filler).utf8))
@@ -908,7 +908,7 @@ if CommandLine.arguments.contains("--ticker-selftest") {
 }
 
 if CommandLine.arguments.contains("--ticker-background-selftest") {
-    let suiteName = "thoughtcrime.ticker-background.selftest.\(UUID().uuidString)"
+    let suiteName = "doublethink.ticker-background.selftest.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suiteName) else { exit(1) }
     defer { defaults.removePersistentDomain(forName: suiteName) }
     let sample = NSColor(srgbRed: 0.2, green: 0.4, blue: 0.7, alpha: 0.85)
@@ -1014,11 +1014,11 @@ if CommandLine.arguments.contains("--message-view-selftest") {
         FileHandle.standardError.write("message view self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    message.show(source: "Thoughtcrime · Check error",
-                 text: "⛔ **THOUGHTCRIME CHECK ERROR**\nProvider failed.",
+    message.show(source: "Doublethink · Check error",
+                 text: "⛔ **DOUBLETHINK CHECK ERROR**\nProvider failed.",
                  kind: "analysis", tone: .error)
-    guard message.source == "Thoughtcrime · Check error",
-          message.text.contains("THOUGHTCRIME CHECK ERROR"),
+    guard message.source == "Doublethink · Check error",
+          message.text.contains("DOUBLETHINK CHECK ERROR"),
           message.tone == .error else {
         FileHandle.standardError.write(
             "message error tone self-test failed\n".data(using: .utf8)!)
@@ -1126,7 +1126,7 @@ if CommandLine.arguments.contains("--ticker-actions-selftest") {
     actions.requestHistoryForTest()
     actions.requestHideForTest()
     activity.begin(destination: "Groq · Test")
-    guard actions.accessibilityNames == ["Open history", "Settings", "Hide Thoughtcrime"],
+    guard actions.accessibilityNames == ["Open history", "Settings", "Hide Doublethink"],
           history, hidden,
           activity.isChecking, !activity.isHidden,
           activity.destination == "Groq · Test",
@@ -1267,7 +1267,7 @@ if CommandLine.arguments.contains("--settings-window-selftest") {
     let keysTab = settings.selectedTab
     let windowWidth = settings.window?.frame.width ?? 0
     settings.window?.close()
-    let suite = "thoughtcrime.violation-alerts-selftest"
+    let suite = "doublethink.violation-alerts-selftest"
     guard let defaults = UserDefaults(suiteName: suite) else { exit(1) }
     defaults.removePersistentDomain(forName: suite)
     defer { defaults.removePersistentDomain(forName: suite) }
@@ -1307,11 +1307,11 @@ if CommandLine.arguments.contains("--settings-window-selftest") {
 
 if CommandLine.arguments.contains("--check-rules-editor-selftest") ||
    CommandLine.arguments.contains("--check-prompt-selftest") {
-    guard let defaults = UserDefaults(suiteName: "thoughtcrime.check-rules-selftest") else {
+    guard let defaults = UserDefaults(suiteName: "doublethink.check-rules-selftest") else {
         exit(1)
     }
-    defaults.removePersistentDomain(forName: "thoughtcrime.check-rules-selftest")
-    defer { defaults.removePersistentDomain(forName: "thoughtcrime.check-rules-selftest") }
+    defaults.removePersistentDomain(forName: "doublethink.check-rules-selftest")
+    defer { defaults.removePersistentDomain(forName: "doublethink.check-rules-selftest") }
     var saveActionRan = false
     let editor = CheckRulesEditor(contents: CheckRulesStore.loadRaw(defaults: defaults),
                                   mode: .eachLine,
@@ -1454,7 +1454,7 @@ if CommandLine.arguments.contains("--exit-controls-selftest") {
 }
 
 if CommandLine.arguments.contains("--privacy-audit-selftest") {
-    let path = NSTemporaryDirectory() + "/thoughtcrime-audit-\(UUID().uuidString).jsonl"
+    let path = NSTemporaryDirectory() + "/doublethink-audit-\(UUID().uuidString).jsonl"
     let audit = PrivacyAudit(path: path)
     audit.start()
     audit.start(reset: false)
@@ -1568,7 +1568,7 @@ if CommandLine.arguments.contains("--violation-store-selftest") {
             "violation menu title self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    let path = NSTemporaryDirectory() + "/thoughtcrime-violations-\(UUID().uuidString).json"
+    let path = NSTemporaryDirectory() + "/doublethink-violations-\(UUID().uuidString).json"
     let first = ViolationRecord(
         timestamp: "2026-08-31T12:00:00Z", source: "Claude · Alpha",
         content: "Reasoning that matched the check prompt", reason: "Asked user to wait",
@@ -1635,7 +1635,7 @@ if CommandLine.arguments.contains("--violation-store-selftest") {
 }
 
 if CommandLine.arguments.contains("--usage-selftest") {
-    let path = NSTemporaryDirectory() + "thoughtcrime-usage-\(UUID().uuidString).json"
+    let path = NSTemporaryDirectory() + "doublethink-usage-\(UUID().uuidString).json"
     defer { try? FileManager.default.removeItem(atPath: path) }
     let store = UsageStore(path: path)
     let day = ISO8601DateFormatter().date(from: "2026-10-02T12:00:00Z")!
@@ -1715,7 +1715,7 @@ if CommandLine.arguments.contains("--checker-credentials-selftest") {
             "checker credential removal self-test failed\n".data(using: .utf8)!)
         exit(1)
     }
-    let tokenPath = NSTemporaryDirectory() + "/thoughtcrime-api-token-\(UUID().uuidString)"
+    let tokenPath = NSTemporaryDirectory() + "/doublethink-api-token-\(UUID().uuidString)"
     let token = loadUIAPIToken(path: tokenPath, environmentToken: "")
     let attributes = try? FileManager.default.attributesOfItem(atPath: tokenPath)
     let permissions = (attributes?[.posixPermissions] as? NSNumber)?.intValue
@@ -1740,7 +1740,7 @@ if CommandLine.arguments.contains("--checker-credentials-selftest") {
 
 if CommandLine.arguments.contains("--ui-command-api-selftest") {
     let logURL = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("thoughtcrime-ui-api-\(UUID().uuidString).jsonl")
+        .appendingPathComponent("doublethink-ui-api-\(UUID().uuidString).jsonl")
     let api = UIStateServer(logURL: logURL,
                             token: "selftest-ui-token-0000000000000000")
     var handled: [String] = []

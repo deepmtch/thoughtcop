@@ -20,7 +20,7 @@ required = [
     "/usr/bin/xcrun stapler validate",
     "/usr/sbin/spctl --assess --type execute --verbose=4",
     '/usr/bin/shasum -a 256 "$final_zip"',
-    'Thoughtcrime-$version-macos-$architecture.zip',
+    'Doublethink-$version-macos-$architecture.zip',
 ]
 for exact in required:
     assert exact in script, f"missing release requirement: {exact}"

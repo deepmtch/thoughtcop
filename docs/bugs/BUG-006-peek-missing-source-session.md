@@ -28,6 +28,6 @@ to double as message context because the actual source is attached to the messag
 
 ## Verification
 
-`./.build/thoughtcrime --source-context-selftest` verifies that a preview retains the exact
+`./.build/doublethink --source-context-selftest` verifies that a preview retains the exact
 source/message pair. Live verification additionally requires `peekSource` to match
 the source of the currently selected card while `peekText` matches its message.

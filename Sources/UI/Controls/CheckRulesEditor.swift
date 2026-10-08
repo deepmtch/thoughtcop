@@ -1,4 +1,4 @@
-// The Rules tab of Settings: Thoughtcrime's locally persisted check rules.
+// The Rules tab of Settings: Doublethink's locally persisted check rules.
 
 import AppKit
 
@@ -57,7 +57,7 @@ final class CheckRulesEditor: NSViewController, NSTextViewDelegate {
     private func buildContent(contents: String, mode: CheckInstructionMode) {
         let content = view
 
-        let title = NSTextField(labelWithString: "What should Thoughtcrime check?")
+        let title = NSTextField(labelWithString: "What should Doublethink check?")
         title.font = .systemFont(ofSize: 15, weight: .semibold)
         title.translatesAutoresizingMaskIntoConstraints = false
 
@@ -114,7 +114,7 @@ final class CheckRulesEditor: NSViewController, NSTextViewDelegate {
             width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
         textView.delegate = self
         textView.setAccessibilityLabel("Rules")
-        textView.setAccessibilityHelp("Enter the exact rules Thoughtcrime checks AI replies and thoughts against.")
+        textView.setAccessibilityHelp("Enter the exact rules Doublethink checks AI replies and thoughts against.")
         scrollView.documentView = textView
 
         let privacy = NSTextField(wrappingLabelWithString:
