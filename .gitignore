@@ -4,3 +4,9 @@
 .env
 .DS_Store
 *.xcuserstate
+
+# blog working files (covers, title drafts) stay local
+docs/blog/*/cover-options*
+docs/blog/*/titles.csv
+docs/blog/*/summary.txt
+docs/blog/*/claude-titles.txt

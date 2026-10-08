@@ -19,6 +19,30 @@ and checks complete assistant-response records even when reasoning is omitted.
 ./.build/thinkpeek --local-only                      # never send evidence externally
 ```
 
+## What it looks like
+
+A shield in the menu bar. Hover it for the last catch, click it for the full
+reasoning. Everything below was captured on a fresh macOS VM while Claude Code
+(Haiku 5.5) worked on a small coding task.
+
+![Hovering the menu-bar icon shows the last violation](docs/blog/thinkpeek-catches-agents-improvising/images/menubar-hover.png)
+
+The agent's own reasoning, flagged a second after it was written, with the
+checker's reason:
+
+![Reader with the flagged thought](docs/blog/thinkpeek-catches-agents-improvising/images/reader-violation.png)
+
+The rule is yours, checked exactly as typed:
+
+![Settings › Rules](docs/blog/thinkpeek-catches-agents-improvising/images/settings-rules.png)
+
+The whole run, from task to catch, in 40 seconds:
+
+![Thinkpeek catches Haiku deciding to make the edit first](docs/blog/thinkpeek-catches-agents-improvising/images/run4-thinkpeek-catches-haiku.gif)
+
+The full story is in
+[docs/blog/thinkpeek-catches-agents-improvising](docs/blog/thinkpeek-catches-agents-improvising/thinkpeek-catches-agents-improvising.md).
+
 `build.sh` intentionally creates an ad-hoc signed development bundle. It is not
 a distributable release. A direct-download release requires an installed
 Developer ID Application certificate and a validated `notarytool` keychain
