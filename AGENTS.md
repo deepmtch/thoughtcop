@@ -1,4 +1,4 @@
-# Doublethink engineering rules
+# ThoughtCop engineering rules
 
 ## Non-negotiable: no heuristics
 

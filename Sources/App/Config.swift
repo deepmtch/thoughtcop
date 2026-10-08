@@ -9,18 +9,18 @@ private func configuredPath(_ environmentKey: String, fallback: String) -> Strin
 }
 
 let CLAUDE_PROJECTS = configuredPath(
-    "DOUBLETHINK_CLAUDE_PROJECTS", fallback: "~/.claude/projects")
+    "THOUGHTCOP_CLAUDE_PROJECTS", fallback: "~/.claude/projects")
 let CODEX_SESSIONS = configuredPath(
-    "DOUBLETHINK_CODEX_SESSIONS", fallback: "~/.codex/sessions")
+    "THOUGHTCOP_CODEX_SESSIONS", fallback: "~/.codex/sessions")
 let CODEX_INDEX = configuredPath(
-    "DOUBLETHINK_CODEX_INDEX", fallback: "~/.codex/session_index.jsonl")
+    "THOUGHTCOP_CODEX_INDEX", fallback: "~/.codex/session_index.jsonl")
 let CLAUDE_DESKTOP_SESSIONS = configuredPath(
-    "DOUBLETHINK_CLAUDE_DESKTOP_SESSIONS",
+    "THOUGHTCOP_CLAUDE_DESKTOP_SESSIONS",
     fallback: "~/Library/Application Support/Claude/claude-code-sessions")
 let POLL = 0.2          // seconds between drains of active files
 let RESCAN = 0.5        // seconds between discovering newly active sessions
 let ACTIVE_HOURS = 12.0 // auto mode watches every transcript touched in this window
-let API_PORT = UInt16(ProcessInfo.processInfo.environment["DOUBLETHINK_API_PORT"] ?? "17321") ?? 17321
+let API_PORT = UInt16(ProcessInfo.processInfo.environment["THOUGHTCOP_API_PORT"] ?? "17321") ?? 17321
 let LOCAL_ONLY = CommandLine.arguments.contains("--local-only")
 let ISOLATED_E2E = CommandLine.arguments.contains("--isolated-e2e")
 let DUMMY_CHECKER_URL: URL? = {
@@ -45,7 +45,7 @@ let SEALED = NSColor(srgbRed: 0.48, green: 0.36, blue: 0.62, alpha: 1)
 let ALERT = NSColor(srgbRed: 0.95, green: 0.33, blue: 0.31, alpha: 1)
 
 /// Resolve the repository root for both supported launch artifacts:
-/// `.build/doublethink` and `.build/Doublethink.app/Contents/MacOS/doublethink`.
+/// `.build/thoughtcop` and `.build/ThoughtCop.app/Contents/MacOS/thoughtcop`.
 func projectRoot(executablePath: String, appBundlePath: String?) -> String {
     if let appBundlePath,
        (appBundlePath as NSString).pathExtension == "app" {
@@ -103,7 +103,7 @@ func dotenv(_ name: String) -> String? {
 }
 
 let BACKFILL: Int = {
-    guard let raw = dotenv("DOUBLETHINK_HISTORY_COUNT")?.lowercased() else { return 3 }
+    guard let raw = dotenv("THOUGHTCOP_HISTORY_COUNT")?.lowercased() else { return 3 }
     if ["all", "unlimited", "infinite"].contains(raw) { return Int.max }
     return max(0, Int(raw) ?? 3)
 }()

@@ -211,15 +211,15 @@ def ui(port: int) -> dict:
 
 def run(verification: bool, shapes: dict[str, dict]) -> tuple[dict, dict]:
     """Returns (final /ui state, content → times reported)."""
-    subprocess.run(["/usr/bin/defaults", "write", "doublethink",
+    subprocess.run(["/usr/bin/defaults", "write", "thoughtcop",
                     "violationVerificationEnabled", "-bool",
                     "true" if verification else "false"], check=True)
-    subprocess.run(["/usr/bin/defaults", "write", "doublethink",
+    subprocess.run(["/usr/bin/defaults", "write", "thoughtcop",
                     "violationHistoryLimit", "-int", "500"], check=True)
     port = free_port()
     expected_checks = sum(1 for _, _, steps in SESSIONS for step in steps
                           if step[0] != "tool")
-    with tempfile.TemporaryDirectory(prefix="doublethink-ai-accuracy-") as temp:
+    with tempfile.TemporaryDirectory(prefix="thoughtcop-ai-accuracy-") as temp:
         root = Path(temp)
         project = root / "claude" / "project"
         project.mkdir(parents=True)
@@ -233,20 +233,20 @@ def run(verification: bool, shapes: dict[str, dict]) -> tuple[dict, dict]:
         (root / "codex-index.jsonl").write_text("")
         environment = os.environ.copy()
         environment.update({
-            "DOUBLETHINK_API_PORT": str(port),
-            "DOUBLETHINK_CLAUDE_PROJECTS": str(root / "claude"),
-            "DOUBLETHINK_CODEX_SESSIONS": str(root / "codex"),
-            "DOUBLETHINK_CODEX_INDEX": str(root / "codex-index.jsonl"),
-            "DOUBLETHINK_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
-            "DOUBLETHINK_CLAUDE_CACHE": str(root / "cache"),
-            "DOUBLETHINK_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
-            "DOUBLETHINK_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
-            "DOUBLETHINK_VIOLATIONS_PATH": str(root / "violations.json"),
-            "DOUBLETHINK_UI_API_LOG": str(root / "ui-api.jsonl"),
-            "DOUBLETHINK_UI_API_TOKEN": API_TOKEN,
-            "DOUBLETHINK_HISTORY_COUNT": "0",
+            "THOUGHTCOP_API_PORT": str(port),
+            "THOUGHTCOP_CLAUDE_PROJECTS": str(root / "claude"),
+            "THOUGHTCOP_CODEX_SESSIONS": str(root / "codex"),
+            "THOUGHTCOP_CODEX_INDEX": str(root / "codex-index.jsonl"),
+            "THOUGHTCOP_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
+            "THOUGHTCOP_CLAUDE_CACHE": str(root / "cache"),
+            "THOUGHTCOP_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
+            "THOUGHTCOP_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
+            "THOUGHTCOP_VIOLATIONS_PATH": str(root / "violations.json"),
+            "THOUGHTCOP_UI_API_LOG": str(root / "ui-api.jsonl"),
+            "THOUGHTCOP_UI_API_TOKEN": API_TOKEN,
+            "THOUGHTCOP_HISTORY_COUNT": "0",
         })
-        process = subprocess.Popen(["./.build/doublethink", "--isolated-e2e"],
+        process = subprocess.Popen(["./.build/thoughtcop", "--isolated-e2e"],
                                    env=environment, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
         try:
@@ -283,7 +283,7 @@ def run(verification: bool, shapes: dict[str, dict]) -> tuple[dict, dict]:
             except subprocess.TimeoutExpired:
                 process.kill()
             for key in ["violationVerificationEnabled", "violationHistoryLimit"]:
-                subprocess.run(["/usr/bin/defaults", "delete", "doublethink", key],
+                subprocess.run(["/usr/bin/defaults", "delete", "thoughtcop", key],
                                capture_output=True, check=False)
     reported: dict[str, int] = {}
     for violation in state.get("violations", []):
@@ -291,7 +291,7 @@ def run(verification: bool, shapes: dict[str, dict]) -> tuple[dict, dict]:
     return state, reported
 
 
-REPEATS = int(os.environ.get("DOUBLETHINK_AI_TEST_REPEATS", "3"))
+REPEATS = int(os.environ.get("THOUGHTCOP_AI_TEST_REPEATS", "3"))
 
 
 def verdict(label: str, count: int) -> str:
@@ -300,9 +300,9 @@ def verdict(label: str, count: int) -> str:
     return "ok" if count == 0 else "FALSE"
 
 
-MODES = os.environ.get("DOUBLETHINK_AI_TEST_MODES", "").split(",") if \
-    os.environ.get("DOUBLETHINK_AI_TEST_MODES") else [None]
-RULES_SUITE = "com.doublethink.app.e2e"  # CheckRulesStore.suiteName under --isolated-e2e
+MODES = os.environ.get("THOUGHTCOP_AI_TEST_MODES", "").split(",") if \
+    os.environ.get("THOUGHTCOP_AI_TEST_MODES") else [None]
+RULES_SUITE = "com.thoughtcop.app.e2e"  # CheckRulesStore.suiteName under --isolated-e2e
 
 
 def set_mode(mode: str | None) -> str | None:
@@ -332,7 +332,7 @@ def report(mode: str | None, shapes: dict[str, dict]) -> None:
     print(f"\n===== instruction mode: {mode or 'as stored'} =====")
     runs = {False: [], True: []}
     verification_modes = [False] if os.environ.get(
-        "DOUBLETHINK_AI_TEST_VERIFICATION") == "off" else [False, True]
+        "THOUGHTCOP_AI_TEST_VERIFICATION") == "off" else [False, True]
     for _ in range(REPEATS):
         for verification in verification_modes:
             runs[verification].append(run(verification, shapes))

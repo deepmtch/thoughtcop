@@ -24,8 +24,8 @@ rendered it instead of owning a stable reading snapshot.
 
 For the reported `Identifying overstrict grading criteria` event, the local Codex
 transcript contains only that readable one-line summary. Its paired reasoning
-record contains encrypted content, which Doublethink cannot decrypt. No readable
-body was discarded, and Doublethink does not manufacture hidden reasoning.
+record contains encrypted content, which ThoughtCop cannot decrypt. No readable
+body was discarded, and ThoughtCop does not manufacture hidden reasoning.
 
 ## Verification
 

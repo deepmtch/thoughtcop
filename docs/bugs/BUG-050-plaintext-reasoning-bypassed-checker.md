@@ -2,7 +2,7 @@
 
 ## User-visible failure
 
-Doublethink displayed live Claude and Codex reasoning but produced no alarm even
+ThoughtCop displayed live Claude and Codex reasoning but produced no alarm even
 when that reasoning plainly matched the configured check instruction.
 
 ## Evidence and root cause

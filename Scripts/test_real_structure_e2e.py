@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Black-box proof of exactly which transcript fields Doublethink sends out.
+"""Black-box proof of exactly which transcript fields ThoughtCop sends out.
 
 The running app reads canary copies of real Claude Code and Codex transcripts
 (see Scripts/real_structure.py) and sends checker requests to a local dummy
@@ -87,7 +87,7 @@ def wait_for(port: int, predicate, timeout: float,
     latest: dict = {}
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise AssertionError(f"Doublethink exited {process.returncode}: "
+            raise AssertionError(f"ThoughtCop exited {process.returncode}: "
                                  f"{process.stderr.read() if process.stderr else ''}")
         try:
             latest = get_ui(port)
@@ -157,7 +157,7 @@ def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", checker_port), DummyChecker)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
-    with tempfile.TemporaryDirectory(prefix="doublethink-real-structure-") as temp:
+    with tempfile.TemporaryDirectory(prefix="thoughtcop-real-structure-") as temp:
         root = Path(temp)
         claude_path = root / "claude" / "project" / \
             "55555555-5555-4555-8555-555555555555.jsonl"
@@ -171,22 +171,22 @@ def main() -> None:
         (root / "claude-cache").mkdir()
         environment = os.environ.copy()
         environment.update({
-            "DOUBLETHINK_API_PORT": str(ui_port),
-            "DOUBLETHINK_CLAUDE_PROJECTS": str(root / "claude"),
-            "DOUBLETHINK_CODEX_SESSIONS": str(root / "codex"),
-            "DOUBLETHINK_CODEX_INDEX": str(root / "codex-index.jsonl"),
-            "DOUBLETHINK_CLAUDE_DESKTOP_SESSIONS": str(root / "claude-desktop-sessions"),
-            "DOUBLETHINK_CLAUDE_CACHE": str(root / "claude-cache"),
-            "DOUBLETHINK_CLAUDE_DESKTOP_CACHE": str(root / "claude-cache"),
-            "DOUBLETHINK_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
-            "DOUBLETHINK_VIOLATIONS_PATH": str(root / "violations.json"),
-            "DOUBLETHINK_UI_API_LOG": str(root / "ui-api.jsonl"),
-            "DOUBLETHINK_UI_API_TOKEN": API_TOKEN,
-            "DOUBLETHINK_HISTORY_COUNT": "0",
+            "THOUGHTCOP_API_PORT": str(ui_port),
+            "THOUGHTCOP_CLAUDE_PROJECTS": str(root / "claude"),
+            "THOUGHTCOP_CODEX_SESSIONS": str(root / "codex"),
+            "THOUGHTCOP_CODEX_INDEX": str(root / "codex-index.jsonl"),
+            "THOUGHTCOP_CLAUDE_DESKTOP_SESSIONS": str(root / "claude-desktop-sessions"),
+            "THOUGHTCOP_CLAUDE_CACHE": str(root / "claude-cache"),
+            "THOUGHTCOP_CLAUDE_DESKTOP_CACHE": str(root / "claude-cache"),
+            "THOUGHTCOP_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
+            "THOUGHTCOP_VIOLATIONS_PATH": str(root / "violations.json"),
+            "THOUGHTCOP_UI_API_LOG": str(root / "ui-api.jsonl"),
+            "THOUGHTCOP_UI_API_TOKEN": API_TOKEN,
+            "THOUGHTCOP_HISTORY_COUNT": "0",
         })
         configure_isolated_rules()
         process = subprocess.Popen(
-            ["./.build/doublethink", "--isolated-e2e", "--dummy-checker-url",
+            ["./.build/thoughtcop", "--isolated-e2e", "--dummy-checker-url",
              f"http://127.0.0.1:{checker_port}/v1/chat/completions"],
             env=environment, stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE, text=True)

@@ -4,6 +4,11 @@ import AppKit
 import Foundation
 import QuartzCore
 
+/// The window position is saved by AppKit under this name. It keeps the
+/// pre-rename value so every existing install finds its saved position
+/// (BUG-105: the rename moved the window to the bottom-left).
+let MAIN_WINDOW_AUTOSAVE_NAME = "thinkpeek.main-window"
+
 /// The menu-bar glyph: a brain, plus a lightning bolt while a violation is
 /// unreviewed. With `color` nil the result is a template image that macOS
 /// draws in the menu bar's own foreground (BUG-079); with a color it is a
@@ -121,7 +126,7 @@ enum ViolationBubblePreference {
     }
 }
 
-/// Hide survives restarts: a user who hid Doublethink is not shown the ticker
+/// Hide survives restarts: a user who hid ThoughtCop is not shown the ticker
 /// again on the next launch. Isolated tests neither read nor write it.
 enum HiddenPreference {
     static let defaultsKey = "tickerHidden"
@@ -234,7 +239,7 @@ final class MessagePreview {
                 // The summary first; Why and the full message one click away.
                 let rest = violationDetailsExpanded
                     ? "Why: \(decision.reason)\(full)"
-                    : "[Why and full message ▸](doublethink://violation-details)"
+                    : "[Why and full message ▸](thoughtcop://violation-details)"
                 return "**\(summary)**\n\n\(quote)\(rest)"
             }
             return "**Violation**\n\(quote)Why: \(decision.reason)\(full)"
@@ -268,7 +273,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var peekPrimaryActions: TickerPrimaryActions!
     private var peekToolbar: NSStackView!
     private let peekSeparator = NSTextField(labelWithString: "·")
-    private var peekSourceKey = "Doublethink"
+    private var peekSourceKey = "ThoughtCop"
     /// Active only while the reader shows: hidden, its minimum height (about
     /// 39 pt) would hold the 28-pt ticker taller than its window.
     private var fullMessageBottom: NSLayoutConstraint!
@@ -296,7 +301,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let hoverDelay: TimeInterval = 0.5
     private var isolatedActivity: NSObjectProtocol?
     /// Set when a violation was opened (bubble, Show Last Violation, Open
-    /// Violation History) while the user had hidden Doublethink (BUG-100).
+    /// Violation History) while the user had hidden ThoughtCop (BUG-100).
     private var returnToHiddenOnClose = false
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
@@ -394,7 +399,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             contentRect: NSRect(x: 60, y: 140, width: 560, height: 210),
             styleMask: [.borderless, .resizable, .nonactivatingPanel],
             backing: .buffered, defer: false)
-        panel.title = "Doublethink"
+        panel.title = "ThoughtCop"
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
@@ -407,7 +412,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.animationBehavior = .none
         panel.minSize = NSSize(width: 340, height: 54)
         panel.maxSize = NSSize(width: 560, height: 360)
-        panel.setFrameAutosaveName("doublethink.main-window")
+        panel.setFrameAutosaveName(MAIN_WINDOW_AUTOSAVE_NAME)
         panel.delegate = self
         panel.acceptsMouseMovedEvents = true
         panel.isMovableByWindowBackground = true
@@ -467,7 +472,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekProviderIcon = ProviderIconView(frame: .zero)
         peekProviderIcon.translatesAutoresizingMaskIntoConstraints = false
 
-        peekSourceLabel = NSTextField(labelWithString: "Doublethink")
+        peekSourceLabel = NSTextField(labelWithString: "ThoughtCop")
         peekSourceLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         peekSourceLabel.textColor = .secondaryLabelColor
         // Cut at the end so the chat name stays readable (middle truncation
@@ -800,7 +805,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // other apps were in front on the host. Test runs only.
             isolatedActivity = ProcessInfo.processInfo.beginActivity(
                 options: .userInitiated, reason: "Isolated end-to-end test run")
-            // Isolated tests drive Doublethink only through the command API.
+            // Isolated tests drive ThoughtCop only through the command API.
             // Real keys and clicks (a person or another tool using the same
             // desktop) must not change the app mid-assertion.
             isolatedInputMonitor = NSEvent.addLocalMonitorForEvents(matching: [
@@ -1239,11 +1244,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func installStatusMenu() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let glyph = statusGlyphImage(bolt: false)
-        glyph.accessibilityDescription = "Doublethink"
+        glyph.accessibilityDescription = "ThoughtCop"
         item.button?.image = glyph
-        item.button?.toolTip = "Doublethink"
+        item.button?.toolTip = "ThoughtCop"
         let menu = NSMenu()
-        let show = NSMenuItem(title: "Show Doublethink", action: #selector(showHUDFromMenu(_:)),
+        let show = NSMenuItem(title: "Show ThoughtCop", action: #selector(showHUDFromMenu(_:)),
                               keyEquivalent: "")
         show.target = self
         menu.addItem(show)
@@ -1275,7 +1280,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         settings.target = self
         menu.addItem(settings)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit Doublethink", action: #selector(quitFromMenu(_:)),
+        let quit = NSMenuItem(title: "Quit ThoughtCop", action: #selector(quitFromMenu(_:)),
                               keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -1306,7 +1311,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func showHUDFromMenu(_ sender: Any?) {
-        // Show Doublethink undoes Hide for good.
+        // Show ThoughtCop undoes Hide for good.
         returnToHiddenOnClose = false
         hiddenByUser = false
         HiddenPreference.save(false)
@@ -1404,7 +1409,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         })
         let keys = ProviderCredentialsEditor(statuses: Self.credentialStatuses(),
             save: { [weak self] edits in
-                var failures = ["Doublethink could not save credentials."]
+                var failures = ["ThoughtCop could not save credentials."]
                 self?.api.perform(.applyProviderCredentialEdits(edits,
                     completion: { failures = $0 }), origin: .appKit)
                 return failures
@@ -2392,7 +2397,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let text = detail.isEmpty ? title : "\(title)\n\(detail)"
         let event = UIEvent(timestamp: ISO8601DateFormatter().string(from: Date()),
                             kind: "activity", text: text, readableAnalysis: false)
-        _ = addCard(source: "Doublethink", event: event, navigable: false)
+        _ = addCard(source: "ThoughtCop", event: event, navigable: false)
     }
 
     private func restoreViolationCards() {
@@ -2434,7 +2439,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Brain when quiet; the bolt joins it while a violation is unreviewed.
         let glyph = statusGlyphImage(bolt: hasUnacknowledged)
         glyph.accessibilityDescription = hasUnacknowledged
-            ? "Doublethink has a new violation" : "Doublethink"
+            ? "ThoughtCop has a new violation" : "ThoughtCop"
         statusItem?.button?.image = glyph
         statusItem?.button?.title = violationStatusBadgeTitle(unreviewed: newCount)
         statusItem?.button?.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
@@ -2458,11 +2463,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
         statusItem?.button?.setAccessibilityLabel(count == 0
-            ? "Doublethink, no recorded violations"
-            : "Doublethink, \(newCount) new and \(count) recorded violation\(count == 1 ? "" : "s")")
+            ? "ThoughtCop, no recorded violations"
+            : "ThoughtCop, \(newCount) new and \(count) recorded violation\(count == 1 ? "" : "s")")
         statusItem?.button?.toolTip = count == 0
-            ? "Doublethink · no recorded violations"
-            : "Doublethink · \(newCount) new · \(count) recorded"
+            ? "ThoughtCop · no recorded violations"
+            : "ThoughtCop · \(newCount) new · \(count) recorded"
     }
 
     private func markViolationReviewed(at index: Int) {
@@ -2534,7 +2539,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
            index >= 0, index < eventPreviews.count,
            eventPreviews[index].alarmActive {
             let preview = eventPreviews[index]
-            panel.title = "⚠ Doublethink violation — \(violationRecords.count) recorded"
+            panel.title = "⚠ ThoughtCop violation — \(violationRecords.count) recorded"
             updatePeekHeader(source: preview.displaySource)
             peekTicker.text = normalizedTickerText(preview.tickerText)
             applyTickerAppearance(alarmActive: true)
@@ -2550,7 +2555,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             peekTicker.text = normalizedTickerText(eventPreviews[compactIndex].tickerText)
             applyTickerAppearance(alarmActive: eventPreviews[compactIndex].alarmActive)
         } else {
-            updatePeekHeader(source: "Doublethink")
+            updatePeekHeader(source: "ThoughtCop")
             peekTicker.text = "Watching Claude and Codex…"
             applyTickerAppearance(alarmActive: false)
         }
@@ -2689,12 +2694,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             NSAccessibility.post(element: panel as Any,
                                  notification: .announcementRequested,
                                  userInfo: [
-                                    .announcement: "New Doublethink violation from \(preview.source). \(decision.reason)",
+                                    .announcement: "New ThoughtCop violation from \(preview.source). \(decision.reason)",
                                     .priority: NSAccessibilityPriorityLevel.high.rawValue,
                                  ])
             startViolationAlert(record)
         }
-        panel.title = "⚠ Doublethink alert — \(alertCount)"
+        panel.title = "⚠ ThoughtCop alert — \(alertCount)"
         apiEvents.append([
             "kind": "drift-alert", "text": decision.reason,
             "evidence": decision.evidence, "source": preview.source,
@@ -2711,7 +2716,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         // Isolated tests shorten the steps; the visual check passes the real
         // "3,5" so the guest screen can be captured during each step.
-        let parts = (ProcessInfo.processInfo.environment["DOUBLETHINK_E2E_ALERT_SECONDS"] ?? "")
+        let parts = (ProcessInfo.processInfo.environment["THOUGHTCOP_E2E_ALERT_SECONDS"] ?? "")
             .split(separator: ",").compactMap { TimeInterval(String($0)) }
         return parts.count == 2 ? (parts[0], parts[1]) : (1.0, 1.5)
     }
@@ -2881,7 +2886,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             violationBubble.show(title: title, quote: quote, below: statusIconAnchor(),
                                  hint: displayTime(record.timestamp) + " · Click to open")
         } else {
-            violationBubble.show(title: "Doublethink", quote: "No violations yet.",
+            violationBubble.show(title: "ThoughtCop", quote: "No violations yet.",
                                  below: statusIconAnchor())
         }
         publishAPI()
@@ -2914,7 +2919,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
            let index = eventPreviews.firstIndex(where: { $0.violationID == id }) {
             openViolationReader(at: index)
         } else {
-            presentReader(MessageReaderSnapshot(source: "Doublethink", text: "No violations yet.",
+            presentReader(MessageReaderSnapshot(source: "ThoughtCop", text: "No violations yet.",
                                                 kind: "activity", tone: .normal),
                           openedIndex: nil, followLive: false)
             revealForExplicitRequest()
@@ -3019,7 +3024,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showCheckFailure(_ message: String, _ ms: Double,
                                   card: EventCard, preview: MessagePreview) {
         preview.evaluation = .failed(message)
-        card.setError("Doublethink check error · \(message) · \(Int(ms)) ms")
+        card.setError("ThoughtCop check error · \(message) · \(Int(ms)) ms")
         apiEvents.append([
             "kind": "drift-error", "text": message, "source": preview.source,
             "latencyMs": Int(ms),
@@ -3238,7 +3243,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let unreadable = parsedRecordTimestamp(block.ts) == nil
                 card.setFooter(unreadable
                     ? "Not checked · the record has no readable timestamp"
-                    : "Not checked · written before Doublethink started")
+                    : "Not checked · written before ThoughtCop started")
                 apiEvents.append([
                     "kind": "drift-skipped-old", "source": source,
                     "reason": unreadable ? "no readable timestamp" : "written before launch",

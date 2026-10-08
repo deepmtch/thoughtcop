@@ -75,7 +75,7 @@ func claudeCacheDirectoryChanged(_ directory: String,
 }
 
 final class ClaudeCloudActivityMonitor {
-    private let queue = DispatchQueue(label: "doublethink.claude-cloud-activity",
+    private let queue = DispatchQueue(label: "thoughtcop.claude-cloud-activity",
                                       qos: .utility)
     private let directory: String
     private var offsets: [String: UInt64] = [:]
@@ -89,7 +89,7 @@ final class ClaudeCloudActivityMonitor {
 
     init(directory: String? = nil) {
         self.directory = directory ?? ProcessInfo.processInfo.environment[
-            "DOUBLETHINK_CLAUDE_CACHE"] ?? NSString(
+            "THOUGHTCOP_CLAUDE_CACHE"] ?? NSString(
                 string: "~/Library/Application Support/Claude/Cache/Cache_Data")
                 .expandingTildeInPath
     }
@@ -160,7 +160,7 @@ final class ClaudeCloudActivityMonitor {
             }
             incompleteNames.remove(name)
             streamSources[path] = source
-            // Cache files survive Claude and Doublethink restarts. Replaying an
+            // Cache files survive Claude and ThoughtCop restarts. Replaying an
             // existing stream from byte zero resurrects completed or waiting
             // sessions from days ago as if they were live. Begin at the exact
             // discovered EOF; only subsequently appended lifecycle bytes are

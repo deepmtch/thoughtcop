@@ -25,7 +25,7 @@ to a single row, so it could not remain usable at a materially narrower width.
 
 ## Verification
 
-`./.build/doublethink --compact-width-selftest` verifies clamping and responsive layout
+`./.build/thoughtcop --compact-width-selftest` verifies clamping and responsive layout
 thresholds. Live `/controls` followed by `/width/narrow` must report width 400,
 `compactHeaderStyle: stacked`, and a fully-on-screen window whose screenshot
 shows every navigation/settings control. `/hide` must return to the unchanged

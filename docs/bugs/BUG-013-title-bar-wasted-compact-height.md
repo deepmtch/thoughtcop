@@ -22,7 +22,7 @@ though the exact session/source is already rendered inside the HUD.
 
 ## Verification
 
-`./.build/doublethink --window-chrome-selftest` creates the production style mask and
+`./.build/thoughtcop --window-chrome-selftest` creates the production style mask and
 asserts a zero-point difference between frame and content height. The live state
 must report `windowChromeHeight: 0`, `windowHeight: 70`, and a fully-on-screen
 460-point-wide ticker.

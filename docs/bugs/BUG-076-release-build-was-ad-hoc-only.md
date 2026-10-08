@@ -7,7 +7,7 @@ Status: Blocked on Apple credentials
 The bundle installed in the clean Parallels guest passed structural signature
 verification but `spctl --assess` returned `rejected-development-build`.
 Locally, `security find-identity -v -p codesigning` reports zero valid identities,
-and the `doublethink` notarization keychain profile is absent.
+and the `thoughtcop` notarization keychain profile is absent.
 
 ## Root cause
 

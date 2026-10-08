@@ -3,14 +3,14 @@
 ## User-visible failure
 
 After Claude displayed an interactive question and waited for the user,
-Doublethink continued to label that Claude session `working…`. It could remain
+ThoughtCop continued to label that Claude session `working…`. It could remain
 stuck indefinitely because the cloud turn did not emit a normal `result` event.
 
 ## Evidence and cause
 
 The captured Claude cloud SSE sequence ended with `control_request` for
 `AskUserQuestion`, trailing `stream_event` frames, and `task_summary`. There was
-no `result` event. Doublethink recognized only `requesting`, `stream_event`, and
+no `result` event. ThoughtCop recognized only `requesting`, `stream_event`, and
 `result`, so the last recognized state was still active.
 
 ## Fix

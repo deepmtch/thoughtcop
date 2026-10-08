@@ -30,16 +30,16 @@ user approved the mockup ("yes", "agree").
 
 The user asked to run tests on the host again, because the Parallels guest is
 shared with another session. On the host, the isolated test app read the
-user's real rules (`com.doublethink.app`: two rules, one per line). So each
+user's real rules (`com.thoughtcop.app`: two rules, one per line). So each
 record was checked twice, and the multi-session test failed. The same failure
 happens at f6046d9, before today's changes.
 
-- **Rules.** Isolated mode now reads its rules from `com.doublethink.app.e2e`.
+- **Rules.** Isolated mode now reads its rules from `com.thoughtcop.app.e2e`.
   Every e2e script sets the rules it needs (`Scripts/e2e_defaults.py`).
 - **Usage.** Isolated mode writes usage to a temporary file unless a path is
   given, so tests never touch the user's real usage and cost.
 
-The user's real settings (`com.doublethink.desktop`) and rules were checked
+The user's real settings (`com.thoughtcop.desktop`) and rules were checked
 before and after the runs and are unchanged.
 
 ## Verification

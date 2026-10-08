@@ -8,7 +8,7 @@ Codex sessions flow through the running AppKit application correctly.
 
 ## Test harness
 
-`Scripts/test_multi_session_e2e.py` launches an isolated real Doublethink process
+`Scripts/test_multi_session_e2e.py` launches an isolated real ThoughtCop process
 against temporary Claude/Codex transcript roots and a deterministic local HTTP
 checker. It never uses production keys or logs.
 

@@ -8,22 +8,22 @@ if [ -n "$(/usr/bin/git status --porcelain --untracked-files=normal)" ]; then
     exit 2
 fi
 
-identity=${DOUBLETHINK_SIGNING_IDENTITY:-}
-notary_profile=${DOUBLETHINK_NOTARY_PROFILE:-}
+identity=${THOUGHTCOP_SIGNING_IDENTITY:-}
+notary_profile=${THOUGHTCOP_NOTARY_PROFILE:-}
 
 if [ -z "$identity" ]; then
-    echo "release blocked: set DOUBLETHINK_SIGNING_IDENTITY to a Developer ID Application identity" >&2
+    echo "release blocked: set THOUGHTCOP_SIGNING_IDENTITY to a Developer ID Application identity" >&2
     exit 2
 fi
 case "$identity" in
     "Developer ID Application: "*) ;;
     *)
-        echo "release blocked: DOUBLETHINK_SIGNING_IDENTITY must name a Developer ID Application certificate" >&2
+        echo "release blocked: THOUGHTCOP_SIGNING_IDENTITY must name a Developer ID Application certificate" >&2
         exit 2
         ;;
 esac
 if [ -z "$notary_profile" ]; then
-    echo "release blocked: set DOUBLETHINK_NOTARY_PROFILE to a notarytool keychain profile" >&2
+    echo "release blocked: set THOUGHTCOP_NOTARY_PROFILE to a notarytool keychain profile" >&2
     exit 2
 fi
 
@@ -46,17 +46,17 @@ fi
 ./Scripts/test.sh
 
 version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-    Resources/Doublethink-Info.plist)
+    Resources/ThoughtCop-Info.plist)
 architecture=$(/usr/bin/uname -m)
 release_parent=".build/releases"
 /bin/mkdir -p "$release_parent"
-release_dir=$(/usr/bin/mktemp -d "$release_parent/Doublethink-$version.XXXXXX")
-app="$release_dir/Doublethink.app"
-submission_zip="$release_dir/Doublethink-$version-notarization.zip"
+release_dir=$(/usr/bin/mktemp -d "$release_parent/ThoughtCop-$version.XXXXXX")
+app="$release_dir/ThoughtCop.app"
+submission_zip="$release_dir/ThoughtCop-$version-notarization.zip"
 submission_json="$release_dir/notarization.json"
-final_zip="$release_dir/Doublethink-$version-macos-$architecture.zip"
+final_zip="$release_dir/ThoughtCop-$version-macos-$architecture.zip"
 
-/usr/bin/ditto .build/Doublethink.app "$app"
+/usr/bin/ditto .build/ThoughtCop.app "$app"
 /usr/bin/codesign --force --options runtime --timestamp \
     --sign "$identity" "$app"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$app"

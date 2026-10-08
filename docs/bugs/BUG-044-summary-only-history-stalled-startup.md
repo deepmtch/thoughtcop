@@ -2,7 +2,7 @@
 
 ## Symptom
 
-After summary text stopped masquerading as original reasoning, Doublethink could
+After summary text stopped masquerading as original reasoning, ThoughtCop could
 remain unavailable during launch while consuming CPU on a large Codex rollout.
 The local UI API never reached `initialScanComplete=true`.
 
@@ -18,7 +18,7 @@ leaving an empty interface.
 
 - Count unavailable reasoning records as bounded history entries.
 - Present their explicit unavailable state instead of filtering them out.
-- Remove the obsolete `DOUBLETHINK_SHOW_ENCRYPTED` switch; it could not reveal or
+- Remove the obsolete `THOUGHTCOP_SHOW_ENCRYPTED` switch; it could not reveal or
   decrypt the original reasoning.
 - Make the base transcript self-test use a deterministic local fixture instead
   of whichever large transcript happened to be newest.

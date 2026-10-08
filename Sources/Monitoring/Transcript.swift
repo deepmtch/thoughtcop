@@ -26,7 +26,7 @@ func exactFileStamp(_ path: String) -> ExactFileStamp? {
         isDirectory: (info.st_mode & S_IFMT) == S_IFDIR)
 }
 
-/// Whether a record was written while this Doublethink process was running, by
+/// Whether a record was written while this ThoughtCop process was running, by
 /// the record's own provider timestamp. Only such records are checked: files
 /// that Claude creates for resumed chats and sub-agents begin with copies of
 /// older messages, and those must not be checked again. A record without a
@@ -78,7 +78,7 @@ func userRequestEnvelope(_ request: String?) -> Any {
     }
     let removed = total - 2 * USER_REQUEST_KEPT_CHARACTERS
     let text = String(request.prefix(USER_REQUEST_KEPT_CHARACTERS)) +
-        "\n[… \(removed) characters cut by Doublethink …]\n" +
+        "\n[… \(removed) characters cut by ThoughtCop …]\n" +
         String(request.suffix(USER_REQUEST_KEPT_CHARACTERS))
     return ["text": text, "cut": true, "characters": total] as [String: Any]
 }
@@ -630,7 +630,7 @@ final class TranscriptMonitorWorker {
     private var monitorsReady = false
 
     init(queue: DispatchQueue = DispatchQueue(
-            label: "doublethink.transcript-monitor", qos: .utility),
+            label: "thoughtcop.transcript-monitor", qos: .utility),
          tailerFactory: @escaping TailerFactory = {
             Tailer(path: $0, backfill: $1, startOffset: $2)
          }) {

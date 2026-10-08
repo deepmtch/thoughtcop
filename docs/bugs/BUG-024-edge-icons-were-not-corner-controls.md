@@ -21,6 +21,6 @@ place the ticker in one of the four screen corners.
 
 ## Verification
 
-`./.build/doublethink --ticker-corner-selftest` verifies all four final origins, callback
+`./.build/thoughtcop --ticker-corner-selftest` verifies all four final origins, callback
 order, and accessibility names. The running `/ui` surface reports the same four
 corner controls.

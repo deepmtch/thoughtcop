@@ -24,6 +24,6 @@ editor or persistent runtime preference.
 
 ## Verification
 
-`./.build/doublethink --check-prompt-selftest` verifies default loading, custom persistence,
+`./.build/thoughtcop --check-prompt-selftest` verifies default loading, custom persistence,
 next-check prompt assembly, protected JSON instructions, and default restoration.
-`./.build/doublethink --settings-menu-selftest` verifies the runtime editor is discoverable.
+`./.build/thoughtcop --settings-menu-selftest` verifies the runtime editor is discoverable.

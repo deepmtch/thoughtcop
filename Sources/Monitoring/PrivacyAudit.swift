@@ -2,8 +2,8 @@
 
 import Foundation
 
-let PRIVACY_AUDIT_PATH = ProcessInfo.processInfo.environment["DOUBLETHINK_PRIVACY_AUDIT_PATH"]
-    ?? ("~/Library/Logs/Doublethink/privacy-audit.jsonl" as NSString).expandingTildeInPath
+let PRIVACY_AUDIT_PATH = ProcessInfo.processInfo.environment["THOUGHTCOP_PRIVACY_AUDIT_PATH"]
+    ?? ("~/Library/Logs/ThoughtCop/privacy-audit.jsonl" as NSString).expandingTildeInPath
 
 func auditMetadata(in line: String) -> [[String: Any]] {
     guard let data = line.data(using: .utf8),

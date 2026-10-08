@@ -4,15 +4,15 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleDisplayName</key>
-  <string>Doublethink</string>
+  <string>ThoughtCop</string>
   <key>CFBundleExecutable</key>
-  <string>doublethink</string>
+  <string>thoughtcop</string>
   <key>CFBundleIconFile</key>
-  <string>Doublethink</string>
+  <string>ThoughtCop</string>
   <key>CFBundleIdentifier</key>
-  <string>com.doublethink.desktop</string>
+  <string>com.thoughtcop.desktop</string>
   <key>CFBundleName</key>
-  <string>Doublethink</string>
+  <string>ThoughtCop</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleVersion</key>
@@ -28,6 +28,6 @@
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSHumanReadableCopyright</key>
-  <string>Copyright © 2026 Doublethink contributors. GPL-3.0.</string>
+  <string>Copyright © 2026 ThoughtCop contributors. GPL-3.0.</string>
 </dict>
 </plist>

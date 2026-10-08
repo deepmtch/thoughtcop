@@ -33,7 +33,7 @@ not only the reported bottom placement.
 
 ## Verification
 
-`./.build/doublethink --window-position-selftest` performs a complete collapsed → expanded
+`./.build/thoughtcop --window-position-selftest` performs a complete collapsed → expanded
 → collapsed cycle from the bottom-right preset. Both the 12-point bottom inset and
 12-point right inset remain unchanged. It also verifies that a floating window
 keeps its center.

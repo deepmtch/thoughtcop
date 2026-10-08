@@ -10,7 +10,7 @@ The active rollout filename contained two UUIDs:
 
 Its first `session_meta` record identified the owning session as
 `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`, and `session_index.jsonl` mapped that ID
-to the synthetic task title `Primary task`. Doublethink instead displayed a short
+to the synthetic task title `Primary task`. ThoughtCop instead displayed a short
 form of the non-owning suffix UUID.
 
 ## Root cause

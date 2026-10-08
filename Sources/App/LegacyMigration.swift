@@ -1,18 +1,18 @@
 // One-time carry-over of settings and data from the app's previous
-// identifiers to the current ones (Doublethink).
+// identifiers to the current ones (ThoughtCop).
 
 import Foundation
 
 enum LegacyMigration {
     /// Oldest first; a newer legacy domain wins over an older one because the
     /// copy fills only keys the target does not have yet.
-    static let legacyRulesSuites = ["com.thinkpeek.app", "com.thoughtcrime.app"]
-    static let legacyDesktopSuites = ["com.thinkpeek.desktop", "com.thoughtcrime.desktop"]
-    static let legacyDataDirectories = ["Thinkpeek", "Thoughtcrime"].map {
+    static let legacyRulesSuites = ["com.thinkpeek.app", "com.thoughtcrime.app", "com.doublethink.app"]
+    static let legacyDesktopSuites = ["com.thinkpeek.desktop", "com.thoughtcrime.desktop", "com.doublethink.desktop"]
+    static let legacyDataDirectories = ["Thinkpeek", "Thoughtcrime", "Doublethink"].map {
         ("~/Library/Application Support/" + $0 as NSString).expandingTildeInPath
     }
     static let currentDataDirectory =
-        ("~/Library/Application Support/Doublethink" as NSString).expandingTildeInPath
+        ("~/Library/Application Support/ThoughtCop" as NSString).expandingTildeInPath
 
     /// Copies every key of each legacy preferences domain that the current
     /// domain does not have yet, and moves the newest legacy data folder when

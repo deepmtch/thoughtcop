@@ -98,7 +98,7 @@ func claudeDesktopTitleRecord(from data: Data) -> (sessionID: String, title: Str
 }
 
 /// Claude Desktop owns the title its session UI displays. Its local metadata
-/// maps that user-facing title to the CLI transcript UUID Doublethink tails.
+/// maps that user-facing title to the CLI transcript UUID ThoughtCop tails.
 func claudeDesktopTitles() -> [String: String] {
     claudeDesktopTitleCacheLock.lock()
     defer { claudeDesktopTitleCacheLock.unlock() }
@@ -151,7 +151,7 @@ final class TranscriptDiscovery {
     init(fileProvider: @escaping () -> [String],
          activityProvider: @escaping (String) -> Date? = latestTranscriptEventDate,
          queue: DispatchQueue = DispatchQueue(
-            label: "doublethink.transcript-discovery", qos: .utility)) {
+            label: "thoughtcop.transcript-discovery", qos: .utility)) {
         self.fileProvider = fileProvider
         self.activityProvider = activityProvider
         self.queue = queue

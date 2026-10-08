@@ -31,7 +31,7 @@ final class TickerPrimaryActions: NSStackView {
         displaySettingsButton = NSButton(frame: .zero)
         hideButton = NSButton(
             image: NSImage(systemSymbolName: "xmark",
-                           accessibilityDescription: "Hide Doublethink") ?? NSImage(),
+                           accessibilityDescription: "Hide ThoughtCop") ?? NSImage(),
             target: nil, action: nil)
         super.init(frame: frameRect)
 
@@ -54,8 +54,8 @@ final class TickerPrimaryActions: NSStackView {
         displaySettingsButton.setAccessibilityLabel("Settings")
         hideButton.target = self
         hideButton.action = #selector(hideTicker(_:))
-        hideButton.toolTip = "Hide Doublethink — show it again from the menu bar"
-        hideButton.setAccessibilityLabel("Hide Doublethink")
+        hideButton.toolTip = "Hide ThoughtCop — show it again from the menu bar"
+        hideButton.setAccessibilityLabel("Hide ThoughtCop")
     }
 
     required init?(coder: NSCoder) { nil }

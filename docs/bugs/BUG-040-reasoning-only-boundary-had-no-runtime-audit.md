@@ -3,12 +3,12 @@
 ## Symptom
 
 After the tool-record privacy regression, there was no independent runtime record
-showing what Doublethink selected, discarded, or sent after launch.
+showing what ThoughtCop selected, discarded, or sent after launch.
 
 ## Fix
 
 Add a per-launch JSONL audit at
-`~/Library/Logs/Doublethink/privacy-audit.jsonl`. It records:
+`~/Library/Logs/ThoughtCop/privacy-audit.jsonl`. It records:
 
 - app start and declared `reasoning_only` scope;
 - selected readable reasoning metadata;

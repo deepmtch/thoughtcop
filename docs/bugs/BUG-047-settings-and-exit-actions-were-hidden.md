@@ -5,7 +5,7 @@
 Changing display settings from the resting ticker required opening the expanded
 controls view first and then finding its gear button. In expanded readers and
 controls, the action that returned to the ticker was ambiguously labelled
-`Done`, while `Quit Doublethink` was hidden behind an ellipsis menu.
+`Done`, while `Quit ThoughtCop` was hidden behind an ellipsis menu.
 
 ## Root cause
 

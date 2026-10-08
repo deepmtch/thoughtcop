@@ -1,30 +1,30 @@
-# Doublethink
+# ThoughtCop
 
 Big Brother for your coding agent. See Claude Code and Codex reasoning live,
 and get a red lightning bolt in your menu bar when a thought or a reply breaks
 a rule you wrote in your own words.
 
-Claude Code and Codex append live JSONL session events as turns run. Doublethink
+Claude Code and Codex append live JSONL session events as turns run. ThoughtCop
 tails both sources, displays readable reasoning when the provider supplies it,
 and checks complete assistant-response records even when reasoning is omitted.
 
-![How Doublethink works: the agent writes thoughts to a file, Doublethink reads it, a checker model compares each thought with your rule, on a match the brain in the menu bar gets a red bolt](docs/blog/doublethink-catches-agents-improvising/images/how-it-works.png)
+![How ThoughtCop works: the agent writes thoughts to a file, ThoughtCop reads it, a checker model compares each thought with your rule, on a match the brain in the menu bar gets a red bolt](docs/blog/thoughtcop-catches-agents-improvising/images/how-it-works.png)
 
 | | | |
 |---|---|---|
-| **`.build/doublethink`** | always-on-top window | shows the reasoning |
+| **`.build/thoughtcop`** | always-on-top window | shows the reasoning |
 | Native evaluator | drift alarm | evaluates structured records against your verbatim instruction |
 
 ```bash
 ./build.sh                                           # build once
-./.build/doublethink                                   # the window
+./.build/thoughtcop                                   # the window
 ./restart.sh                                         # rebuild and replace a running copy
-./.build/doublethink --local-only                      # never send evidence externally
+./.build/thoughtcop --local-only                      # never send evidence externally
 ```
 
 ## Rules to start from
 
-Doublethink ships with no rules. Write your own, one per line, in plain words.
+ThoughtCop ships with no rules. Write your own, one per line, in plain words.
 Some that catch common agent failures:
 
 ```text
@@ -49,30 +49,30 @@ unreviewed. Hover it for the last catch, click it for the full
 reasoning. Everything below was captured on a fresh macOS VM while Claude Code
 (Haiku 5.5) worked on a small coding task.
 
-![Idle, unreviewed, and flashing](docs/blog/doublethink-catches-agents-improvising/images/menubar-idle.png)
-![Brain with bolt and count](docs/blog/doublethink-catches-agents-improvising/images/menubar-shield.png)
-![The three-second red flash](docs/blog/doublethink-catches-agents-improvising/images/menubar-flash.png)
+![Idle, unreviewed, and flashing](docs/blog/thoughtcop-catches-agents-improvising/images/menubar-idle.png)
+![Brain with bolt and count](docs/blog/thoughtcop-catches-agents-improvising/images/menubar-shield.png)
+![The three-second red flash](docs/blog/thoughtcop-catches-agents-improvising/images/menubar-flash.png)
 
-![Hovering the menu-bar icon shows the last violation](docs/blog/doublethink-catches-agents-improvising/images/menubar-hover.png)
+![Hovering the menu-bar icon shows the last violation](docs/blog/thoughtcop-catches-agents-improvising/images/menubar-hover.png)
 
 The agent's own reasoning, flagged a second after it was written, with the
 checker's reason:
 
-![Reader with the flagged thought](docs/blog/doublethink-catches-agents-improvising/images/reader-violation.png)
+![Reader with the flagged thought](docs/blog/thoughtcop-catches-agents-improvising/images/reader-violation.png)
 
 The rule is yours, checked exactly as typed:
 
-![Settings › Rules](docs/blog/doublethink-catches-agents-improvising/images/settings-rules.png)
+![Settings › Rules](docs/blog/thoughtcop-catches-agents-improvising/images/settings-rules.png)
 
 The whole run, from task to catch, in 40 seconds:
 
-![Doublethink catches Haiku deciding to make the edit first](docs/blog/doublethink-catches-agents-improvising/images/run4-doublethink-catches-haiku.gif)
+![ThoughtCop catches Haiku deciding to make the edit first](docs/blog/thoughtcop-catches-agents-improvising/images/run4-thoughtcop-catches-haiku.gif)
 
 (Recorded before the menu-bar icon changed from a shield to the brain; the
 behaviour is the same.)
 
 The full story is in
-[docs/blog/doublethink-catches-agents-improvising](docs/blog/doublethink-catches-agents-improvising/doublethink-catches-agents-improvising.md).
+[docs/blog/thoughtcop-catches-agents-improvising](docs/blog/thoughtcop-catches-agents-improvising/thoughtcop-catches-agents-improvising.md).
 
 `build.sh` intentionally creates an ad-hoc signed development bundle. It is not
 a distributable release. A direct-download release requires an installed
@@ -80,8 +80,8 @@ Developer ID Application certificate and a validated `notarytool` keychain
 profile:
 
 ```bash
-export DOUBLETHINK_SIGNING_IDENTITY='Developer ID Application: Example (TEAMID)'
-export DOUBLETHINK_NOTARY_PROFILE='doublethink-notary'
+export THOUGHTCOP_SIGNING_IDENTITY='Developer ID Application: Example (TEAMID)'
+export THOUGHTCOP_NOTARY_PROFILE='thoughtcop-notary'
 ./Scripts/release.sh
 ```
 
@@ -91,7 +91,7 @@ the notarization, staples and validates the ticket, runs Gatekeeper assessment,
 then creates a final ZIP and SHA-256 checksum under `.build/releases/`.
 
 This checkout uses the repository-managed `.githooks/post-commit` hook. After
-each successful commit it rebuilds and replaces the running Doublethink exactly
+each successful commit it rebuilds and replaces the running ThoughtCop exactly
 once, only when that build succeeds. The build produces a minimal macOS app
 bundle and the hook opens it through LaunchServices; it deliberately does not
 register a restartable `launchd` service. Inspect
@@ -102,20 +102,20 @@ for a fresh clone with:
 git config core.hooksPath .githooks
 ```
 
-Doublethink is a native Swift/AppKit app. Building requires Xcode Command Line
+ThoughtCop is a native Swift/AppKit app. Building requires Xcode Command Line
 Tools; Claude Desktop cache monitoring and its tests require `zstd`
 (`brew install zstd`). Python 3 is used only by the test and compatibility
 scripts. **Nothing is ever written under `~/.claude/`** — that directory is
-Claude Code's, and Doublethink only reads its supported session data.
+Claude Code's, and ThoughtCop only reads its supported session data.
 
 ## Install from source
 
 ```bash
-git clone https://github.com/deepmtch/doublethink
-cd doublethink
+git clone https://github.com/deepmtch/thoughtcop
+cd thoughtcop
 brew install zstd
 ./Scripts/test.sh
-open .build/Doublethink.app
+open .build/ThoughtCop.app
 ```
 
 The development bundle is ad-hoc signed for the local Mac. It is not the
@@ -163,12 +163,12 @@ Codex tasks write rollout events to:
 ```
 
 Codex reasoning items use plaintext `content[].reasoning_text` when the provider
-supplies it. When Codex supplies only a readable `summary[]`, Doublethink displays
+supplies it. When Codex supplies only a readable `summary[]`, ThoughtCop displays
 the complete summary locally; duplicate `event_msg/agent_reasoning` entries are
 ignored. Plaintext reasoning is displayed locally and sent verbatim to the
 configured external checker. Provider summaries are local-display-only and are
 never sent. Complete assistant responses are evaluated but are not presented as
-thoughts; a response appears in Doublethink only when it triggers a violation or
+thoughts; a response appears in ThoughtCop only when it triggers a violation or
 its check fails. Each checked record is sent with your latest typed request
 from the same session (cut to its first and last 1,000 characters when longer
 than 2,000). Tool calls, tool results, other user-role records, and
@@ -203,7 +203,7 @@ does this by default unless Claude Code is configured to request summaries:
 
 Add that key to `~/.claude/settings.json`. Existing omitted blocks cannot be
 recovered retroactively, and a host application can explicitly override the
-setting. doublethink reports operation start immediately and displays readable
+setting. thoughtcop reports operation start immediately and displays readable
 reasoning only when plaintext exists; response checking does not depend on that
 optional stream.
 
@@ -247,10 +247,10 @@ A single click opens a dedicated full-message reader; **Done** or a click outsid
 the reader returns to the ticker. The reader's History button opens history.
 Settings › General selects and remembers Slow, Normal, or
 Fast ticker movement and provides Top/Bottom × Left/Center/Right presets.
-The reader keeps **Done** visible. **Hide Doublethink** is the ticker's direct X
+The reader keeps **Done** visible. **Hide ThoughtCop** is the ticker's direct X
 action and is remembered across restarts; a violation opened from the bubble
-or menu bar returns to hidden when closed, and menu bar › **Show Doublethink**
-shows the ticker again. **Quit Doublethink** remains available from the menu bar.
+or menu bar returns to hidden when closed, and menu bar › **Show ThoughtCop**
+shows the ticker again. **Quit ThoughtCop** remains available from the menu bar.
 Escape from the reader or history always returns directly to the one-line
 ticker. History uses the same lifecycle pattern: **Done** returns to the ticker
 without terminating the monitor. Settings › General offers **Ticker width:
@@ -268,9 +268,9 @@ Return, Home, End, J, and K behavior.
 
 Auto mode follows every active session and nested agent. Use the session picker
 to pin one session. Cards show the local time, source session, and original
-readable reasoning. Set `DOUBLETHINK_HISTORY_COUNT` in `.env` to an integer, `0`,
+readable reasoning. Set `THOUGHTCOP_HISTORY_COUNT` in `.env` to an integer, `0`,
 or `all`. When a provider record contains neither plaintext reasoning nor a
-readable summary, Doublethink presents an explicit unavailable state.
+readable summary, ThoughtCop presents an explicit unavailable state.
 Repeated identical records from the same source are presented once even when
 the transcript records them at multiple timestamps.
 
@@ -283,10 +283,10 @@ was sent. Per-record `timestamp` fields advance monotonically within the turn.
 
 ## The drift alarm
 
-The native Doublethink app sends each new complete assistant response and each new
+The native ThoughtCop app sends each new complete assistant response and each new
 readable reasoning record, plus your locally saved evaluation instruction and the
 latest request you typed before that record, to a fast model. Tool calls and tool results are discarded by the transcript parser
-and never enter the automatic evaluation path. Doublethink does not infer actions
+and never enter the automatic evaluation path. ThoughtCop does not infer actions
 from keywords.
 
 The **Settings › Rules** editor has two explicit modes:
@@ -297,19 +297,19 @@ The **Settings › Rules** editor has two explicit modes:
 
 No comments, categories, keywords, or trigger meanings are inferred. Edits take
 effect on the next assistant response or readable reasoning record without
-restarting Doublethink.
+restarting ThoughtCop.
 
 ### Violation history
 
 Every reported violation must quote evidence. With **Violation Alerts → Confirm
-with Second Check** on (the default), Doublethink sends the claim, its evidence,
+with Second Check** on (the default), ThoughtCop sends the claim, its evidence,
 your instruction, the original record and your request to the same model and
 asks whether the claim is true. Only confirmed violations are shown and stored;
 rejected or evidence-free claims are dropped. Turn the setting off to show the
 first verdict directly.
 
 Each shown violation is appended to the local 0600-permission store at
-`~/Library/Application Support/Doublethink/violations.json`. **Violation History**
+`~/Library/Application Support/ThoughtCop/violations.json`. **Violation History**
 in the display settings keeps the newest 10, 25, 50 (default), 100, 250 or 500
 violations; lowering it deletes the oldest immediately. A record preserves
 the source provider/session, time, matched reason, quoted evidence, original
@@ -338,13 +338,13 @@ drive the same actions without clicking the UI.
 
 **Settings › Rules** edits that local value and mode directly.
 There is no file-backed configuration. The next response or reasoning block uses
-the saved rules without restarting Doublethink.
+the saved rules without restarting ThoughtCop.
 
 Every ⚙ button and menu bar › **Settings…** open the same window.
 
 ### Privacy audit log
 
-Each app start resets `~/Library/Logs/Doublethink/privacy-audit.jsonl`. The JSONL
+Each app start resets `~/Library/Logs/ThoughtCop/privacy-audit.jsonl`. The JSONL
 records only metadata: session filename, transcript record type, disposition,
 byte count, and actual external evaluation destination/size. It distinguishes
 reasoning requests from assistant-response requests and records tool calls and
@@ -369,7 +369,7 @@ explicit overrides:
 cp .env.example .env
 chmod 600 .env
 # edit .env: GROQ_API_KEY=... and/or CEREBRAS_API_KEY=...
-./.build/doublethink --drift-status
+./.build/thoughtcop --drift-status
 ```
 
 `.env` is ignored by git; `.env.example` contains only empty placeholders and
@@ -424,37 +424,37 @@ Run the complete suite with:
 Scripts/test.sh
 ```
 
-Run the opt-in real Claude CLI → transcript → Doublethink API latency probe with:
+Run the opt-in real Claude CLI → transcript → ThoughtCop API latency probe with:
 
 ```bash
 python3 Scripts/test_live_claude_api.py
 ```
 
 It invokes one tool-free authenticated Claude CLI turn with a small budget cap, polls the
-local Doublethink API without clicking the UI, and fails unless the matching
+local ThoughtCop API without clicking the UI, and fails unless the matching
 Claude session reaches the ticker as `Working…` before the CLI turn finishes.
 
 ```bash
-./.build/doublethink --selftest
-./.build/doublethink --claude-desktop-conversation-selftest
-./.build/doublethink --layout-selftest
-./.build/doublethink --presentation-selftest
-./.build/doublethink --source-context-selftest
-./.build/doublethink --ticker-selftest
-./.build/doublethink --ticker-background-selftest
-./.build/doublethink --message-view-selftest
-./.build/doublethink --escape-selftest
-./.build/doublethink --exit-controls-selftest
-./.build/doublethink --outside-click-selftest
-./.build/doublethink --window-position-selftest
-./.build/doublethink --ticker-corner-selftest
-./.build/doublethink --provider-icon-selftest
-./.build/doublethink --settings-menu-selftest
-./.build/doublethink --check-rules-editor-selftest
-./.build/doublethink --window-chrome-selftest
-./.build/doublethink --compact-width-selftest
-./.build/doublethink --interaction-selftest
-./.build/doublethink --ui-command-api-selftest
+./.build/thoughtcop --selftest
+./.build/thoughtcop --claude-desktop-conversation-selftest
+./.build/thoughtcop --layout-selftest
+./.build/thoughtcop --presentation-selftest
+./.build/thoughtcop --source-context-selftest
+./.build/thoughtcop --ticker-selftest
+./.build/thoughtcop --ticker-background-selftest
+./.build/thoughtcop --message-view-selftest
+./.build/thoughtcop --escape-selftest
+./.build/thoughtcop --exit-controls-selftest
+./.build/thoughtcop --outside-click-selftest
+./.build/thoughtcop --window-position-selftest
+./.build/thoughtcop --ticker-corner-selftest
+./.build/thoughtcop --provider-icon-selftest
+./.build/thoughtcop --settings-menu-selftest
+./.build/thoughtcop --check-rules-editor-selftest
+./.build/thoughtcop --window-chrome-selftest
+./.build/thoughtcop --compact-width-selftest
+./.build/thoughtcop --interaction-selftest
+./.build/thoughtcop --ui-command-api-selftest
 ```
 
 prints the active transcript and its last 5 reasoning blocks — no window involved.
@@ -468,14 +468,14 @@ The window presentation is also exposed as a headless JSON API. The AppKit
 renderer and automated tests consume the same `UIEvent` objects:
 
 ```bash
-./.build/doublethink --ui-json ~/.claude/projects/<project>/<session>.jsonl
+./.build/thoughtcop --ui-json ~/.claude/projects/<project>/<session>.jsonl
 ```
 
 The running window publishes the state it actually consumed at the local
 endpoint `http://127.0.0.1:17321/ui` (override with
-`DOUBLETHINK_API_PORT`). Every request requires `Authorization: Bearer <token>`;
+`THOUGHTCOP_API_PORT`). Every request requires `Authorization: Bearer <token>`;
 the random token is stored with mode `0600` at
-`~/Library/Application Support/Doublethink/ui-api-token`. This makes window title,
+`~/Library/Application Support/ThoughtCop/ui-api-token`. This makes window title,
 selection, status, analysis, omitted blocks, activity, and drift results
 assertable without screen capture.
 The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
@@ -493,20 +493,20 @@ running window. `/reveal` remains an alias for `/controls` for compatibility.
 binds only to IPv4 loopback and returns no-store responses.
 
 ```bash
-token=$(<"$HOME/Library/Application Support/Doublethink/ui-api-token")
+token=$(<"$HOME/Library/Application Support/ThoughtCop/ui-api-token")
 printf 'Authorization: Bearer %s\n' "$token" | \
   curl --header @- http://127.0.0.1:17321/ui
 printf 'Authorization: Bearer %s\n' "$token" | \
   curl --header @- -X POST http://127.0.0.1:17321/controls
 ```
-Use `./.build/doublethink --transcript /absolute/session.jsonl` to pin a deterministic
+Use `./.build/thoughtcop --transcript /absolute/session.jsonl` to pin a deterministic
 input for an end-to-end UI test.
 
 For a direct native evaluator check:
 
 ```bash
-./.build/doublethink --drift-status
-./.build/doublethink --check "I'll remove the build directory now."
+./.build/thoughtcop --drift-status
+./.build/thoughtcop --check "I'll remove the build directory now."
 ```
 
 ## History

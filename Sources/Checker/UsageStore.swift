@@ -3,11 +3,11 @@
 
 import Foundation
 
-let USAGE_PATH = ProcessInfo.processInfo.environment["DOUBLETHINK_USAGE_PATH"]
+let USAGE_PATH = ProcessInfo.processInfo.environment["THOUGHTCOP_USAGE_PATH"]
     // An isolated test never writes the user's real usage and cost.
     ?? (ISOLATED_E2E
-        ? NSTemporaryDirectory() + "doublethink-e2e-usage-\(getpid()).json"
-        : ("~/Library/Application Support/Doublethink/usage.json" as NSString)
+        ? NSTemporaryDirectory() + "thoughtcop-e2e-usage-\(getpid()).json"
+        : ("~/Library/Application Support/ThoughtCop/usage.json" as NSString)
             .expandingTildeInPath)
 
 /// Tokens reported in one chat-completions response (`usage`).

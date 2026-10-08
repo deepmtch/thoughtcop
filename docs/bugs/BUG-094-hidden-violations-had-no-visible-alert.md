@@ -2,7 +2,7 @@
 
 ## Evidence
 
-The user (2026-10-04): with Doublethink minimized, the only sign of a new
+The user (2026-10-04): with ThoughtCop minimized, the only sign of a new
 violation was the menu-bar shield changing shape. The optional 10-second ticker
 popup did nothing while the window was hidden (BUG-074 forbids reopening it).
 The user asked for:
@@ -18,7 +18,7 @@ The user approved the mockups as drawn ("do it exactly like this").
 
 The first build, checked in the Parallels guest with host `prlctl capture`,
 drew the bubble off-screen. That guest's menu bar is full, so macOS hid the
-Doublethink icon and parked its window off-screen, and the bubble was anchored
+ThoughtCop icon and parked its window off-screen, and the bubble was anchored
 under it.
 
 ## Root cause

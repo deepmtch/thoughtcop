@@ -2,7 +2,7 @@
 
 ## User-visible failure
 
-Activity Monitor showed Doublethink at 177% CPU while the HUD was hidden. Hiding
+Activity Monitor showed ThoughtCop at 177% CPU while the HUD was hidden. Hiding
 the HUD did not stop the monitoring queue, so the machine remained hot.
 
 ## Production evidence
@@ -10,7 +10,7 @@ the HUD did not stop the monitoring queue, so the machine remained hot.
 The live Claude cache contained 19,584 files (1.2 GB), of which exactly two
 contained Claude session SSE stream URLs and 65 contained Desktop conversation
 records. A five-second process sample recorded
-2,170 of 2,200 samples on `doublethink.claude-cloud-activity`; 1,842 samples were
+2,170 of 2,200 samples on `thoughtcop.claude-cloud-activity`; 1,842 samples were
 inside `FileManager.attributesOfItem` and 208 were in directory enumeration.
 The live `/ui` state reported `tickerOverflowing: false`, excluding ticker
 animation as the primary cause.

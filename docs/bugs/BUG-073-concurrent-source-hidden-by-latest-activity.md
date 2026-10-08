@@ -4,9 +4,9 @@ Status: Fixed
 
 ## Reproduction evidence
 
-One Claude session was visibly running while Doublethink showed only a different
+One Claude session was visibly running while ThoughtCop showed only a different
 Codex session as `Working…`. The Claude JSONL still contained live tool records,
-and the privacy audit confirmed that Doublethink consumed them. Later Codex
+and the privacy audit confirmed that ThoughtCop consumed them. Later Codex
 activity changed the single ticker source.
 
 ## Root cause

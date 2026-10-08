@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture every Doublethink screen with realistic data, for visual review.
+"""Capture every ThoughtCop screen with realistic data, for visual review.
 
 Run in the Parallels guest only (never on the host; see AGENTS.md lessons):
     python3 Scripts/capture_screens.py OUT_DIR
@@ -236,24 +236,24 @@ def launch(root: Path, port: int, checker: int | None, violations: list) -> subp
     (root / "codex-index.jsonl").write_text("")
     environment = os.environ.copy()
     environment.update({
-        "DOUBLETHINK_API_PORT": str(port),
-        "DOUBLETHINK_CLAUDE_PROJECTS": str(root / "claude"),
-        "DOUBLETHINK_CODEX_SESSIONS": str(root / "codex"),
-        "DOUBLETHINK_CODEX_INDEX": str(root / "codex-index.jsonl"),
-        "DOUBLETHINK_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
-        "DOUBLETHINK_CLAUDE_CACHE": str(root / "cache"),
-        "DOUBLETHINK_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
-        "DOUBLETHINK_PRIVACY_AUDIT_PATH": str(root / "audit.jsonl"),
-        "DOUBLETHINK_VIOLATIONS_PATH": str(root / "violations.json"),
-        "DOUBLETHINK_UI_API_LOG": str(root / "ui-api.jsonl"),
-        "DOUBLETHINK_UI_API_TOKEN": API_TOKEN,
-        "DOUBLETHINK_HISTORY_COUNT": "0",
-        "DOUBLETHINK_USAGE_PATH": str(root / "usage.json"),
+        "THOUGHTCOP_API_PORT": str(port),
+        "THOUGHTCOP_CLAUDE_PROJECTS": str(root / "claude"),
+        "THOUGHTCOP_CODEX_SESSIONS": str(root / "codex"),
+        "THOUGHTCOP_CODEX_INDEX": str(root / "codex-index.jsonl"),
+        "THOUGHTCOP_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
+        "THOUGHTCOP_CLAUDE_CACHE": str(root / "cache"),
+        "THOUGHTCOP_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
+        "THOUGHTCOP_PRIVACY_AUDIT_PATH": str(root / "audit.jsonl"),
+        "THOUGHTCOP_VIOLATIONS_PATH": str(root / "violations.json"),
+        "THOUGHTCOP_UI_API_LOG": str(root / "ui-api.jsonl"),
+        "THOUGHTCOP_UI_API_TOKEN": API_TOKEN,
+        "THOUGHTCOP_HISTORY_COUNT": "0",
+        "THOUGHTCOP_USAGE_PATH": str(root / "usage.json"),
         # The real flash and bubble durations, so each step can be captured.
-        "DOUBLETHINK_E2E_ALERT_SECONDS": os.environ.get("DOUBLETHINK_CAPTURE_ALERT_SECONDS",
+        "THOUGHTCOP_E2E_ALERT_SECONDS": os.environ.get("THOUGHTCOP_CAPTURE_ALERT_SECONDS",
                                                      "3,5"),
     })
-    args = ["./.build/doublethink", "--isolated-e2e"]
+    args = ["./.build/thoughtcop", "--isolated-e2e"]
     args += (["--dummy-checker-url", f"http://127.0.0.1:{checker}/v1/chat/completions"]
              if checker else ["--local-only"])
     configure_isolated_rules()
@@ -282,9 +282,9 @@ def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", free_port()), Checker)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     for key in ["violationAlertsEnabled", "violationFlashEnabled", "compactWindowWidth"]:
-        subprocess.run(["/usr/bin/defaults", "delete", "doublethink", key], capture_output=True)
+        subprocess.run(["/usr/bin/defaults", "delete", "thoughtcop", key], capture_output=True)
 
-    with tempfile.TemporaryDirectory(prefix="doublethink-capture-") as temp:
+    with tempfile.TemporaryDirectory(prefix="thoughtcop-capture-") as temp:
         root = Path(temp)
         port = free_port()
         process = launch(root, port, server.server_address[1], VIOLATIONS)
@@ -333,7 +333,7 @@ def main() -> None:
 
             state = ui(port)
             assert state["tickerToolbarActions"] == ["Open history", "Settings",
-                                                     "Hide Doublethink"], state
+                                                     "Hide ThoughtCop"], state
             request(port, "POST", "/message")
             wait_ui(port, lambda s: s.get("messageMode") is True)
             capture.shot("06-reader-live-tabs", "reader")
@@ -432,10 +432,10 @@ def main() -> None:
                 assert ui(port)["settingsWindowTitle"] == tab.capitalize(), ui(port)["settingsWindowTitle"]
             state = ui(port)
             items = state["statusMenuItems"]
-            assert items[0] == "Show Doublethink" and \
+            assert items[0] == "Show ThoughtCop" and \
                 items[1].startswith("Open Violation History") and \
                 items[2:] == ["Show Last Violation", state["usageMenuTitle"], "Settings…",
-                              "Quit Doublethink"], items
+                              "Quit ThoughtCop"], items
             assert state["settingsFlashSwitchOn"] is True, state  # default on
             assert state["settingsBubbleSwitchOn"] is False, state  # off again
             assert state["settingsHistoryChoice"] == "50 newest", state
@@ -450,7 +450,7 @@ def main() -> None:
 
     # Active chats but no violations: "No violations yet." must stay on
     # screen when the next thought arrives (it is not a live view).
-    with tempfile.TemporaryDirectory(prefix="doublethink-capture-chats-") as temp:
+    with tempfile.TemporaryDirectory(prefix="thoughtcop-capture-chats-") as temp:
         root = Path(temp)
         port = free_port()
         process = launch(root, port, None, [])
@@ -472,7 +472,7 @@ def main() -> None:
         finally:
             stop(process, port)
 
-    with tempfile.TemporaryDirectory(prefix="doublethink-capture-empty-") as temp:
+    with tempfile.TemporaryDirectory(prefix="thoughtcop-capture-empty-") as temp:
         root = Path(temp)
         port = free_port()
         process = launch(root, port, None, [])
@@ -502,7 +502,7 @@ def main() -> None:
             stop(process, port)
     server.shutdown()
     for key in ["violationAlertsEnabled", "violationFlashEnabled"]:
-        subprocess.run(["/usr/bin/defaults", "delete", "doublethink", key],
+        subprocess.run(["/usr/bin/defaults", "delete", "thoughtcop", key],
                    capture_output=True)
 
     manifest = capture.manifest + capture_chats.manifest + capture_empty.manifest

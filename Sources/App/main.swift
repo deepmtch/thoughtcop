@@ -1,4 +1,4 @@
-// Doublethink application and command-line entry point.
+// ThoughtCop application and command-line entry point.
 
 import AppKit
 import Foundation

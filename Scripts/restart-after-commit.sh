@@ -11,7 +11,7 @@ commit=$(git -C "$repo_root" rev-parse --short HEAD)
 mkdir -p "$state_dir"
 
 if ! mkdir "$lock_dir" 2>/dev/null; then
-    echo "Doublethink post-commit restart already running; skipped $commit"
+    echo "ThoughtCop post-commit restart already running; skipped $commit"
     exit 0
 fi
 cleanup() {
@@ -19,7 +19,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-echo "Doublethink: rebuilding $commit after commit"
+echo "ThoughtCop: rebuilding $commit after commit"
 {
     echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') rebuilding $commit"
     if ! (cd "$repo_root" && ./build.sh); then
@@ -29,10 +29,10 @@ echo "Doublethink: rebuilding $commit after commit"
 
     # LaunchServices owns the app process, so it survives Git exiting without
     # becoming a restartable service. SingleInstance replaces the old copy once.
-    /usr/bin/open -n -g "$repo_root/.build/Doublethink.app"
+    /usr/bin/open -n -g "$repo_root/.build/ThoughtCop.app"
     sleep 1
-    /usr/bin/pgrep -x doublethink >/dev/null
+    /usr/bin/pgrep -x thoughtcop >/dev/null
     echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') opened app bundle for $commit"
 } >> "$restart_log" 2>&1
 
-echo "Doublethink: rebuilt and opened replacement once; log: $restart_log"
+echo "ThoughtCop: rebuilt and opened replacement once; log: $restart_log"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the running AppKit UI only through Doublethink's local API."""
+"""Exercise the running AppKit UI only through ThoughtCop's local API."""
 
 import json
 import os
@@ -9,16 +9,16 @@ import urllib.request
 from pathlib import Path
 
 
-BASE = os.environ.get("DOUBLETHINK_UI_API", "http://127.0.0.1:17321")
+BASE = os.environ.get("THOUGHTCOP_UI_API", "http://127.0.0.1:17321")
 LOG = Path(os.environ.get(
-    "DOUBLETHINK_UI_API_LOG",
-    Path.home() / "Library/Logs/Doublethink/ui-api.jsonl",
+    "THOUGHTCOP_UI_API_LOG",
+    Path.home() / "Library/Logs/ThoughtCop/ui-api.jsonl",
 ))
 TOKEN_PATH = Path(os.environ.get(
-    "DOUBLETHINK_UI_API_TOKEN_PATH",
-    Path.home() / "Library/Application Support/Doublethink/ui-api-token",
+    "THOUGHTCOP_UI_API_TOKEN_PATH",
+    Path.home() / "Library/Application Support/ThoughtCop/ui-api-token",
 ))
-TOKEN = os.environ.get("DOUBLETHINK_UI_API_TOKEN") or TOKEN_PATH.read_text().strip()
+TOKEN = os.environ.get("THOUGHTCOP_UI_API_TOKEN") or TOKEN_PATH.read_text().strip()
 
 
 def request(path: str, method: str = "GET", authenticated: bool = True) -> bytes:
@@ -114,7 +114,7 @@ assert closed["uiStyle"] == "single-line-ticker"
 assert closed["tickerSettingsControlVisible"] is True
 assert closed["windowWidth"] == closed["contentViewWidth"] == 510
 assert closed["tickerToolbarAttached"] is True
-assert closed["tickerPrimaryActions"] == ["Open history", "Settings", "Hide Doublethink"]
+assert closed["tickerPrimaryActions"] == ["Open history", "Settings", "Hide ThoughtCop"]
 assert closed["tickerToolbarActions"] == closed["tickerPrimaryActions"]
 
 records = [json.loads(line) for line in LOG.read_text().splitlines() if line.strip()]

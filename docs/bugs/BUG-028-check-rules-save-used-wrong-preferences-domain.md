@@ -9,14 +9,14 @@ the original rule. The running UI also continued to report
 ## Reproduction evidence
 
 - The editor showed the changed text and an enabled Save button.
-- After Save, the `com.doublethink.app` preferences domain did not exist.
+- After Save, the `com.thoughtcop.app` preferences domain did not exist.
 - The running `/ui` state still returned the built-in rule and
   `checkRulesCustomized: false`.
 
 ## Root cause
 
 The production read path defaulted to `CheckRulesStore.localDefaults`, the
-dedicated `com.doublethink.app` suite. The production write path accidentally
+dedicated `com.thoughtcop.app` suite. The production write path accidentally
 defaulted to `UserDefaults.standard`. Save therefore succeeded in a different
 preferences domain that subsequent reads never consulted.
 
@@ -32,6 +32,6 @@ preferences domain that subsequent reads never consulted.
 ## Verification
 
 - `Scripts/test.sh`
-- `./.build/doublethink --check-rules-editor-selftest`
+- `./.build/thoughtcop --check-rules-editor-selftest`
 - Running `/ui` reports `checkRulesCustomized: true` after an editor save and
   returns the saved `checkRulesText`.

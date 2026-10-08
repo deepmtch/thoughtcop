@@ -271,7 +271,7 @@ private func checkOneInstruction(_ instruction: String,
 }
 
 /// Whether each violation claim must be confirmed by a second request to the
-/// same model before Doublethink shows or stores it. A user setting, on unless
+/// same model before ThoughtCop shows or stores it. A user setting, on unless
 /// the user turns it off.
 enum ViolationVerificationPreference {
     static let defaultsKey = "violationVerificationEnabled"
@@ -357,7 +357,7 @@ private func verifyClaim(_ claim: EvaluationDecision, instruction: String,
     }
     guard envelopeData.count <= MAX_EXTERNAL_ENVELOPE_BYTES else {
         done(.failure(VerificationFailure(errorDescription:
-            "Doublethink did not send the verification: the \(envelopeData.count)-byte " +
+            "ThoughtCop did not send the verification: the \(envelopeData.count)-byte " +
             "request exceeds its \(MAX_EXTERNAL_ENVELOPE_BYTES)-byte local transmission limit")))
         return
     }
@@ -513,11 +513,11 @@ func checkDrift(_ evidence: EvaluationRecord,
         serializedEvaluationEnvelope(instruction: $0, evidence: evidence)?.count
     }
     guard envelopeSizes.count == instructions.count else {
-        done(.failed("Doublethink could not serialize this evidence record"), 0)
+        done(.failed("ThoughtCop could not serialize this evidence record"), 0)
         return
     }
     if let largest = envelopeSizes.max(), largest > MAX_EXTERNAL_ENVELOPE_BYTES {
-        done(.failed("Doublethink did not send this record: the \(largest)-byte request " +
+        done(.failed("ThoughtCop did not send this record: the \(largest)-byte request " +
             "exceeds its \(MAX_EXTERNAL_ENVELOPE_BYTES)-byte local transmission limit"), 0)
         return
     }

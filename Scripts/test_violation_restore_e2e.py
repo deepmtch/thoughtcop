@@ -28,7 +28,7 @@ RECORDS = 500          # ViolationStore.maximumRecords, the largest choice
 LAUNCH_LIMIT = 5.0
 LIVE_LIMIT = 1.0
 LIVE_RECORDS = 5
-SCREENSHOT_DIRECTORY = os.environ.get("DOUBLETHINK_SCREENSHOT_DIR")
+SCREENSHOT_DIRECTORY = os.environ.get("THOUGHTCOP_SCREENSHOT_DIR")
 API_TOKEN = "violation-restore-e2e-token-000000000000"
 
 
@@ -106,7 +106,7 @@ def save_screenshot(port: int, name: str) -> None:
 def main() -> None:
     limit = float(sys.argv[1]) if len(sys.argv) > 1 else LAUNCH_LIMIT
     port = free_port()
-    with tempfile.TemporaryDirectory(prefix="doublethink-violations-") as temp:
+    with tempfile.TemporaryDirectory(prefix="thoughtcop-violations-") as temp:
         root = Path(temp)
         records = [{
             "id": f"00000000-0000-4000-8000-{index:012d}",
@@ -125,26 +125,26 @@ def main() -> None:
         (root / "codex-index.jsonl").write_text("")
         environment = os.environ.copy()
         environment.update({
-            "DOUBLETHINK_API_PORT": str(port),
-            "DOUBLETHINK_CLAUDE_PROJECTS": str(root / "claude"),
-            "DOUBLETHINK_CODEX_SESSIONS": str(root / "codex"),
-            "DOUBLETHINK_CODEX_INDEX": str(root / "codex-index.jsonl"),
-            "DOUBLETHINK_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
-            "DOUBLETHINK_CLAUDE_CACHE": str(root / "cache"),
-            "DOUBLETHINK_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
-            "DOUBLETHINK_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
-            "DOUBLETHINK_VIOLATIONS_PATH": str(root / "violations.json"),
-            "DOUBLETHINK_UI_API_LOG": str(root / "ui-api.jsonl"),
-            "DOUBLETHINK_UI_API_TOKEN": API_TOKEN,
-            "DOUBLETHINK_HISTORY_COUNT": "0",
+            "THOUGHTCOP_API_PORT": str(port),
+            "THOUGHTCOP_CLAUDE_PROJECTS": str(root / "claude"),
+            "THOUGHTCOP_CODEX_SESSIONS": str(root / "codex"),
+            "THOUGHTCOP_CODEX_INDEX": str(root / "codex-index.jsonl"),
+            "THOUGHTCOP_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
+            "THOUGHTCOP_CLAUDE_CACHE": str(root / "cache"),
+            "THOUGHTCOP_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
+            "THOUGHTCOP_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
+            "THOUGHTCOP_VIOLATIONS_PATH": str(root / "violations.json"),
+            "THOUGHTCOP_UI_API_LOG": str(root / "ui-api.jsonl"),
+            "THOUGHTCOP_UI_API_TOKEN": API_TOKEN,
+            "THOUGHTCOP_HISTORY_COUNT": "0",
         })
         # Exercise the largest selectable history limit.
-        subprocess.run(["/usr/bin/defaults", "write", "doublethink",
+        subprocess.run(["/usr/bin/defaults", "write", "thoughtcop",
                         "violationHistoryLimit", "-int", str(RECORDS)], check=True)
         started = time.monotonic()
         configure_isolated_rules()
         process = subprocess.Popen(
-            ["./.build/doublethink", "--isolated-e2e", "--local-only"],
+            ["./.build/thoughtcop", "--isolated-e2e", "--local-only"],
             env=environment, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL)
         state: dict = {}
@@ -203,7 +203,7 @@ def main() -> None:
             if log.exists():
                 Path(".local").mkdir(exist_ok=True)
                 (Path(".local") / "last-restore-ui-api.jsonl").write_text(log.read_text())
-            subprocess.run(["/usr/bin/defaults", "delete", "doublethink",
+            subprocess.run(["/usr/bin/defaults", "delete", "thoughtcop",
                             "violationHistoryLimit"], capture_output=True, check=False)
             process.terminate()
             try:

@@ -2,7 +2,7 @@
 
 ## User-visible failure
 
-Running `doublethink --check` to verify the configured checker erased the existing
+Running `thoughtcop --check` to verify the configured checker erased the existing
 privacy audit before recording the one-shot request and result.
 
 ## Evidence and cause

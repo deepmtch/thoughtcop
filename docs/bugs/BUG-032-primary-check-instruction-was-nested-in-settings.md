@@ -2,7 +2,7 @@
 
 ## Symptom
 
-Editing what Doublethink checks required opening the sliders menu and then finding
+Editing what ThoughtCop checks required opening the sliders menu and then finding
 **What to Check…**. The app's primary configuration task was presented like an
 infrequent appearance preference.
 
