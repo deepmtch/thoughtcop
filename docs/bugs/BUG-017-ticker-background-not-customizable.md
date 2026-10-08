@@ -24,7 +24,7 @@ color model or background layer behind the ticker content.
 
 ## Verification
 
-`./.build/thinkpeek --ticker-background-selftest` verifies RGBA persistence, reset, and
+`./.build/thoughtcrime --ticker-background-selftest` verifies RGBA persistence, reset, and
 light/dark contrast selection. Live `/background/blue` must show a blue 460 × 70
 ticker with white foreground and `tickerBackgroundMode: custom`. After restart,
 the RGBA values must persist. `/background/system` must restore the system

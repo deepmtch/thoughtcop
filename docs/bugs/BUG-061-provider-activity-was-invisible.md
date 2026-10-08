@@ -3,7 +3,7 @@
 ## User-visible failure
 
 Claude could visibly show `Working on it…` and several Codex tasks could be
-running while Thinkpeek remained on `Watching Claude and Codex…`. The user
+running while Thoughtcrime remained on `Watching Claude and Codex…`. The user
 could not tell whether monitoring was alive, which provider had changed, or
 whether a reasoning record was currently being checked externally.
 
@@ -15,7 +15,7 @@ the parser discarded most of them before presentation saw any activity.
 
 The one existing operation-start path updated only the native panel title. The
 borderless ticker draws its own header, so the visible header remained
-`Thinkpeek`. Claude's cloud tasks also publish exact lifecycle events through
+`Thoughtcrime`. Claude's cloud tasks also publish exact lifecycle events through
 the Desktop app's cached session SSE stream rather than local Claude Code JSONL,
 which the monitor did not observe.
 

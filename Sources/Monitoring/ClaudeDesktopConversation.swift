@@ -132,7 +132,7 @@ final class ClaudeDesktopConversationMonitor {
         let modified: Date
     }
 
-    private let queue = DispatchQueue(label: "thinkpeek.claude-desktop-conversation",
+    private let queue = DispatchQueue(label: "thoughtcrime.claude-desktop-conversation",
                                       qos: .utility)
     private let directory: String
     private var discoveryIndex = ClaudeCacheDiscoveryIndex()
@@ -147,7 +147,7 @@ final class ClaudeDesktopConversationMonitor {
 
     init(directory: String? = nil) {
         self.directory = directory ?? ProcessInfo.processInfo.environment[
-            "THINKPEEK_CLAUDE_DESKTOP_CACHE"] ?? NSString(
+            "THOUGHTCRIME_CLAUDE_DESKTOP_CACHE"] ?? NSString(
                 string: "~/Library/Application Support/Claude/Cache/Cache_Data")
                 .expandingTildeInPath
     }
@@ -183,7 +183,7 @@ final class ClaudeDesktopConversationMonitor {
         }
 
         // A desktop conversation can already be actively thinking when
-        // ThinkPeek launches. Surface the configured history count as local
+        // Thoughtcrime launches. Surface the configured history count as local
         // history, then retain exact identifiers so later cache writes appear
         // once only. No content or timestamp inference decides eligibility.
         if !initialized {

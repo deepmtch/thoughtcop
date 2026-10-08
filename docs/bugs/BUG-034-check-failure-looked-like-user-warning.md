@@ -2,10 +2,10 @@
 
 ## Symptom
 
-When Thinkpeek could not send or score an evaluation, the ticker and message
+When Thoughtcrime could not send or score an evaluation, the ticker and message
 reader used the same warning symbol and nearly the same presentation as a
 successful user-configured warning. The reader header still named the monitored
-Codex or Claude task, making an internal Thinkpeek failure look like task output.
+Codex or Claude task, making an internal Thoughtcrime failure look like task output.
 
 ## Cause
 
@@ -17,8 +17,8 @@ failures received only a red footer.
 ## Fix
 
 - Model reader tone explicitly as normal, warning, or error.
-- Attribute configured warnings to `Thinkpeek · Warning` and use amber.
-- Attribute evaluator failures to `Thinkpeek · Check error`, prefix them with a
+- Attribute configured warnings to `Thoughtcrime · Warning` and use amber.
+- Attribute evaluator failures to `Thoughtcrime · Check error`, prefix them with a
   stop/error symbol, and use a red wash plus a red leading stripe.
 - Preserve the original monitored source and content inside the detail body so
   attribution remains factual.

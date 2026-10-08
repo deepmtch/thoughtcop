@@ -211,15 +211,15 @@ def ui(port: int) -> dict:
 
 def run(verification: bool, shapes: dict[str, dict]) -> tuple[dict, dict]:
     """Returns (final /ui state, content → times reported)."""
-    subprocess.run(["/usr/bin/defaults", "write", "thinkpeek",
+    subprocess.run(["/usr/bin/defaults", "write", "thoughtcrime",
                     "violationVerificationEnabled", "-bool",
                     "true" if verification else "false"], check=True)
-    subprocess.run(["/usr/bin/defaults", "write", "thinkpeek",
+    subprocess.run(["/usr/bin/defaults", "write", "thoughtcrime",
                     "violationHistoryLimit", "-int", "500"], check=True)
     port = free_port()
     expected_checks = sum(1 for _, _, steps in SESSIONS for step in steps
                           if step[0] != "tool")
-    with tempfile.TemporaryDirectory(prefix="thinkpeek-ai-accuracy-") as temp:
+    with tempfile.TemporaryDirectory(prefix="thoughtcrime-ai-accuracy-") as temp:
         root = Path(temp)
         project = root / "claude" / "project"
         project.mkdir(parents=True)
@@ -233,20 +233,20 @@ def run(verification: bool, shapes: dict[str, dict]) -> tuple[dict, dict]:
         (root / "codex-index.jsonl").write_text("")
         environment = os.environ.copy()
         environment.update({
-            "THINKPEEK_API_PORT": str(port),
-            "THINKPEEK_CLAUDE_PROJECTS": str(root / "claude"),
-            "THINKPEEK_CODEX_SESSIONS": str(root / "codex"),
-            "THINKPEEK_CODEX_INDEX": str(root / "codex-index.jsonl"),
-            "THINKPEEK_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
-            "THINKPEEK_CLAUDE_CACHE": str(root / "cache"),
-            "THINKPEEK_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
-            "THINKPEEK_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
-            "THINKPEEK_VIOLATIONS_PATH": str(root / "violations.json"),
-            "THINKPEEK_UI_API_LOG": str(root / "ui-api.jsonl"),
-            "THINKPEEK_UI_API_TOKEN": API_TOKEN,
-            "THINKPEEK_HISTORY_COUNT": "0",
+            "THOUGHTCRIME_API_PORT": str(port),
+            "THOUGHTCRIME_CLAUDE_PROJECTS": str(root / "claude"),
+            "THOUGHTCRIME_CODEX_SESSIONS": str(root / "codex"),
+            "THOUGHTCRIME_CODEX_INDEX": str(root / "codex-index.jsonl"),
+            "THOUGHTCRIME_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
+            "THOUGHTCRIME_CLAUDE_CACHE": str(root / "cache"),
+            "THOUGHTCRIME_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
+            "THOUGHTCRIME_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
+            "THOUGHTCRIME_VIOLATIONS_PATH": str(root / "violations.json"),
+            "THOUGHTCRIME_UI_API_LOG": str(root / "ui-api.jsonl"),
+            "THOUGHTCRIME_UI_API_TOKEN": API_TOKEN,
+            "THOUGHTCRIME_HISTORY_COUNT": "0",
         })
-        process = subprocess.Popen(["./.build/thinkpeek", "--isolated-e2e"],
+        process = subprocess.Popen(["./.build/thoughtcrime", "--isolated-e2e"],
                                    env=environment, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
         try:
@@ -283,7 +283,7 @@ def run(verification: bool, shapes: dict[str, dict]) -> tuple[dict, dict]:
             except subprocess.TimeoutExpired:
                 process.kill()
             for key in ["violationVerificationEnabled", "violationHistoryLimit"]:
-                subprocess.run(["/usr/bin/defaults", "delete", "thinkpeek", key],
+                subprocess.run(["/usr/bin/defaults", "delete", "thoughtcrime", key],
                                capture_output=True, check=False)
     reported: dict[str, int] = {}
     for violation in state.get("violations", []):
@@ -291,7 +291,7 @@ def run(verification: bool, shapes: dict[str, dict]) -> tuple[dict, dict]:
     return state, reported
 
 
-REPEATS = int(os.environ.get("THINKPEEK_AI_TEST_REPEATS", "3"))
+REPEATS = int(os.environ.get("THOUGHTCRIME_AI_TEST_REPEATS", "3"))
 
 
 def verdict(label: str, count: int) -> str:
@@ -300,9 +300,9 @@ def verdict(label: str, count: int) -> str:
     return "ok" if count == 0 else "FALSE"
 
 
-MODES = os.environ.get("THINKPEEK_AI_TEST_MODES", "").split(",") if \
-    os.environ.get("THINKPEEK_AI_TEST_MODES") else [None]
-RULES_SUITE = "com.thinkpeek.app.e2e"  # CheckRulesStore.suiteName under --isolated-e2e
+MODES = os.environ.get("THOUGHTCRIME_AI_TEST_MODES", "").split(",") if \
+    os.environ.get("THOUGHTCRIME_AI_TEST_MODES") else [None]
+RULES_SUITE = "com.thoughtcrime.app.e2e"  # CheckRulesStore.suiteName under --isolated-e2e
 
 
 def set_mode(mode: str | None) -> str | None:
@@ -332,7 +332,7 @@ def report(mode: str | None, shapes: dict[str, dict]) -> None:
     print(f"\n===== instruction mode: {mode or 'as stored'} =====")
     runs = {False: [], True: []}
     verification_modes = [False] if os.environ.get(
-        "THINKPEEK_AI_TEST_VERIFICATION") == "off" else [False, True]
+        "THOUGHTCRIME_AI_TEST_VERIFICATION") == "off" else [False, True]
     for _ in range(REPEATS):
         for verification in verification_modes:
             runs[verification].append(run(verification, shapes))

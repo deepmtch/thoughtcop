@@ -7,9 +7,9 @@ The ticker could label Claude reasoning with a transcript `custom-title` or
 
 ## Cause
 
-Thinkpeek read only title records embedded in `~/.claude/projects` transcripts.
+Thoughtcrime read only title records embedded in `~/.claude/projects` transcripts.
 Claude Desktop owns separate local Claude Code session metadata that maps each
-`cliSessionId` to its local task `title`, but Thinkpeek did not consult it.
+`cliSessionId` to its local task `title`, but Thoughtcrime did not consult it.
 
 ## Fix
 

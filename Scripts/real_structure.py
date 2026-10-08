@@ -8,7 +8,7 @@ listed in KEEP_PATHS. Empty and whitespace-only strings stay verbatim, because
 the parser treats them differently from readable text.
 
 KEEP_PATHS is not a guess about which values look structural. It lists exactly
-the string values Thinkpeek's parser compares or validates:
+the string values Thoughtcrime's parser compares or validates:
 
 - Transcript.swift ``blocks(in:)``: top-level ``type``, ``subtype`` and
   ``operation``; Codex ``payload.type``, ``payload.role``, ``payload.phase``,
@@ -164,7 +164,7 @@ class CanaryWriter:
         if path == TIMESTAMP_PATH:
             return self.synthetic_timestamp()
         if path == CODEX_SESSION_ID_PATH and record.get("type") == "session_meta":
-            return str(uuid.uuid5(uuid.NAMESPACE_URL, f"thinkpeek-{value}"))
+            return str(uuid.uuid5(uuid.NAMESPACE_URL, f"thoughtcrime-{value}"))
         return self.token(path)
 
 

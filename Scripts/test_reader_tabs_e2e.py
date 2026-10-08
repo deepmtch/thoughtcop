@@ -70,7 +70,7 @@ def think(path: Path, text: str) -> None:
 
 def main() -> None:
     port = free_port()
-    with tempfile.TemporaryDirectory(prefix="thinkpeek-reader-tabs-") as temp:
+    with tempfile.TemporaryDirectory(prefix="thoughtcrime-reader-tabs-") as temp:
         root = Path(temp)
         project = root / "claude" / "project"
         project.mkdir(parents=True)
@@ -89,22 +89,22 @@ def main() -> None:
         (root / "codex-index.jsonl").write_text("")
         environment = os.environ.copy()
         environment.update({
-            "THINKPEEK_API_PORT": str(port),
-            "THINKPEEK_CLAUDE_PROJECTS": str(root / "claude"),
-            "THINKPEEK_CODEX_SESSIONS": str(root / "codex"),
-            "THINKPEEK_CODEX_INDEX": str(root / "codex-index.jsonl"),
-            "THINKPEEK_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
-            "THINKPEEK_CLAUDE_CACHE": str(root / "cache"),
-            "THINKPEEK_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
-            "THINKPEEK_PRIVACY_AUDIT_PATH": str(root / "audit.jsonl"),
-            "THINKPEEK_VIOLATIONS_PATH": str(root / "violations.json"),
-            "THINKPEEK_UI_API_LOG": str(root / "ui-api.jsonl"),
-            "THINKPEEK_UI_API_TOKEN": API_TOKEN,
-            "THINKPEEK_HISTORY_COUNT": "0",
-            "THINKPEEK_USAGE_PATH": str(root / "usage.json"),
+            "THOUGHTCRIME_API_PORT": str(port),
+            "THOUGHTCRIME_CLAUDE_PROJECTS": str(root / "claude"),
+            "THOUGHTCRIME_CODEX_SESSIONS": str(root / "codex"),
+            "THOUGHTCRIME_CODEX_INDEX": str(root / "codex-index.jsonl"),
+            "THOUGHTCRIME_CLAUDE_DESKTOP_SESSIONS": str(root / "desktop"),
+            "THOUGHTCRIME_CLAUDE_CACHE": str(root / "cache"),
+            "THOUGHTCRIME_CLAUDE_DESKTOP_CACHE": str(root / "cache"),
+            "THOUGHTCRIME_PRIVACY_AUDIT_PATH": str(root / "audit.jsonl"),
+            "THOUGHTCRIME_VIOLATIONS_PATH": str(root / "violations.json"),
+            "THOUGHTCRIME_UI_API_LOG": str(root / "ui-api.jsonl"),
+            "THOUGHTCRIME_UI_API_TOKEN": API_TOKEN,
+            "THOUGHTCRIME_HISTORY_COUNT": "0",
+            "THOUGHTCRIME_USAGE_PATH": str(root / "usage.json"),
         })
         configure_isolated_rules()
-        process = subprocess.Popen(["./.build/thinkpeek", "--isolated-e2e", "--local-only"],
+        process = subprocess.Popen(["./.build/thoughtcrime", "--isolated-e2e", "--local-only"],
                                    env=environment, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
         try:

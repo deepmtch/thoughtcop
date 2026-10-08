@@ -1,17 +1,17 @@
-// Ensures only one thinkpeek window runs at a time.
+// Ensures only one thoughtcrime window runs at a time.
 
 import Foundation
 
-/// Terminate any other running thinkpeek before this one opens a window.
+/// Terminate any other running thoughtcrime before this one opens a window.
 ///
 /// Matches on process *name* (`pgrep -x`), never the full command line: a
-/// `-f thinkpeek` match would also hit the shell that launched us and kill the
+/// `-f thoughtcrime` match would also hit the shell that launched us and kill the
 /// user's terminal session.
 func killOtherInstances() {
     let me = getpid()
     let pgrep = Process()
     pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-    pgrep.arguments = ["-x", "thinkpeek"]
+    pgrep.arguments = ["-x", "thoughtcrime"]
     let pipe = Pipe()
     pgrep.standardOutput = pipe
     pgrep.standardError = Pipe()
@@ -34,5 +34,5 @@ func killOtherInstances() {
     usleep(300_000)
     for pid in others where kill(pid, 0) == 0 { kill(pid, SIGKILL) }
     FileHandle.standardError.write(
-        "thinkpeek: replaced \(others.count) running instance(s)\n".data(using: .utf8)!)
+        "thoughtcrime: replaced \(others.count) running instance(s)\n".data(using: .utf8)!)
 }

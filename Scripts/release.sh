@@ -8,22 +8,22 @@ if [ -n "$(/usr/bin/git status --porcelain --untracked-files=normal)" ]; then
     exit 2
 fi
 
-identity=${THINKPEEK_SIGNING_IDENTITY:-}
-notary_profile=${THINKPEEK_NOTARY_PROFILE:-}
+identity=${THOUGHTCRIME_SIGNING_IDENTITY:-}
+notary_profile=${THOUGHTCRIME_NOTARY_PROFILE:-}
 
 if [ -z "$identity" ]; then
-    echo "release blocked: set THINKPEEK_SIGNING_IDENTITY to a Developer ID Application identity" >&2
+    echo "release blocked: set THOUGHTCRIME_SIGNING_IDENTITY to a Developer ID Application identity" >&2
     exit 2
 fi
 case "$identity" in
     "Developer ID Application: "*) ;;
     *)
-        echo "release blocked: THINKPEEK_SIGNING_IDENTITY must name a Developer ID Application certificate" >&2
+        echo "release blocked: THOUGHTCRIME_SIGNING_IDENTITY must name a Developer ID Application certificate" >&2
         exit 2
         ;;
 esac
 if [ -z "$notary_profile" ]; then
-    echo "release blocked: set THINKPEEK_NOTARY_PROFILE to a notarytool keychain profile" >&2
+    echo "release blocked: set THOUGHTCRIME_NOTARY_PROFILE to a notarytool keychain profile" >&2
     exit 2
 fi
 
@@ -46,17 +46,17 @@ fi
 ./Scripts/test.sh
 
 version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-    Resources/Thinkpeek-Info.plist)
+    Resources/Thoughtcrime-Info.plist)
 architecture=$(/usr/bin/uname -m)
 release_parent=".build/releases"
 /bin/mkdir -p "$release_parent"
-release_dir=$(/usr/bin/mktemp -d "$release_parent/Thinkpeek-$version.XXXXXX")
-app="$release_dir/Thinkpeek.app"
-submission_zip="$release_dir/Thinkpeek-$version-notarization.zip"
+release_dir=$(/usr/bin/mktemp -d "$release_parent/Thoughtcrime-$version.XXXXXX")
+app="$release_dir/Thoughtcrime.app"
+submission_zip="$release_dir/Thoughtcrime-$version-notarization.zip"
 submission_json="$release_dir/notarization.json"
-final_zip="$release_dir/Thinkpeek-$version-macos-$architecture.zip"
+final_zip="$release_dir/Thoughtcrime-$version-macos-$architecture.zip"
 
-/usr/bin/ditto .build/Thinkpeek.app "$app"
+/usr/bin/ditto .build/Thoughtcrime.app "$app"
 /usr/bin/codesign --force --options runtime --timestamp \
     --sign "$identity" "$app"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$app"

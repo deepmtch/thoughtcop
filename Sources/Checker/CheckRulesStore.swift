@@ -18,7 +18,7 @@ enum CheckRulesStore {
     /// Isolated tests use their own domain: they must never read or change
     /// the user's real rules (a host run once checked each record against
     /// the user's two real rules).
-    static let suiteName = ISOLATED_E2E ? "com.thinkpeek.app.e2e" : "com.thinkpeek.app"
+    static let suiteName = ISOLATED_E2E ? "com.thoughtcrime.app.e2e" : "com.thoughtcrime.app"
     static let defaultsKey = "runtimeCheckRules"
     static let modeKey = "runtimeCheckInstructionMode"
     // Flagging is opt-in. A hidden, product-authored heuristic must never be

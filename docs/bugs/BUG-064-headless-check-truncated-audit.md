@@ -2,7 +2,7 @@
 
 ## User-visible failure
 
-Running `thinkpeek --check` to verify the configured checker erased the existing
+Running `thoughtcrime --check` to verify the configured checker erased the existing
 privacy audit before recording the one-shot request and result.
 
 ## Evidence and cause

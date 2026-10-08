@@ -8,8 +8,9 @@ mkdir -p "$module_cache"
 
 swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
     -framework Security \
-    -module-cache-path "$module_cache" -o "$build_dir/thinkpeek" \
+    -module-cache-path "$module_cache" -o "$build_dir/thoughtcrime" \
     Sources/App/Config.swift \
+    Sources/App/LegacyMigration.swift \
     Sources/Checker/CheckRulesStore.swift \
     Sources/Checker/CheckerCredentials.swift \
     Sources/Checker/ViolationStore.swift \
@@ -47,14 +48,16 @@ swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
 
 # A minimal app bundle lets LaunchServices own the GUI process. Launching a raw
 # executable from a Git hook leaves it tied to the hook's process lifetime.
-app_contents="$build_dir/Thinkpeek.app/Contents"
+app_contents="$build_dir/Thoughtcrime.app/Contents"
 mkdir -p "$app_contents/MacOS"
-cp "$build_dir/thinkpeek" "$app_contents/MacOS/thinkpeek"
-cp "Resources/Thinkpeek-Info.plist" "$app_contents/Info.plist"
-/usr/bin/codesign --force --deep --sign - "$build_dir/Thinkpeek.app"
+cp "$build_dir/thoughtcrime" "$app_contents/MacOS/thoughtcrime"
+cp "Resources/Thoughtcrime-Info.plist" "$app_contents/Info.plist"
+mkdir -p "$app_contents/Resources"
+cp "Resources/Thoughtcrime.icns" "$app_contents/Resources/Thoughtcrime.icns"
+/usr/bin/codesign --force --deep --sign - "$build_dir/Thoughtcrime.app"
 /usr/bin/touch "$build_dir/build.stamp"
 
-if /usr/bin/pgrep -x thinkpeek >/dev/null 2>&1; then
-    echo "build complete; a running Thinkpeek still uses its old binary"
+if /usr/bin/pgrep -x thoughtcrime >/dev/null 2>&1; then
+    echo "build complete; a running Thoughtcrime still uses its old binary"
     echo "run ./restart.sh to replace it with this build"
 fi

@@ -1,4 +1,4 @@
-// Thinkpeek application and command-line entry point.
+// Thoughtcrime application and command-line entry point.
 
 import AppKit
 import Foundation
@@ -82,6 +82,9 @@ if let requestedEvidence {
 }
 
 if !ISOLATED_E2E { killOtherInstances() }
+// Settings and data saved under the previous app name are carried over
+// once; isolated test runs never touch the user's domains.
+if !ISOLATED_E2E { LegacyMigration.run() }
 
 let app = NSApplication.shared
 let hud = HUD()

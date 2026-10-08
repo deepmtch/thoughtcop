@@ -5,7 +5,7 @@ struct OperationPresentationState {
     private var waitingByIdentity: [String: String] = [:]
     private var latestPendingIdentity: String?
     private var latestWaitingIdentity: String?
-    private(set) var lastUsefulTitle = "Thinkpeek"
+    private(set) var lastUsefulTitle = "Thoughtcrime"
 
     var operationPending: Bool { !pendingByIdentity.isEmpty }
     var operationWaiting: Bool { !waitingByIdentity.isEmpty }

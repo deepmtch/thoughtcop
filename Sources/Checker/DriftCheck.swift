@@ -271,7 +271,7 @@ private func checkOneInstruction(_ instruction: String,
 }
 
 /// Whether each violation claim must be confirmed by a second request to the
-/// same model before Thinkpeek shows or stores it. A user setting, on unless
+/// same model before Thoughtcrime shows or stores it. A user setting, on unless
 /// the user turns it off.
 enum ViolationVerificationPreference {
     static let defaultsKey = "violationVerificationEnabled"
@@ -357,7 +357,7 @@ private func verifyClaim(_ claim: EvaluationDecision, instruction: String,
     }
     guard envelopeData.count <= MAX_EXTERNAL_ENVELOPE_BYTES else {
         done(.failure(VerificationFailure(errorDescription:
-            "Thinkpeek did not send the verification: the \(envelopeData.count)-byte " +
+            "Thoughtcrime did not send the verification: the \(envelopeData.count)-byte " +
             "request exceeds its \(MAX_EXTERNAL_ENVELOPE_BYTES)-byte local transmission limit")))
         return
     }
@@ -513,11 +513,11 @@ func checkDrift(_ evidence: EvaluationRecord,
         serializedEvaluationEnvelope(instruction: $0, evidence: evidence)?.count
     }
     guard envelopeSizes.count == instructions.count else {
-        done(.failed("Thinkpeek could not serialize this evidence record"), 0)
+        done(.failed("Thoughtcrime could not serialize this evidence record"), 0)
         return
     }
     if let largest = envelopeSizes.max(), largest > MAX_EXTERNAL_ENVELOPE_BYTES {
-        done(.failed("Thinkpeek did not send this record: the \(largest)-byte request " +
+        done(.failed("Thoughtcrime did not send this record: the \(largest)-byte request " +
             "exceeds its \(MAX_EXTERNAL_ENVELOPE_BYTES)-byte local transmission limit"), 0)
         return
     }

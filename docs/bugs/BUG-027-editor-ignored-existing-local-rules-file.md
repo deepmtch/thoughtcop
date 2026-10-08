@@ -14,7 +14,7 @@ that the checker already reloads for every request.
 ## Fix boundary
 
 - Remove both triggers files and the environment path override.
-- Store rules only in the stable `com.thinkpeek.app` local preference domain.
+- Store rules only in the stable `com.thoughtcrime.app` local preference domain.
 - Preserve the user's current rule as the built-in initial value.
 - Use locally saved rules automatically on the next check.
 - Replace the alert with a compact nonmodal editor and horizontal Save/Cancel buttons.
@@ -24,6 +24,6 @@ that the checker already reloads for every request.
 
 ## Verification
 
-`./.build/thinkpeek --check-rules-editor-selftest` uses isolated app preferences to verify
+`./.build/thoughtcrime --check-rules-editor-selftest` uses isolated app preferences to verify
 the initial rule, file-free local persistence, next-check semantics, and compact
 horizontal actions.

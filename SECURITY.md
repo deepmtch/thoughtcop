@@ -10,7 +10,7 @@ within seven days.
 
 ## Security boundaries
 
-- Thinkpeek reads local Claude and Codex transcript files. It never writes to
+- Thoughtcrime reads local Claude and Codex transcript files. It never writes to
   them.
 - External checking is disabled by `--local-only`. When enabled, only eligible
   plaintext reasoning and complete assistant responses are sent to the named

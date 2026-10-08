@@ -1,4 +1,4 @@
-# Thinkpeek lessons learned
+# Thoughtcrime lessons learned
 
 These are release invariants extracted from real failures. They are mandatory
 review material under `AGENTS.md`, not historical commentary.
@@ -8,7 +8,7 @@ review material under `AGENTS.md`, not historical commentary.
 | Learned from | Permanent rule | Required proof |
 |---|---|---|
 | Claude/Codex sometimes showed `Working…` with no thought | Distinguish plaintext reasoning, provider summary, encrypted/empty reasoning, assistant response, tool activity, and lifecycle records. Never call one type another. Empty/encrypted reasoning is unavailable; say so explicitly. | Parser fixtures for every record type plus privacy-audit assertions. |
-| It was unclear whether Thinkpeek waited for a JSON attribute or the provider had written nothing | Consume only newline-complete JSONL records and retain partial bytes until the line completes. Once a complete record contains empty/encrypted reasoning, report that exact limitation; do not wait for that record to mutate. | Partial-line split/rejoin tests and empty-reasoning fixtures. |
+| It was unclear whether Thoughtcrime waited for a JSON attribute or the provider had written nothing | Consume only newline-complete JSONL records and retain partial bytes until the line completes. Once a complete record contains empty/encrypted reasoning, report that exact limitation; do not wait for that record to mutate. | Partial-line split/rejoin tests and empty-reasoning fixtures. |
 | Claude had useful final text but no plaintext thinking, so prompt violations were missed | Evaluate complete assistant responses as factual evidence even when thinking is absent. Do not display clean responses as thoughts. | Both Claude and Codex response fixtures and black-box checker requests. |
 | Provider summaries and duplicate events looked like original reasoning | Show provider summaries locally only; never send them to the checker or duplicate them as separate thoughts. | External-request content assertions and audit actions. |
 | A rollout suffix replaced the Codex sidebar title | Resolve identity from authoritative transcript metadata. Filename parsing is compatibility fallback only; never assume the last UUID owns the task. | A synthetic double-UUID fixture and exact title assertion. |
@@ -73,7 +73,7 @@ review material under `AGENTS.md`, not historical commentary.
 | A bubble anchored to a hidden menu-bar icon was placed off-screen | macOS hides status items that do not fit and parks their window off-screen; never anchor to a status item whose window is not visible, and keep every floating window inside a screen's visible frame. The app cannot render its own menu-bar icon for evidence; check the red state through `/ui` and the real menu bar from the host. | `violationBubbleOnScreen` and placement assertions in the e2e and capture suites; host captures. |
 | Settings lived in nested ticker menus and ⌘, opened Edit Rules | Follow the platform pattern: one Settings window from menu bar › Settings… (⌘,), with tabs; every gear opens it. New preferences go into a Settings tab, never a new menu. | `--settings-window-selftest`, status-menu assertion and four Settings screens in `capture_screens.py`. |
 | Removing toolbar buttons left the rest floating mid-ticker | Never give a container a fixed size derived from its old contents; let it hug its children. Review screenshots for alignment and empty space, not only for presence. | `tickerToolbarTrailingGap` assertion on every ticker capture. |
-| A host test run read the user's real rules and checked each record twice | An isolated test app never shares a preferences domain or data file with the user: rules use `com.thinkpeek.app.e2e`, usage a temporary file, and each test sets what it needs. Check the user's real settings before and after any host run. | Multi-session e2e passing on the host with the user's rules unchanged. |
+| A host test run read the user's real rules and checked each record twice | An isolated test app never shares a preferences domain or data file with the user: rules use `com.thoughtcrime.app.e2e`, usage a temporary file, and each test sets what it needs. Check the user's real settings before and after any host run. | Multi-session e2e passing on the host with the user's rules unchanged. |
 | The red menu-bar flash showed black on the user's Mac | The menu bar redraws template images, tints and title colors in its own foreground; a colored status icon must be a non-template image with the color drawn in. Test what is drawn (pixels), not the property that was set, and never scan pixels on every state publish. | `imageDrawsColor` in the status-item self-test and e2e. |
 | A click on the ticker opened the reader and the same click closed it | Judge an event against the UI state at the moment it happened; never defer the decision to a later run-loop turn, when the event may already have changed the window. | `--outside-click-selftest` timing case. |
 
@@ -89,4 +89,4 @@ For every user-visible change:
 5. Run `./Scripts/test.sh`.
 6. Restart the real app, inspect `/ui`, and inspect `/screenshot` for UI changes.
 7. Commit, let the post-commit hook rebuild, and verify exactly one current
-   Thinkpeek process with a clean worktree.
+   Thoughtcrime process with a clean worktree.

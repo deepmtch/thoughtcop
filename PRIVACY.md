@@ -1,14 +1,14 @@
 # Privacy
 
-Thinkpeek is a local macOS utility. It discovers and reads Claude and Codex
+Thoughtcrime is a local macOS utility. It discovers and reads Claude and Codex
 transcript files on the Mac so it can display provider-supplied reasoning or
 summaries and monitor assistant responses.
 
 ## Data that can leave the Mac
 
-Only records written after Thinkpeek starts (by their own timestamp) are
+Only records written after Thoughtcrime starts (by their own timestamp) are
 checked; older and copied history is displayed but never sent. When external
-checking is configured, Thinkpeek sends the exact check
+checking is configured, Thoughtcrime sends the exact check
 instruction together with one eligible plaintext reasoning record or complete
 assistant response to Groq, falling back to Cerebras when configured. Each such
 request also carries the user request that record answers: the latest message
@@ -23,7 +23,7 @@ rules, and the violation's reason and quote are sent once more, without your
 request, to ask for a one-line summary. Those providers process the requests
 under their own terms and privacy policies.
 
-Thinkpeek does not send tool calls, tool results, other user-role records
+Thoughtcrime does not send tool calls, tool results, other user-role records
 (task notifications, injected context, meta messages), readable Codex provider
 summaries, or encrypted/signature-only reasoning. Use `--local-only`
 to prevent all external analysis.
@@ -33,19 +33,19 @@ to prevent all external analysis.
 - Check instructions and display preferences use macOS preferences.
 - Groq and Cerebras credentials use the macOS login Keychain.
 - Violation history is stored at
-  `~/Library/Application Support/Thinkpeek/violations.json` with user-only
+  `~/Library/Application Support/Thoughtcrime/violations.json` with user-only
   permissions. It keeps the newest 50 violations by default (selectable: 10, 25,
   50, 100, 250, 500); older ones are deleted. Violations the second check
   rejects are never stored.
 - Usage totals (checks and token counts per day and model, no content) are stored
-  at `~/Library/Application Support/Thinkpeek/usage.json` with user-only
+  at `~/Library/Application Support/Thoughtcrime/usage.json` with user-only
   permissions; prices are read from the provider's model list.
 - Content-free audit and UI API logs are stored under
-  `~/Library/Logs/Thinkpeek/` with user-only permissions.
+  `~/Library/Logs/Thoughtcrime/` with user-only permissions.
 - The UI API capability is stored at
-  `~/Library/Application Support/Thinkpeek/ui-api-token` with user-only
+  `~/Library/Application Support/Thoughtcrime/ui-api-token` with user-only
   permissions.
 
-Deleting those Thinkpeek files and Keychain entries removes the app's local
-history and credentials. Removing Thinkpeek does not delete Claude or Codex
+Deleting those Thoughtcrime files and Keychain entries removes the app's local
+history and credentials. Removing Thoughtcrime does not delete Claude or Codex
 transcripts.

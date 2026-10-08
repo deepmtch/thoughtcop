@@ -24,7 +24,7 @@ final class DetailExitControls: NSStackView {
 
         closeButton.target = self
         closeButton.action = #selector(requestClose(_:))
-        closeButton.toolTip = "Close details and return to the Thinkpeek ticker"
+        closeButton.toolTip = "Close details and return to the Thoughtcrime ticker"
         closeButton.setAccessibilityLabel("Close details")
         closeButton.keyEquivalent = "\u{1b}"
 

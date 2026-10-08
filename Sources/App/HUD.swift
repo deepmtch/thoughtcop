@@ -4,33 +4,55 @@ import AppKit
 import Foundation
 import QuartzCore
 
-/// The flash icon: the shield and the count drawn in `color` as a regular
-/// (non-template) image, which the menu bar shows exactly as drawn. A template
-/// image, its tint and the title color are redrawn by macOS in the menu bar's
-/// own color, so the first flash showed black instead of red.
-func statusFlashImage(count: String, color: NSColor) -> NSImage {
-    let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-        .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-    let shield = NSImage(systemSymbolName: "exclamationmark.shield.fill",
-                         accessibilityDescription: nil)?
+/// The menu-bar glyph: a brain, plus a lightning bolt while a violation is
+/// unreviewed. With `color` nil the result is a template image that macOS
+/// draws in the menu bar's own foreground (BUG-079); with a color it is a
+/// regular image drawn exactly in that color, which the flash needs because
+/// a template image, its tint and the title color are all redrawn by macOS
+/// in the menu bar's color, so the first flash showed black instead of red.
+func statusGlyphImage(bolt: Bool, count: String = "", color: NSColor? = nil) -> NSImage {
+    var config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+    if let color {
+        config = config.applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+    }
+    let brain = NSImage(systemSymbolName: "brain", accessibilityDescription: nil)?
         .withSymbolConfiguration(config) ?? NSImage()
+    let boltConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .heavy)
+        .applying(NSImage.SymbolConfiguration(paletteColors: [color ?? .black]))
+    let boltImage = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: nil)?
+        .withSymbolConfiguration(boltConfig) ?? NSImage()
     let text = NSAttributedString(string: count, attributes: [
         .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .bold),
-        .foregroundColor: color])
+        .foregroundColor: color ?? NSColor.black])
     let textSize = count.isEmpty ? .zero : text.size()
-    let height = ceil(max(shield.size.height, textSize.height, 18))
-    let width = ceil(shield.size.width + (count.isEmpty ? 0 : 3 + textSize.width))
+    // The bolt sits beside the brain's top-right edge, like the app icon,
+    // instead of over the folds where it is unreadable at 18 points.
+    let boltOverlap: CGFloat = bolt ? boltImage.size.width * 0.4 : 0
+    let glyphWidth = brain.size.width + boltOverlap
+    let height = ceil(max(brain.size.height, textSize.height, 18))
+    let width = ceil(glyphWidth + (count.isEmpty ? 0 : 3 + textSize.width))
     let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
-        shield.draw(in: NSRect(x: 0, y: (rect.height - shield.size.height) / 2,
-                               width: shield.size.width, height: shield.size.height))
+        brain.draw(in: NSRect(x: 0, y: (rect.height - brain.size.height) / 2,
+                              width: brain.size.width, height: brain.size.height))
+        if bolt {
+            boltImage.draw(in: NSRect(x: glyphWidth - boltImage.size.width,
+                                      y: rect.height - boltImage.size.height,
+                                      width: boltImage.size.width,
+                                      height: boltImage.size.height))
+        }
         if !count.isEmpty {
-            text.draw(at: NSPoint(x: shield.size.width + 3,
+            text.draw(at: NSPoint(x: glyphWidth + 3,
                                   y: (rect.height - textSize.height) / 2))
         }
         return true
     }
-    image.isTemplate = false
+    image.isTemplate = color == nil
     return image
+}
+
+/// The flash image: brain, bolt and count all in `color`.
+func statusFlashImage(count: String, color: NSColor) -> NSImage {
+    statusGlyphImage(bolt: true, count: count, color: color)
 }
 
 /// True when some opaque pixel of `image` is within 0.2 of `color` in every
@@ -99,7 +121,7 @@ enum ViolationBubblePreference {
     }
 }
 
-/// Hide survives restarts: a user who hid Thinkpeek is not shown the ticker
+/// Hide survives restarts: a user who hid Thoughtcrime is not shown the ticker
 /// again on the next launch. Isolated tests neither read nor write it.
 enum HiddenPreference {
     static let defaultsKey = "tickerHidden"
@@ -212,7 +234,7 @@ final class MessagePreview {
                 // The summary first; Why and the full message one click away.
                 let rest = violationDetailsExpanded
                     ? "Why: \(decision.reason)\(full)"
-                    : "[Why and full message ▸](thinkpeek://violation-details)"
+                    : "[Why and full message ▸](thoughtcrime://violation-details)"
                 return "**\(summary)**\n\n\(quote)\(rest)"
             }
             return "**Violation**\n\(quote)Why: \(decision.reason)\(full)"
@@ -246,7 +268,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var peekPrimaryActions: TickerPrimaryActions!
     private var peekToolbar: NSStackView!
     private let peekSeparator = NSTextField(labelWithString: "·")
-    private var peekSourceKey = "Thinkpeek"
+    private var peekSourceKey = "Thoughtcrime"
     /// Active only while the reader shows: hidden, its minimum height (about
     /// 39 pt) would hold the 28-pt ticker taller than its window.
     private var fullMessageBottom: NSLayoutConstraint!
@@ -274,7 +296,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let hoverDelay: TimeInterval = 0.5
     private var isolatedActivity: NSObjectProtocol?
     /// Set when a violation was opened (bubble, Show Last Violation, Open
-    /// Violation History) while the user had hidden Thinkpeek (BUG-100).
+    /// Violation History) while the user had hidden Thoughtcrime (BUG-100).
     private var returnToHiddenOnClose = false
     private var expandButton: NSButton!
     private var eventCards: [EventCard] = []
@@ -372,7 +394,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             contentRect: NSRect(x: 60, y: 140, width: 560, height: 210),
             styleMask: [.borderless, .resizable, .nonactivatingPanel],
             backing: .buffered, defer: false)
-        panel.title = "Thinkpeek"
+        panel.title = "Thoughtcrime"
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
@@ -385,7 +407,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.animationBehavior = .none
         panel.minSize = NSSize(width: 340, height: 54)
         panel.maxSize = NSSize(width: 560, height: 360)
-        panel.setFrameAutosaveName("thinkpeek.main-window")
+        panel.setFrameAutosaveName("thoughtcrime.main-window")
         panel.delegate = self
         panel.acceptsMouseMovedEvents = true
         panel.isMovableByWindowBackground = true
@@ -445,7 +467,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         peekProviderIcon = ProviderIconView(frame: .zero)
         peekProviderIcon.translatesAutoresizingMaskIntoConstraints = false
 
-        peekSourceLabel = NSTextField(labelWithString: "Thinkpeek")
+        peekSourceLabel = NSTextField(labelWithString: "Thoughtcrime")
         peekSourceLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         peekSourceLabel.textColor = .secondaryLabelColor
         // Cut at the end so the chat name stays readable (middle truncation
@@ -778,7 +800,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // other apps were in front on the host. Test runs only.
             isolatedActivity = ProcessInfo.processInfo.beginActivity(
                 options: .userInitiated, reason: "Isolated end-to-end test run")
-            // Isolated tests drive Thinkpeek only through the command API.
+            // Isolated tests drive Thoughtcrime only through the command API.
             // Real keys and clicks (a person or another tool using the same
             // desktop) must not change the app mid-assertion.
             isolatedInputMonitor = NSEvent.addLocalMonitorForEvents(matching: [
@@ -1216,11 +1238,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func installStatusMenu() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(systemSymbolName: "text.bubble.fill",
-                                     accessibilityDescription: "Thinkpeek")
-        item.button?.toolTip = "Thinkpeek"
+        let glyph = statusGlyphImage(bolt: false)
+        glyph.accessibilityDescription = "Thoughtcrime"
+        item.button?.image = glyph
+        item.button?.toolTip = "Thoughtcrime"
         let menu = NSMenu()
-        let show = NSMenuItem(title: "Show Thinkpeek", action: #selector(showHUDFromMenu(_:)),
+        let show = NSMenuItem(title: "Show Thoughtcrime", action: #selector(showHUDFromMenu(_:)),
                               keyEquivalent: "")
         show.target = self
         menu.addItem(show)
@@ -1252,7 +1275,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         settings.target = self
         menu.addItem(settings)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit Thinkpeek", action: #selector(quitFromMenu(_:)),
+        let quit = NSMenuItem(title: "Quit Thoughtcrime", action: #selector(quitFromMenu(_:)),
                               keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -1283,7 +1306,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func showHUDFromMenu(_ sender: Any?) {
-        // Show Thinkpeek undoes Hide for good.
+        // Show Thoughtcrime undoes Hide for good.
         returnToHiddenOnClose = false
         hiddenByUser = false
         HiddenPreference.save(false)
@@ -1381,7 +1404,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         })
         let keys = ProviderCredentialsEditor(statuses: Self.credentialStatuses(),
             save: { [weak self] edits in
-                var failures = ["Thinkpeek could not save credentials."]
+                var failures = ["Thoughtcrime could not save credentials."]
                 self?.api.perform(.applyProviderCredentialEdits(edits,
                     completion: { failures = $0 }), origin: .appKit)
                 return failures
@@ -2369,7 +2392,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let text = detail.isEmpty ? title : "\(title)\n\(detail)"
         let event = UIEvent(timestamp: ISO8601DateFormatter().string(from: Date()),
                             kind: "activity", text: text, readableAnalysis: false)
-        _ = addCard(source: "Thinkpeek", event: event, navigable: false)
+        _ = addCard(source: "Thoughtcrime", event: event, navigable: false)
     }
 
     private func restoreViolationCards() {
@@ -2408,13 +2431,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         violationsMenuItem?.isEnabled = true
         setViolationTabLabels(violationTabs())
         let hasUnacknowledged = newCount > 0
-        statusItem?.button?.image = NSImage(
-            systemSymbolName: count > 0
-                ? (hasUnacknowledged
-                    ? "exclamationmark.shield.fill" : "exclamationmark.shield")
-                : "text.bubble.fill",
-            accessibilityDescription: hasUnacknowledged
-                ? "Thinkpeek has a new violation" : "Thinkpeek")
+        // Brain when quiet; the bolt joins it while a violation is unreviewed.
+        let glyph = statusGlyphImage(bolt: hasUnacknowledged)
+        glyph.accessibilityDescription = hasUnacknowledged
+            ? "Thoughtcrime has a new violation" : "Thoughtcrime"
+        statusItem?.button?.image = glyph
         statusItem?.button?.title = violationStatusBadgeTitle(unreviewed: newCount)
         statusItem?.button?.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
         if let button = statusItem?.button {
@@ -2437,11 +2458,11 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
         statusItem?.button?.setAccessibilityLabel(count == 0
-            ? "Thinkpeek, no recorded violations"
-            : "Thinkpeek, \(newCount) new and \(count) recorded violation\(count == 1 ? "" : "s")")
+            ? "Thoughtcrime, no recorded violations"
+            : "Thoughtcrime, \(newCount) new and \(count) recorded violation\(count == 1 ? "" : "s")")
         statusItem?.button?.toolTip = count == 0
-            ? "Thinkpeek · no recorded violations"
-            : "Thinkpeek · \(newCount) new · \(count) recorded"
+            ? "Thoughtcrime · no recorded violations"
+            : "Thoughtcrime · \(newCount) new · \(count) recorded"
     }
 
     private func markViolationReviewed(at index: Int) {
@@ -2513,7 +2534,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
            index >= 0, index < eventPreviews.count,
            eventPreviews[index].alarmActive {
             let preview = eventPreviews[index]
-            panel.title = "⚠ Thinkpeek violation — \(violationRecords.count) recorded"
+            panel.title = "⚠ Thoughtcrime violation — \(violationRecords.count) recorded"
             updatePeekHeader(source: preview.displaySource)
             peekTicker.text = normalizedTickerText(preview.tickerText)
             applyTickerAppearance(alarmActive: true)
@@ -2529,7 +2550,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             peekTicker.text = normalizedTickerText(eventPreviews[compactIndex].tickerText)
             applyTickerAppearance(alarmActive: eventPreviews[compactIndex].alarmActive)
         } else {
-            updatePeekHeader(source: "Thinkpeek")
+            updatePeekHeader(source: "Thoughtcrime")
             peekTicker.text = "Watching Claude and Codex…"
             applyTickerAppearance(alarmActive: false)
         }
@@ -2668,12 +2689,12 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             NSAccessibility.post(element: panel as Any,
                                  notification: .announcementRequested,
                                  userInfo: [
-                                    .announcement: "New Thinkpeek violation from \(preview.source). \(decision.reason)",
+                                    .announcement: "New Thoughtcrime violation from \(preview.source). \(decision.reason)",
                                     .priority: NSAccessibilityPriorityLevel.high.rawValue,
                                  ])
             startViolationAlert(record)
         }
-        panel.title = "⚠ Thinkpeek alert — \(alertCount)"
+        panel.title = "⚠ Thoughtcrime alert — \(alertCount)"
         apiEvents.append([
             "kind": "drift-alert", "text": decision.reason,
             "evidence": decision.evidence, "source": preview.source,
@@ -2690,7 +2711,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         // Isolated tests shorten the steps; the visual check passes the real
         // "3,5" so the guest screen can be captured during each step.
-        let parts = (ProcessInfo.processInfo.environment["THINKPEEK_E2E_ALERT_SECONDS"] ?? "")
+        let parts = (ProcessInfo.processInfo.environment["THOUGHTCRIME_E2E_ALERT_SECONDS"] ?? "")
             .split(separator: ",").compactMap { TimeInterval(String($0)) }
         return parts.count == 2 ? (parts[0], parts[1]) : (1.0, 1.5)
     }
@@ -2860,7 +2881,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
             violationBubble.show(title: title, quote: quote, below: statusIconAnchor(),
                                  hint: displayTime(record.timestamp) + " · Click to open")
         } else {
-            violationBubble.show(title: "Thinkpeek", quote: "No violations yet.",
+            violationBubble.show(title: "Thoughtcrime", quote: "No violations yet.",
                                  below: statusIconAnchor())
         }
         publishAPI()
@@ -2893,7 +2914,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
            let index = eventPreviews.firstIndex(where: { $0.violationID == id }) {
             openViolationReader(at: index)
         } else {
-            presentReader(MessageReaderSnapshot(source: "Thinkpeek", text: "No violations yet.",
+            presentReader(MessageReaderSnapshot(source: "Thoughtcrime", text: "No violations yet.",
                                                 kind: "activity", tone: .normal),
                           openedIndex: nil, followLive: false)
             revealForExplicitRequest()
@@ -2998,7 +3019,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showCheckFailure(_ message: String, _ ms: Double,
                                   card: EventCard, preview: MessagePreview) {
         preview.evaluation = .failed(message)
-        card.setError("Thinkpeek check error · \(message) · \(Int(ms)) ms")
+        card.setError("Thoughtcrime check error · \(message) · \(Int(ms)) ms")
         apiEvents.append([
             "kind": "drift-error", "text": message, "source": preview.source,
             "latencyMs": Int(ms),
@@ -3217,7 +3238,7 @@ final class HUD: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let unreadable = parsedRecordTimestamp(block.ts) == nil
                 card.setFooter(unreadable
                     ? "Not checked · the record has no readable timestamp"
-                    : "Not checked · written before Thinkpeek started")
+                    : "Not checked · written before Thoughtcrime started")
                 apiEvents.append([
                     "kind": "drift-skipped-old", "source": source,
                     "reason": unreadable ? "no readable timestamp" : "written before launch",

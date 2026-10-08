@@ -2,7 +2,7 @@
 
 ## User-visible failure
 
-The replacement Thinkpeek process and window were alive, but port 17321 was not
+The replacement Thoughtcrime process and window were alive, but port 17321 was not
 listening. API-based verification and UI automation could not inspect the app.
 
 ## Cause

@@ -11,7 +11,7 @@ commit=$(git -C "$repo_root" rev-parse --short HEAD)
 mkdir -p "$state_dir"
 
 if ! mkdir "$lock_dir" 2>/dev/null; then
-    echo "Thinkpeek post-commit restart already running; skipped $commit"
+    echo "Thoughtcrime post-commit restart already running; skipped $commit"
     exit 0
 fi
 cleanup() {
@@ -19,7 +19,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-echo "Thinkpeek: rebuilding $commit after commit"
+echo "Thoughtcrime: rebuilding $commit after commit"
 {
     echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') rebuilding $commit"
     if ! (cd "$repo_root" && ./build.sh); then
@@ -29,10 +29,10 @@ echo "Thinkpeek: rebuilding $commit after commit"
 
     # LaunchServices owns the app process, so it survives Git exiting without
     # becoming a restartable service. SingleInstance replaces the old copy once.
-    /usr/bin/open -n -g "$repo_root/.build/Thinkpeek.app"
+    /usr/bin/open -n -g "$repo_root/.build/Thoughtcrime.app"
     sleep 1
-    /usr/bin/pgrep -x thinkpeek >/dev/null
+    /usr/bin/pgrep -x thoughtcrime >/dev/null
     echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') opened app bundle for $commit"
 } >> "$restart_log" 2>&1
 
-echo "Thinkpeek: rebuilt and opened replacement once; log: $restart_log"
+echo "Thoughtcrime: rebuilt and opened replacement once; log: $restart_log"

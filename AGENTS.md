@@ -1,4 +1,4 @@
-# Thinkpeek engineering rules
+# Thoughtcrime engineering rules
 
 ## Non-negotiable: no heuristics
 

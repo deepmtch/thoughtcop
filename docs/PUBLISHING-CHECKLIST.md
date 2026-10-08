@@ -14,7 +14,7 @@
 
 ## Distribution gate
 
-- [ ] Final app icon and current screenshots.
+- [x] Final app icon and current screenshots.
 - [ ] Developer ID Application certificate available.
 - [ ] Valid `notarytool` Keychain profile available.
 - [ ] Release script produces an architecture-labeled, notarized ZIP.

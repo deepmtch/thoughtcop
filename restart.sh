@@ -4,24 +4,24 @@ set -eu
 cd "$(dirname "$0")"
 
 needs_build=false
-if [ ! -x .build/Thinkpeek.app/Contents/MacOS/thinkpeek ] ||
+if [ ! -x .build/Thoughtcrime.app/Contents/MacOS/thoughtcrime ] ||
    [ ! -f .build/build.stamp ] ||
    [ build.sh -nt .build/build.stamp ] ||
-   [ Resources/Thinkpeek-Info.plist -nt .build/build.stamp ] ||
+   [ Resources/Thoughtcrime-Info.plist -nt .build/build.stamp ] ||
    /usr/bin/find Sources Tests -type f -newer .build/build.stamp -print -quit | /usr/bin/grep -q .; then
     needs_build=true
 fi
 
 if [ "$needs_build" = true ]; then
-    echo "thinkpeek: building changed sources..."
+    echo "thoughtcrime: building changed sources..."
     ./build.sh
 else
-    echo "thinkpeek: build is current"
+    echo "thoughtcrime: build is current"
 fi
 
-old_pid=$(/usr/bin/pgrep -x thinkpeek 2>/dev/null | /usr/bin/head -n 1 || true)
-api_port=${THINKPEEK_API_PORT:-17321}
-api_token_path=${THINKPEEK_UI_API_TOKEN_PATH:-"$HOME/Library/Application Support/Thinkpeek/ui-api-token"}
+old_pid=$(/usr/bin/pgrep -x thoughtcrime 2>/dev/null | /usr/bin/head -n 1 || true)
+api_port=${THOUGHTCRIME_API_PORT:-17321}
+api_token_path=${THOUGHTCRIME_UI_API_TOKEN_PATH:-"$HOME/Library/Application Support/Thoughtcrime/ui-api-token"}
 
 api_ready() {
     printf 'Authorization: Bearer %s\n' "$api_token" |
@@ -30,17 +30,17 @@ api_ready() {
 }
 
 # LaunchServices owns the GUI process, so this command returns to the shell.
-# The new process uses SingleInstance.swift to terminate the previous Thinkpeek
+# The new process uses SingleInstance.swift to terminate the previous Thoughtcrime
 # only after the build and launch both succeed.
-/usr/bin/open -n -g "$(pwd)/.build/Thinkpeek.app" "$@"
-echo "thinkpeek: launched replacement; verifying..."
+/usr/bin/open -n -g "$(pwd)/.build/Thoughtcrime.app" "$@"
+echo "thoughtcrime: launched replacement; verifying..."
 
 attempt=0
 while [ "$attempt" -lt 100 ]; do
-    running=$(/usr/bin/pgrep -x thinkpeek 2>/dev/null || true)
+    running=$(/usr/bin/pgrep -x thoughtcrime 2>/dev/null || true)
     count=$(printf '%s\n' "$running" | /usr/bin/awk 'NF { n += 1 } END { print n + 0 }')
     new_pid=$(printf '%s\n' "$running" | /usr/bin/head -n 1)
-    api_token=${THINKPEEK_UI_API_TOKEN:-}
+    api_token=${THOUGHTCRIME_UI_API_TOKEN:-}
     if [ -z "$api_token" ] && [ -r "$api_token_path" ]; then
         api_token=$(/bin/cat "$api_token_path")
     fi
@@ -48,12 +48,12 @@ while [ "$attempt" -lt 100 ]; do
        { [ -z "$old_pid" ] || [ "$new_pid" != "$old_pid" ]; } &&
        [ -n "$api_token" ] &&
        api_ready; then
-        echo "thinkpeek: replacement verified; pid $new_pid"
+        echo "thoughtcrime: replacement verified; pid $new_pid"
         exit 0
     fi
     attempt=$((attempt + 1))
     /bin/sleep 0.1
 done
 
-echo "thinkpeek: replacement did not reach one verified new process" >&2
+echo "thoughtcrime: replacement did not reach one verified new process" >&2
 exit 1

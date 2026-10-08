@@ -14,9 +14,9 @@ not distinguish explicit user Hide from other visibility changes.
 
 ## Fix boundary
 
-Thinkpeek now tracks explicit user-hidden state. New violations remain persisted,
+Thoughtcrime now tracks explicit user-hidden state. New violations remain persisted,
 unreviewed, badged in the menu bar, and available through history, but cannot
-clear that state or reveal the window. Explicit Show Thinkpeek or Open Violation
+clear that state or reveal the window. Explicit Show Thoughtcrime or Open Violation
 History clears the state and presents the requested view.
 
 ## Verification

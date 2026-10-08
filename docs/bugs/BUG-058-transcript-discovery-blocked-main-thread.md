@@ -2,7 +2,7 @@
 
 ## User-visible failure
 
-Thinkpeek could hang at startup and periodically stop responding after launch,
+Thoughtcrime could hang at startup and periodically stop responding after launch,
 especially with a large Claude or Codex transcript history.
 
 ## Cause

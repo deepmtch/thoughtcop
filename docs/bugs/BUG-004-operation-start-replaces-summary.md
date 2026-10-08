@@ -25,7 +25,7 @@ Backfilled activity records could also consume the configured history allowance.
 
 ## Verification
 
-`./.build/thinkpeek --presentation-selftest` verifies the pending-work state machine,
+`./.build/thoughtcrime --presentation-selftest` verifies the pending-work state machine,
 including concurrent pending sources and clearing only after readable content.
 An end-to-end window test then verified the card/history policy.
 

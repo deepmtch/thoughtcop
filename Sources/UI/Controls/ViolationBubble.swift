@@ -1,5 +1,5 @@
 // A short note under the menu-bar icon after a violation, shown when "Flash
-// Red, Then Show Bubble" is on. It never activates Thinkpeek or reopens a
+// Red, Then Show Bubble" is on. It never activates Thoughtcrime or reopens a
 // hidden window; clicking it opens the violation.
 
 import AppKit

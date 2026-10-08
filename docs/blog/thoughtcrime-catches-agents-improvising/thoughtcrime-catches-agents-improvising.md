@@ -14,9 +14,9 @@ Before it had written a single line, this showed up in its reasoning:
 
 It knew. It decided to tell me later. Then it got to work.
 
-![Thinkpeek reader showing the flagged thought and the checker's reason](images/reader-violation.png)
+![Thoughtcrime reader showing the flagged thought and the checker's reason](images/reader-violation.png)
 
-Thinkpeek flagged that thought about a second after it hit the disk, while the agent was still editing files. "Worth flagging, but let me make the edit first" is the whole post in one sentence.
+Thoughtcrime flagged that thought about a second after it hit the disk, while the agent was still editing files. "Worth flagging, but let me make the edit first" is the whole post in one sentence.
 
 ## Why a thought, and not the answer
 
@@ -38,36 +38,40 @@ That is the pattern I keep seeing. **An agent that is blocked at step one asks. 
 
 ## How it works, in a nutshell
 
-Thinkpeek is a small macOS menu-bar app. It never touches the agent. No hook, no proxy, no wrapper.
+Thoughtcrime is a small macOS menu-bar app. It never touches the agent. No hook, no proxy, no wrapper.
 
 1. Claude Code and Codex already write every thought, tool call and reply to a session file on disk.
-2. Thinkpeek tails that file.
+2. Thoughtcrime tails that file.
 3. Each readable thought and each reply goes to a checker model (Groq or Cerebras) together with your last request and your rule, word for word. Tool calls and tool results never leave the machine.
-4. If the checker says the rule matches, it is asked once more to confirm. Then the shield in your menu bar flashes and the count goes up.
+4. If the checker says the rule matches, it is asked once more to confirm. Then the brain in your menu bar gets a red lightning bolt, flashes, and the count goes up.
 
-![How Thinkpeek works: agent writes a session file, Thinkpeek tails it, a checker model answers yes or no, the shield flashes](images/how-it-works.png)
+![How Thoughtcrime works: agent writes a session file, Thoughtcrime tails it, a checker model answers yes or no, the brain gets a red bolt](images/how-it-works.png)
 
-Two models, one rule, one shield. The agent never knows it's being watched.
+Two models, one rule, one brain in the menu bar. The agent never knows it's being watched.
 
 What it costs: this whole session, 43 checks and 6 confirmations, used about 17,000 input and 4,000 output tokens on `qwen3.8-27b`. At OpenRouter's list price for that model that is under two cents (openrouter.ai). The menu bar has a Usage entry that shows today's and this month's checks and cost.
 
-![The Thinkpeek shield in the menu bar with five flagged items](images/menubar-shield.png)
+![The Thoughtcrime brain in the menu bar, with a bolt and seven unreviewed catches](images/menubar-shield.png)
 
-That is the entire UI most of the time. A shield and a number. There is also a one-line always-on-top ticker that scrolls the live reasoning; I keep it hidden and let the shield do the talking.
+Quiet, it's just a brain. The moment a rule matches it flashes red for three seconds, then the bolt stays until you've looked:
 
-Hover the shield and you get the last catch without opening anything.
+![The flash: brain, bolt and count in red](images/menubar-flash.png)
+
+That is the entire UI most of the time. A brain, a bolt when something is unreviewed, and a number. There is also a one-line always-on-top ticker that scrolls the live reasoning; I keep it hidden and let the shield do the talking.
+
+Hover the brain and you get the last catch without opening anything.
 
 ![Hovering the menu-bar icon shows the last violation](images/menubar-hover.png)
 
 Click it and the reader opens on that exact message, with the quote that matched and the checker's reason, like the first screenshot above.
 
-The rule is yours. Thinkpeek sends it to the checker exactly as you typed it. No keyword matching, no "smart" rewriting, no built-in list of bad behaviours. Here is mine, typos included, because that is what it was running with:
+The rule is yours. Thoughtcrime sends it to the checker exactly as you typed it. No keyword matching, no "smart" rewriting, no built-in list of bad behaviours. Here is mine, typos included, because that is what it was running with:
 
 ![Settings › Rules with the two rules used in this post](images/settings-rules.png)
 
 "The AI is blocked becuase something is msising or not working as expected" and "The ai is taking a shortcut or workaround witouth asking th euser". Two lines, each its own rule. That's it.
 
-Improvising is just the rule I care about most. The rule can be anything you can say in a sentence, and the checker reads it as written: "The AI says a test passed without showing the output." "The AI touches a file under /infra." "The AI answers in German." "The AI apologises." One line each, in your own words, and Thinkpeek checks every thought and reply against all of them.
+Improvising is just the rule I care about most. The rule can be anything you can say in a sentence, and the checker reads it as written: "The AI says a test passed without showing the output." "The AI touches a file under /infra." "The AI answers in German." "The AI apologises." One line each, in your own words, and Thoughtcrime checks every thought and reply against all of them.
 
 ![Violation history with the four catches from this session](images/history-violations.png)
 
@@ -75,20 +79,20 @@ History keeps every catch with the session name, the time and the quote, so you 
 
 ## The whole run, in 40 seconds
 
-![Haiku starts the task, Thinkpeek's count goes from 5 to 6 while the agent is still working](images/run4-thinkpeek-catches-haiku.gif)
+![Haiku starts the task, Thoughtcrime's count goes from 5 to 6 while the agent is still working](images/run4-thoughtcrime-catches-haiku.gif)
 
-Top right: the shield count goes from 5 to 6 while the agent is still editing. That is the moment it decided to make the edit first.
+Top right: the menu-bar count goes from 5 to 6 while the agent is still editing. That is the moment it decided to make the edit first.
 
 ## How to run it yourself
 
-Thinkpeek is open source. Build it from the repository and start it:
+Thoughtcrime is open source. Build it from the repository and start it:
 
 ```bash
 git clone <repo-url>
-cd thinkpeek
+cd thoughtcrime
 brew install zstd
 ./Scripts/test.sh
-open .build/Thinkpeek.app
+open .build/Thoughtcrime.app
 ```
 
 Put a Groq or Cerebras key in **Provider Credentials…** (it goes into the macOS Keychain), write your rules in **Settings › Rules**, done.
@@ -99,14 +103,14 @@ One thing you need on the Claude Code side: by default the newest models store n
 {"showThinkingSummaries": true}
 ```
 
-Without it, Thinkpeek still checks every reply, but the "worth flagging, but let me make the edit first" moment above would never have reached disk.
+Without it, Thoughtcrime still checks every reply, but the "worth flagging, but let me make the edit first" moment above would never have reached disk.
 
 ## The Limitations
 
 - **It only sees what the provider writes.** Claude's stored "thinking" is a summary, not the raw chain of thought. A long reasoning pass can arrive as two sentences. Still, two sentences was enough here.
 - **The checker is a model too.** It will flag things you don't care about and it will miss things. In this session, rule one fired every time the agent reported being blocked, which is what I asked for, but you may want a narrower rule.
 - **Thoughts leave your machine.** Readable reasoning and replies are sent to the checker together with your latest request to the agent. `--local-only` turns external checking off and you get the live reasoning view without any alarms. Read `PRIVACY.md` before deciding.
-- **It is a mirror, not a fence.** Thinkpeek tells you what happened. It does not stop the agent. If you want enforcement, that is a hook, like I wrote about in a previous post.
+- **It is a mirror, not a fence.** Thoughtcrime tells you what happened. It does not stop the agent. If you want enforcement, that is a hook, like I wrote about in a previous post.
 - **macOS, Claude Code and Codex only.** It reads their local session files. Nothing is ever written under `~/.claude/`.
 
 ## The Bottom Line
@@ -163,4 +167,4 @@ export CLAUDE_CODE_EXTRA_BODY='{"thinking":{"type":"adaptive","display":"summari
 claude
 ```
 
-The `CLAUDE_CODE_EXTRA_BODY` line is what makes OpenRouter return the thinking summary that Thinkpeek reads.
+The `CLAUDE_CODE_EXTRA_BODY` line is what makes OpenRouter return the thinking summary that Thoughtcrime reads.

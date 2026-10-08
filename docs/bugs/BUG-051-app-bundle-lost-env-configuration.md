@@ -2,7 +2,7 @@
 
 ## User-visible failure
 
-After an automatic post-commit restart, Thinkpeek continued displaying Claude
+After an automatic post-commit restart, Thoughtcrime continued displaying Claude
 and Codex reasoning but reported that checking was off and produced no alarms.
 
 ## Evidence and root cause
@@ -10,19 +10,19 @@ and Codex reasoning but reported that checking was off and produced no alarms.
 The live UI API reported `externalAnalysisEnabled: false` and
 `GROQ_API_KEY and CEREBRAS_API_KEY missing from .env`, while the repository
 `.env` contained both configured names. The running process executable was
-inside `.build/Thinkpeek.app/Contents/MacOS`.
+inside `.build/Thoughtcrime.app/Contents/MacOS`.
 
-`PROJECT_ROOT` handled the raw `.build/thinkpeek` layout only. After commit
+`PROJECT_ROOT` handled the raw `.build/thoughtcrime` layout only. After commit
 `8760fab` switched automatic restarts to the app bundle, configuration lookup
-incorrectly targeted `.build/Thinkpeek.app/Contents/MacOS/.env` instead of the
+incorrectly targeted `.build/Thoughtcrime.app/Contents/MacOS/.env` instead of the
 repository `.env`.
 
 ## Fix
 
 Resolve the repository root explicitly for both supported layouts:
 
-- `.build/thinkpeek`
-- `.build/Thinkpeek.app/Contents/MacOS/thinkpeek`
+- `.build/thoughtcrime`
+- `.build/Thoughtcrime.app/Contents/MacOS/thoughtcrime`
 
 No key values are logged or copied into the app bundle.
 

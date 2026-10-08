@@ -42,7 +42,7 @@ for test in \
     --keyboard-navigation-selftest \
     --status-item-foreground-selftest
 do
-    ./.build/thinkpeek "$test"
+    ./.build/thoughtcrime "$test"
 done
 
 PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
@@ -69,4 +69,4 @@ PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
     python3 Scripts/test_reader_tabs_e2e.py
 PYTHONPYCACHEPREFIX="$PWD/.local/python-cache" \
     python3 Scripts/capture_screens.py .local/screens
-echo "all Thinkpeek tests passed"
+echo "all Thoughtcrime tests passed"

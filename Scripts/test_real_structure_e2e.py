@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Black-box proof of exactly which transcript fields Thinkpeek sends out.
+"""Black-box proof of exactly which transcript fields Thoughtcrime sends out.
 
 The running app reads canary copies of real Claude Code and Codex transcripts
 (see Scripts/real_structure.py) and sends checker requests to a local dummy
@@ -87,7 +87,7 @@ def wait_for(port: int, predicate, timeout: float,
     latest: dict = {}
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise AssertionError(f"Thinkpeek exited {process.returncode}: "
+            raise AssertionError(f"Thoughtcrime exited {process.returncode}: "
                                  f"{process.stderr.read() if process.stderr else ''}")
         try:
             latest = get_ui(port)
@@ -157,7 +157,7 @@ def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", checker_port), DummyChecker)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
-    with tempfile.TemporaryDirectory(prefix="thinkpeek-real-structure-") as temp:
+    with tempfile.TemporaryDirectory(prefix="thoughtcrime-real-structure-") as temp:
         root = Path(temp)
         claude_path = root / "claude" / "project" / \
             "55555555-5555-4555-8555-555555555555.jsonl"
@@ -171,22 +171,22 @@ def main() -> None:
         (root / "claude-cache").mkdir()
         environment = os.environ.copy()
         environment.update({
-            "THINKPEEK_API_PORT": str(ui_port),
-            "THINKPEEK_CLAUDE_PROJECTS": str(root / "claude"),
-            "THINKPEEK_CODEX_SESSIONS": str(root / "codex"),
-            "THINKPEEK_CODEX_INDEX": str(root / "codex-index.jsonl"),
-            "THINKPEEK_CLAUDE_DESKTOP_SESSIONS": str(root / "claude-desktop-sessions"),
-            "THINKPEEK_CLAUDE_CACHE": str(root / "claude-cache"),
-            "THINKPEEK_CLAUDE_DESKTOP_CACHE": str(root / "claude-cache"),
-            "THINKPEEK_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
-            "THINKPEEK_VIOLATIONS_PATH": str(root / "violations.json"),
-            "THINKPEEK_UI_API_LOG": str(root / "ui-api.jsonl"),
-            "THINKPEEK_UI_API_TOKEN": API_TOKEN,
-            "THINKPEEK_HISTORY_COUNT": "0",
+            "THOUGHTCRIME_API_PORT": str(ui_port),
+            "THOUGHTCRIME_CLAUDE_PROJECTS": str(root / "claude"),
+            "THOUGHTCRIME_CODEX_SESSIONS": str(root / "codex"),
+            "THOUGHTCRIME_CODEX_INDEX": str(root / "codex-index.jsonl"),
+            "THOUGHTCRIME_CLAUDE_DESKTOP_SESSIONS": str(root / "claude-desktop-sessions"),
+            "THOUGHTCRIME_CLAUDE_CACHE": str(root / "claude-cache"),
+            "THOUGHTCRIME_CLAUDE_DESKTOP_CACHE": str(root / "claude-cache"),
+            "THOUGHTCRIME_PRIVACY_AUDIT_PATH": str(root / "privacy-audit.jsonl"),
+            "THOUGHTCRIME_VIOLATIONS_PATH": str(root / "violations.json"),
+            "THOUGHTCRIME_UI_API_LOG": str(root / "ui-api.jsonl"),
+            "THOUGHTCRIME_UI_API_TOKEN": API_TOKEN,
+            "THOUGHTCRIME_HISTORY_COUNT": "0",
         })
         configure_isolated_rules()
         process = subprocess.Popen(
-            ["./.build/thinkpeek", "--isolated-e2e", "--dummy-checker-url",
+            ["./.build/thoughtcrime", "--isolated-e2e", "--dummy-checker-url",
              f"http://127.0.0.1:{checker_port}/v1/chat/completions"],
             env=environment, stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE, text=True)

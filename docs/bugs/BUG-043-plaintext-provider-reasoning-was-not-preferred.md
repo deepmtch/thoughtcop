@@ -3,7 +3,7 @@
 ## Symptom
 
 The provider contract permits an OpenAI reasoning item to contain both
-`content[].reasoning_text` and `summary[]`, but Thinkpeek always displayed the
+`content[].reasoning_text` and `summary[]`, but Thoughtcrime always displayed the
 summary array. Claude's separate `message.content[].thinking` path already
 preserved the complete plaintext field.
 

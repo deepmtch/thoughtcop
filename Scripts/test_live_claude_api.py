@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real Claude CLI -> transcript -> ThinkPeek API latency probe.
+"""Real Claude CLI -> transcript -> Thoughtcrime API latency probe.
 
 This is intentionally opt-in because it invokes the user's authenticated Claude
 CLI and may consume a small amount of model usage. It never clicks the UI.
@@ -17,17 +17,17 @@ import uuid
 from pathlib import Path
 
 
-API_URL = os.environ.get("THINKPEEK_UI_URL", "http://127.0.0.1:17321/ui")
-TIMEOUT = float(os.environ.get("THINKPEEK_LIVE_TEST_TIMEOUT", "60"))
+API_URL = os.environ.get("THOUGHTCRIME_UI_URL", "http://127.0.0.1:17321/ui")
+TIMEOUT = float(os.environ.get("THOUGHTCRIME_LIVE_TEST_TIMEOUT", "60"))
 CLAUDE = os.environ.get("CLAUDE_BIN", str(Path.home() / ".local/bin/claude"))
 API_TOKEN_PATH = Path(os.environ.get(
-    "THINKPEEK_UI_API_TOKEN_PATH",
-    Path.home() / "Library/Application Support/Thinkpeek/ui-api-token",
+    "THOUGHTCRIME_UI_API_TOKEN_PATH",
+    Path.home() / "Library/Application Support/Thoughtcrime/ui-api-token",
 ))
 
 
 def api_state() -> dict:
-    token = os.environ.get("THINKPEEK_UI_API_TOKEN") or API_TOKEN_PATH.read_text().strip()
+    token = os.environ.get("THOUGHTCRIME_UI_API_TOKEN") or API_TOKEN_PATH.read_text().strip()
     request = urllib.request.Request(
         API_URL, headers={"Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(request, timeout=2) as response:
@@ -64,7 +64,7 @@ def transcript_milestones(path: Path | None) -> dict[str, bool]:
 
 def main() -> int:
     session_id = str(uuid.uuid4())
-    session_name = f"ThinkPeek live API probe {session_id[:8]}"
+    session_name = f"Thoughtcrime live API probe {session_id[:8]}"
     command = [
         CLAUDE,
         "-p",
@@ -77,7 +77,7 @@ def main() -> int:
         (
             "This is a local UI integration probe. Do not use tools. Briefly analyze "
             "why deterministic black-box testing is useful, then finish with the exact "
-            "marker THINKPEEK_LIVE_PROBE_COMPLETE."
+            "marker THOUGHTCRIME_LIVE_PROBE_COMPLETE."
         ),
     ]
     started = time.monotonic()
@@ -148,10 +148,10 @@ def main() -> int:
             round((transcript_seen - started) * 1000),
         "transcriptActivityMs": None if activity_seen is None else
             round((activity_seen - started) * 1000),
-        "thinkpeekApiMs": None if api_seen is None else round((api_seen - started) * 1000),
-        "thinkpeekState": matching_state,
+        "thoughtcrimeApiMs": None if api_seen is None else round((api_seen - started) * 1000),
+        "thoughtcrimeState": matching_state,
         "readableThinkingPersisted": transcript_milestones(transcript)["readableThinking"],
-        "claudeCompleted": "THINKPEEK_LIVE_PROBE_COMPLETE" in stdout,
+        "claudeCompleted": "THOUGHTCRIME_LIVE_PROBE_COMPLETE" in stdout,
         "claudeResult": stream_result,
     }
     print(json.dumps(report, indent=2, sort_keys=True))

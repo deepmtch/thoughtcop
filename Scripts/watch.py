@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compatibility entry point for the retired standalone terminal checker.
 
-Evaluation now belongs to the native Thinkpeek executable, which preserves the
+Evaluation now belongs to the native Thoughtcrime executable, which preserves the
 user's instruction verbatim and evaluates structured transcript evidence. This
 wrapper intentionally contains no independent prompt, parser, or rule logic.
 """
@@ -13,18 +13,18 @@ import sys
 
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BINARY = os.path.join(BASE, ".build", "thinkpeek")
+BINARY = os.path.join(BASE, ".build", "thoughtcrime")
 
 
 def run_native(arguments):
     if not os.path.isfile(BINARY):
-        sys.exit("Thinkpeek is not built. Run ./build.sh first.")
+        sys.exit("Thoughtcrime is not built. Run ./build.sh first.")
     return subprocess.call([BINARY, *arguments])
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Compatibility wrapper for Thinkpeek's native evaluator."
+        description="Compatibility wrapper for Thoughtcrime's native evaluator."
     )
     parser.add_argument("--once", metavar="TEXT",
                         help="evaluate one reasoning-summary record")

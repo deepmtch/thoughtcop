@@ -6,7 +6,7 @@ Privacy boundary violation.
 
 ## Symptom
 
-Thinkpeek was intended to evaluate readable reasoning summaries only. Commit
+Thoughtcrime was intended to evaluate readable reasoning summaries only. Commit
 `979856e` expanded the automatic evaluator to Codex and Claude tool calls and
 tool results. A 41,245-byte tool-catalog result exposed this expansion when it
 hit the local outbound-size limit.

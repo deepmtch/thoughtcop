@@ -1,47 +1,55 @@
-# thinkpeek
+# Thoughtcrime
 
-See Claude Code and Codex reasoning summaries live — and get shouted at when
-either the reasoning or an assistant response violates your check instruction.
+Big Brother for your coding agent. See Claude Code and Codex reasoning live,
+and get a red lightning bolt in your menu bar when a thought or a reply breaks
+a rule you wrote in your own words.
 
-Claude Code and Codex append live JSONL session events as turns run. thinkpeek
+Claude Code and Codex append live JSONL session events as turns run. Thoughtcrime
 tails both sources, displays readable reasoning when the provider supplies it,
 and checks complete assistant-response records even when reasoning is omitted.
 
+![How Thoughtcrime works: the agent writes thoughts to a file, Thoughtcrime reads it, a checker model compares each thought with your rule, on a match the brain in the menu bar gets a red bolt](docs/blog/thoughtcrime-catches-agents-improvising/images/how-it-works.png)
+
 | | | |
 |---|---|---|
-| **`.build/thinkpeek`** | always-on-top window | shows the reasoning |
+| **`.build/thoughtcrime`** | always-on-top window | shows the reasoning |
 | Native evaluator | drift alarm | evaluates structured records against your verbatim instruction |
 
 ```bash
 ./build.sh                                           # build once
-./.build/thinkpeek                                   # the window
+./.build/thoughtcrime                                   # the window
 ./restart.sh                                         # rebuild and replace a running copy
-./.build/thinkpeek --local-only                      # never send evidence externally
+./.build/thoughtcrime --local-only                      # never send evidence externally
 ```
 
 ## What it looks like
 
-A shield in the menu bar. Hover it for the last catch, click it for the full
+A brain in the menu bar; it gets a red lightning bolt when a violation is
+unreviewed. Hover it for the last catch, click it for the full
 reasoning. Everything below was captured on a fresh macOS VM while Claude Code
 (Haiku 5.5) worked on a small coding task.
 
-![Hovering the menu-bar icon shows the last violation](docs/blog/thinkpeek-catches-agents-improvising/images/menubar-hover.png)
+![Idle, unreviewed, and flashing](docs/blog/thoughtcrime-catches-agents-improvising/images/menubar-idle.png)
+![Brain with bolt and count](docs/blog/thoughtcrime-catches-agents-improvising/images/menubar-shield.png)
+![The three-second red flash](docs/blog/thoughtcrime-catches-agents-improvising/images/menubar-flash.png)
+
+![Hovering the menu-bar icon shows the last violation](docs/blog/thoughtcrime-catches-agents-improvising/images/menubar-hover.png)
 
 The agent's own reasoning, flagged a second after it was written, with the
 checker's reason:
 
-![Reader with the flagged thought](docs/blog/thinkpeek-catches-agents-improvising/images/reader-violation.png)
+![Reader with the flagged thought](docs/blog/thoughtcrime-catches-agents-improvising/images/reader-violation.png)
 
 The rule is yours, checked exactly as typed:
 
-![Settings › Rules](docs/blog/thinkpeek-catches-agents-improvising/images/settings-rules.png)
+![Settings › Rules](docs/blog/thoughtcrime-catches-agents-improvising/images/settings-rules.png)
 
 The whole run, from task to catch, in 40 seconds:
 
-![Thinkpeek catches Haiku deciding to make the edit first](docs/blog/thinkpeek-catches-agents-improvising/images/run4-thinkpeek-catches-haiku.gif)
+![Thoughtcrime catches Haiku deciding to make the edit first](docs/blog/thoughtcrime-catches-agents-improvising/images/run4-thoughtcrime-catches-haiku.gif)
 
 The full story is in
-[docs/blog/thinkpeek-catches-agents-improvising](docs/blog/thinkpeek-catches-agents-improvising/thinkpeek-catches-agents-improvising.md).
+[docs/blog/thoughtcrime-catches-agents-improvising](docs/blog/thoughtcrime-catches-agents-improvising/thoughtcrime-catches-agents-improvising.md).
 
 `build.sh` intentionally creates an ad-hoc signed development bundle. It is not
 a distributable release. A direct-download release requires an installed
@@ -49,8 +57,8 @@ Developer ID Application certificate and a validated `notarytool` keychain
 profile:
 
 ```bash
-export THINKPEEK_SIGNING_IDENTITY='Developer ID Application: Example (TEAMID)'
-export THINKPEEK_NOTARY_PROFILE='thinkpeek-notary'
+export THOUGHTCRIME_SIGNING_IDENTITY='Developer ID Application: Example (TEAMID)'
+export THOUGHTCRIME_NOTARY_PROFILE='thoughtcrime-notary'
 ./Scripts/release.sh
 ```
 
@@ -60,7 +68,7 @@ the notarization, staples and validates the ticket, runs Gatekeeper assessment,
 then creates a final ZIP and SHA-256 checksum under `.build/releases/`.
 
 This checkout uses the repository-managed `.githooks/post-commit` hook. After
-each successful commit it rebuilds and replaces the running Thinkpeek exactly
+each successful commit it rebuilds and replaces the running Thoughtcrime exactly
 once, only when that build succeeds. The build produces a minimal macOS app
 bundle and the hook opens it through LaunchServices; it deliberately does not
 register a restartable `launchd` service. Inspect
@@ -71,20 +79,20 @@ for a fresh clone with:
 git config core.hooksPath .githooks
 ```
 
-Thinkpeek is a native Swift/AppKit app. Building requires Xcode Command Line
+Thoughtcrime is a native Swift/AppKit app. Building requires Xcode Command Line
 Tools; Claude Desktop cache monitoring and its tests require `zstd`
 (`brew install zstd`). Python 3 is used only by the test and compatibility
 scripts. **Nothing is ever written under `~/.claude/`** — that directory is
-Claude Code's, and Thinkpeek only reads its supported session data.
+Claude Code's, and Thoughtcrime only reads its supported session data.
 
 ## Install from source
 
 ```bash
 git clone <repository-url>
-cd thinkpeek
+cd thoughtcrime
 brew install zstd
 ./Scripts/test.sh
-open .build/Thinkpeek.app
+open .build/Thoughtcrime.app
 ```
 
 The development bundle is ad-hoc signed for the local Mac. It is not the
@@ -133,12 +141,12 @@ Codex tasks write rollout events to:
 ```
 
 Codex reasoning items use plaintext `content[].reasoning_text` when the provider
-supplies it. When Codex supplies only a readable `summary[]`, ThinkPeek displays
+supplies it. When Codex supplies only a readable `summary[]`, Thoughtcrime displays
 the complete summary locally; duplicate `event_msg/agent_reasoning` entries are
 ignored. Plaintext reasoning is displayed locally and sent verbatim to the
 configured external checker. Provider summaries are local-display-only and are
 never sent. Complete assistant responses are evaluated but are not presented as
-thoughts; a response appears in Thinkpeek only when it triggers a violation or
+thoughts; a response appears in Thoughtcrime only when it triggers a violation or
 its check fails. Each checked record is sent with your latest typed request
 from the same session (cut to its first and last 1,000 characters when longer
 than 2,000). Tool calls, tool results, other user-role records, and
@@ -173,7 +181,7 @@ does this by default unless Claude Code is configured to request summaries:
 
 Add that key to `~/.claude/settings.json`. Existing omitted blocks cannot be
 recovered retroactively, and a host application can explicitly override the
-setting. thinkpeek reports operation start immediately and displays readable
+setting. thoughtcrime reports operation start immediately and displays readable
 reasoning only when plaintext exists; response checking does not depend on that
 optional stream.
 
@@ -206,7 +214,7 @@ The ticker always uses the semantic macOS window surface; a violation never
 changes its background. The violation color colors the menu-bar flash. Custom
 colors are remembered, and **Use Default** restores red.
 **Settings › Alerts** has two separate switches. **Flash menu-bar icon red**
-(on by default) turns the shield and count red for 3 seconds when a violation
+(on by default) turns the brain, bolt and count red for 3 seconds when a violation
 arrives. **Show bubble** (off by default) shows a bubble under the icon for 5
 seconds, after the flash when both are on, with the session and the quoted
 evidence; clicking it opens that violation in the reader. If macOS has hidden
@@ -217,10 +225,10 @@ A single click opens a dedicated full-message reader; **Done** or a click outsid
 the reader returns to the ticker. The reader's History button opens history.
 Settings › General selects and remembers Slow, Normal, or
 Fast ticker movement and provides Top/Bottom × Left/Center/Right presets.
-The reader keeps **Done** visible. **Hide Thinkpeek** is the ticker's direct X
+The reader keeps **Done** visible. **Hide Thoughtcrime** is the ticker's direct X
 action and is remembered across restarts; a violation opened from the bubble
-or menu bar returns to hidden when closed, and menu bar › **Show Thinkpeek**
-shows the ticker again. **Quit Thinkpeek** remains available from the menu bar.
+or menu bar returns to hidden when closed, and menu bar › **Show Thoughtcrime**
+shows the ticker again. **Quit Thoughtcrime** remains available from the menu bar.
 Escape from the reader or history always returns directly to the one-line
 ticker. History uses the same lifecycle pattern: **Done** returns to the ticker
 without terminating the monitor. Settings › General offers **Ticker width:
@@ -238,9 +246,9 @@ Return, Home, End, J, and K behavior.
 
 Auto mode follows every active session and nested agent. Use the session picker
 to pin one session. Cards show the local time, source session, and original
-readable reasoning. Set `THINKPEEK_HISTORY_COUNT` in `.env` to an integer, `0`,
+readable reasoning. Set `THOUGHTCRIME_HISTORY_COUNT` in `.env` to an integer, `0`,
 or `all`. When a provider record contains neither plaintext reasoning nor a
-readable summary, Thinkpeek presents an explicit unavailable state.
+readable summary, Thoughtcrime presents an explicit unavailable state.
 Repeated identical records from the same source are presented once even when
 the transcript records them at multiple timestamps.
 
@@ -253,10 +261,10 @@ was sent. Per-record `timestamp` fields advance monotonically within the turn.
 
 ## The drift alarm
 
-The native Thinkpeek app sends each new complete assistant response and each new
+The native Thoughtcrime app sends each new complete assistant response and each new
 readable reasoning record, plus your locally saved evaluation instruction and the
 latest request you typed before that record, to a fast model. Tool calls and tool results are discarded by the transcript parser
-and never enter the automatic evaluation path. Thinkpeek does not infer actions
+and never enter the automatic evaluation path. Thoughtcrime does not infer actions
 from keywords.
 
 The **Settings › Rules** editor has two explicit modes:
@@ -267,30 +275,30 @@ The **Settings › Rules** editor has two explicit modes:
 
 No comments, categories, keywords, or trigger meanings are inferred. Edits take
 effect on the next assistant response or readable reasoning record without
-restarting Thinkpeek.
+restarting Thoughtcrime.
 
 ### Violation history
 
 Every reported violation must quote evidence. With **Violation Alerts → Confirm
-with Second Check** on (the default), Thinkpeek sends the claim, its evidence,
+with Second Check** on (the default), Thoughtcrime sends the claim, its evidence,
 your instruction, the original record and your request to the same model and
 asks whether the claim is true. Only confirmed violations are shown and stored;
 rejected or evidence-free claims are dropped. Turn the setting off to show the
 first verdict directly.
 
 Each shown violation is appended to the local 0600-permission store at
-`~/Library/Application Support/Thinkpeek/violations.json`. **Violation History**
+`~/Library/Application Support/Thoughtcrime/violations.json`. **Violation History**
 in the display settings keeps the newest 10, 25, 50 (default), 100, 250 or 500
 violations; lowering it deletes the oldest immediately. A record preserves
 the source provider/session, time, matched reason, quoted evidence, original
 evidence record, evaluator provider, latency, and the exact check prompt in
 force.
-Every new violation updates the unread menu-bar count and gives its shield an
+Every new violation updates the unread menu-bar count and gives its brain an
 alert tint. By default it does not interrupt the ticker, play a sound, or post a
 VoiceOver announcement. With the flash or the bubble on, it posts a VoiceOver
 announcement; the bubble states the violation in words (never color alone).
 
-The menu-bar shield carries the new-violation count. **Open Violation History…**
+The menu-bar brain carries the new-violation count and a bolt while any is unreviewed. **Open Violation History…**
 opens the violation list even after the ticker has been hidden or the app has
 restarted; **Show Last Violation**, directly below it, opens the newest
 violation in the reader. Resting the mouse on the menu-bar icon for half a
@@ -308,13 +316,13 @@ drive the same actions without clicking the UI.
 
 **Settings › Rules** edits that local value and mode directly.
 There is no file-backed configuration. The next response or reasoning block uses
-the saved rules without restarting Thinkpeek.
+the saved rules without restarting Thoughtcrime.
 
 Every ⚙ button and menu bar › **Settings…** open the same window.
 
 ### Privacy audit log
 
-Each app start resets `~/Library/Logs/Thinkpeek/privacy-audit.jsonl`. The JSONL
+Each app start resets `~/Library/Logs/Thoughtcrime/privacy-audit.jsonl`. The JSONL
 records only metadata: session filename, transcript record type, disposition,
 byte count, and actual external evaluation destination/size. It distinguishes
 reasoning requests from assistant-response requests and records tool calls and
@@ -339,7 +347,7 @@ explicit overrides:
 cp .env.example .env
 chmod 600 .env
 # edit .env: GROQ_API_KEY=... and/or CEREBRAS_API_KEY=...
-./.build/thinkpeek --drift-status
+./.build/thoughtcrime --drift-status
 ```
 
 `.env` is ignored by git; `.env.example` contains only empty placeholders and
@@ -394,37 +402,37 @@ Run the complete suite with:
 Scripts/test.sh
 ```
 
-Run the opt-in real Claude CLI → transcript → ThinkPeek API latency probe with:
+Run the opt-in real Claude CLI → transcript → Thoughtcrime API latency probe with:
 
 ```bash
 python3 Scripts/test_live_claude_api.py
 ```
 
 It invokes one tool-free authenticated Claude CLI turn with a small budget cap, polls the
-local ThinkPeek API without clicking the UI, and fails unless the matching
+local Thoughtcrime API without clicking the UI, and fails unless the matching
 Claude session reaches the ticker as `Working…` before the CLI turn finishes.
 
 ```bash
-./.build/thinkpeek --selftest
-./.build/thinkpeek --claude-desktop-conversation-selftest
-./.build/thinkpeek --layout-selftest
-./.build/thinkpeek --presentation-selftest
-./.build/thinkpeek --source-context-selftest
-./.build/thinkpeek --ticker-selftest
-./.build/thinkpeek --ticker-background-selftest
-./.build/thinkpeek --message-view-selftest
-./.build/thinkpeek --escape-selftest
-./.build/thinkpeek --exit-controls-selftest
-./.build/thinkpeek --outside-click-selftest
-./.build/thinkpeek --window-position-selftest
-./.build/thinkpeek --ticker-corner-selftest
-./.build/thinkpeek --provider-icon-selftest
-./.build/thinkpeek --settings-menu-selftest
-./.build/thinkpeek --check-rules-editor-selftest
-./.build/thinkpeek --window-chrome-selftest
-./.build/thinkpeek --compact-width-selftest
-./.build/thinkpeek --interaction-selftest
-./.build/thinkpeek --ui-command-api-selftest
+./.build/thoughtcrime --selftest
+./.build/thoughtcrime --claude-desktop-conversation-selftest
+./.build/thoughtcrime --layout-selftest
+./.build/thoughtcrime --presentation-selftest
+./.build/thoughtcrime --source-context-selftest
+./.build/thoughtcrime --ticker-selftest
+./.build/thoughtcrime --ticker-background-selftest
+./.build/thoughtcrime --message-view-selftest
+./.build/thoughtcrime --escape-selftest
+./.build/thoughtcrime --exit-controls-selftest
+./.build/thoughtcrime --outside-click-selftest
+./.build/thoughtcrime --window-position-selftest
+./.build/thoughtcrime --ticker-corner-selftest
+./.build/thoughtcrime --provider-icon-selftest
+./.build/thoughtcrime --settings-menu-selftest
+./.build/thoughtcrime --check-rules-editor-selftest
+./.build/thoughtcrime --window-chrome-selftest
+./.build/thoughtcrime --compact-width-selftest
+./.build/thoughtcrime --interaction-selftest
+./.build/thoughtcrime --ui-command-api-selftest
 ```
 
 prints the active transcript and its last 5 reasoning blocks — no window involved.
@@ -438,14 +446,14 @@ The window presentation is also exposed as a headless JSON API. The AppKit
 renderer and automated tests consume the same `UIEvent` objects:
 
 ```bash
-./.build/thinkpeek --ui-json ~/.claude/projects/<project>/<session>.jsonl
+./.build/thoughtcrime --ui-json ~/.claude/projects/<project>/<session>.jsonl
 ```
 
 The running window publishes the state it actually consumed at the local
 endpoint `http://127.0.0.1:17321/ui` (override with
-`THINKPEEK_API_PORT`). Every request requires `Authorization: Bearer <token>`;
+`THOUGHTCRIME_API_PORT`). Every request requires `Authorization: Bearer <token>`;
 the random token is stored with mode `0600` at
-`~/Library/Application Support/Thinkpeek/ui-api-token`. This makes window title,
+`~/Library/Application Support/Thoughtcrime/ui-api-token`. This makes window title,
 selection, status, analysis, omitted blocks, activity, and drift results
 assertable without screen capture.
 The companion `http://127.0.0.1:17321/screenshot` endpoint returns a PNG rendered
@@ -463,20 +471,20 @@ running window. `/reveal` remains an alias for `/controls` for compatibility.
 binds only to IPv4 loopback and returns no-store responses.
 
 ```bash
-token=$(<"$HOME/Library/Application Support/Thinkpeek/ui-api-token")
+token=$(<"$HOME/Library/Application Support/Thoughtcrime/ui-api-token")
 printf 'Authorization: Bearer %s\n' "$token" | \
   curl --header @- http://127.0.0.1:17321/ui
 printf 'Authorization: Bearer %s\n' "$token" | \
   curl --header @- -X POST http://127.0.0.1:17321/controls
 ```
-Use `./.build/thinkpeek --transcript /absolute/session.jsonl` to pin a deterministic
+Use `./.build/thoughtcrime --transcript /absolute/session.jsonl` to pin a deterministic
 input for an end-to-end UI test.
 
 For a direct native evaluator check:
 
 ```bash
-./.build/thinkpeek --drift-status
-./.build/thinkpeek --check "I'll remove the build directory now."
+./.build/thoughtcrime --drift-status
+./.build/thoughtcrime --check "I'll remove the build directory now."
 ```
 
 ## History

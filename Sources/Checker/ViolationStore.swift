@@ -14,8 +14,8 @@ func violationStatusBadgeTitle(unreviewed: Int) -> String {
     unreviewed == 0 ? "" : " \(unreviewed)"
 }
 
-let VIOLATIONS_PATH = ProcessInfo.processInfo.environment["THINKPEEK_VIOLATIONS_PATH"]
-    ?? ("~/Library/Application Support/Thinkpeek/violations.json" as NSString)
+let VIOLATIONS_PATH = ProcessInfo.processInfo.environment["THOUGHTCRIME_VIOLATIONS_PATH"]
+    ?? ("~/Library/Application Support/Thoughtcrime/violations.json" as NSString)
         .expandingTildeInPath
 
 struct ViolationRecord: Codable, Equatable {

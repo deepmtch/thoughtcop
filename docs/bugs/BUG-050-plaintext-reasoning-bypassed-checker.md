@@ -2,7 +2,7 @@
 
 ## User-visible failure
 
-Thinkpeek displayed live Claude and Codex reasoning but produced no alarm even
+Thoughtcrime displayed live Claude and Codex reasoning but produced no alarm even
 when that reasoning plainly matched the configured check instruction.
 
 ## Evidence and root cause

@@ -8,7 +8,7 @@ instruction 2 each exceeded a "32 KB provider limit."
 ## Evidence
 
 The matching transcript record was an `exec` result containing the available
-tool catalog. Thinkpeek rejected the serialized request locally before Groq or
+tool catalog. Thoughtcrime rejected the serialized request locally before Groq or
 Cerebras received it. The check ran inside the per-instruction loop, which
 duplicated the same preflight failure.
 
@@ -21,7 +21,7 @@ instruction.
 ## Fix
 
 - Serialize and measure every instruction envelope before evaluation begins.
-- If any request exceeds the local boundary, emit one Thinkpeek error.
+- If any request exceeds the local boundary, emit one Thoughtcrime error.
 - State both the exact request size and the exact local limit.
 - Do not truncate, summarize, classify, or send any part of the oversized record.
 

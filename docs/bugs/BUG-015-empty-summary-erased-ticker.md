@@ -31,7 +31,7 @@ non-empty after presentation normalization.
 ## Verification
 
 The isolated long/short/empty harness must now retain `"Visible summary"` after a
-formatting-only assignment. `./.build/thinkpeek --ticker-selftest` asserts the same
+formatting-only assignment. `./.build/thoughtcrime --ticker-selftest` asserts the same
 production behavior. The live HUD must expose a non-empty `peekText` while in
 `single-line-ticker` mode; discarded inputs increment the counter without adding
 a navigable card.

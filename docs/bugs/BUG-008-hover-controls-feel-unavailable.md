@@ -30,6 +30,6 @@ the absence of a dependable single-click fallback.
 
 ## Verification
 
-`./.build/thinkpeek --hover-ux-selftest` enforces the interaction thresholds. The live
+`./.build/thoughtcrime --hover-ux-selftest` enforces the interaction thresholds. The live
 test moves the real macOS pointer from outside to the center of the peek, waits
 150 ms, and requires `peekMode` to become `false` with the 560-point settings view.

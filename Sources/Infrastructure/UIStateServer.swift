@@ -4,8 +4,8 @@
 import Foundation
 import Network
 
-let UI_API_TOKEN_PATH = ProcessInfo.processInfo.environment["THINKPEEK_UI_API_TOKEN_PATH"]
-    ?? ("~/Library/Application Support/Thinkpeek/ui-api-token" as NSString)
+let UI_API_TOKEN_PATH = ProcessInfo.processInfo.environment["THOUGHTCRIME_UI_API_TOKEN_PATH"]
+    ?? ("~/Library/Application Support/Thoughtcrime/ui-api-token" as NSString)
         .expandingTildeInPath
 
 /// Keep browser pages and unrelated local processes from reading transcripts or
@@ -13,7 +13,7 @@ let UI_API_TOKEN_PATH = ProcessInfo.processInfo.environment["THINKPEEK_UI_API_TO
 /// capability in a user-only file so command-line automation can authenticate.
 func loadUIAPIToken(path: String = UI_API_TOKEN_PATH,
                     environmentToken: String? = ProcessInfo.processInfo.environment[
-                        "THINKPEEK_UI_API_TOKEN"]) -> String {
+                        "THOUGHTCRIME_UI_API_TOKEN"]) -> String {
     if let injected = environmentToken,
        !injected.isEmpty {
         return injected
@@ -176,19 +176,19 @@ final class UIStateServer {
     private let lock = NSLock()
     private var body = Data("{\"schemaVersion\":1,\"ready\":false}".utf8)
     private var listener: NWListener?
-    private let listenerQueue = DispatchQueue(label: "thinkpeek.ui-api")
+    private let listenerQueue = DispatchQueue(label: "thoughtcrime.ui-api")
     private let token: String
-    /// Renders "window" (the visible Thinkpeek window) or "bubble" as PNG.
+    /// Renders "window" (the visible Thoughtcrime window) or "bubble" as PNG.
     var captureHandler: ((String) -> Data?)?
     var actionHandler: ((UICommand) -> Void)?
     private let logURL: URL
 
     init(logURL: URL? = nil, token: String? = nil) {
         self.token = token ?? loadUIAPIToken()
-        self.logURL = logURL ?? ProcessInfo.processInfo.environment["THINKPEEK_UI_API_LOG"]
+        self.logURL = logURL ?? ProcessInfo.processInfo.environment["THOUGHTCRIME_UI_API_LOG"]
             .map { URL(fileURLWithPath: $0) }
             ?? FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Logs/Thinkpeek/ui-api.jsonl")
+                .appendingPathComponent("Library/Logs/Thoughtcrime/ui-api.jsonl")
     }
 
     func publish(_ object: [String: Any]) {
