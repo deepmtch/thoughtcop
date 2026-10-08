@@ -11,7 +11,9 @@ func killOtherInstances() {
     let me = getpid()
     let pgrep = Process()
     pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-    pgrep.arguments = ["-x", "thoughtcrime"]
+    // The pre-rename process name is included so an old Thinkpeek that is
+    // still running is replaced too (a rebuild after the rename left both).
+    pgrep.arguments = ["-x", "thoughtcrime|thinkpeek"]
     let pipe = Pipe()
     pgrep.standardOutput = pipe
     pgrep.standardError = Pipe()
