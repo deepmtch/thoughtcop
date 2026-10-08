@@ -14,6 +14,8 @@ Before it had written a single line, this showed up in its reasoning:
 
 It knew. It decided to tell me later. Then it got to work.
 
+Orwell had a word for holding "this won't work" and "let me do it anyway" in the same head at the same time: doublethink.
+
 ![Thoughtcrime reader showing the flagged thought and the checker's reason](images/reader-violation.png)
 
 Thoughtcrime flagged that thought about a second after it hit the disk, while the agent was still editing files. "Worth flagging, but let me make the edit first" is the whole post in one sentence.
@@ -38,7 +40,9 @@ That is the pattern I keep seeing. **An agent that is blocked at step one asks. 
 
 ## How it works, in a nutshell
 
-Thoughtcrime is a small macOS menu-bar app. It never touches the agent. No hook, no proxy, no wrapper.
+Thoughtcrime is a small macOS menu-bar app. Big Brother for your coding agent. The name is Orwell's: a thoughtcrime is a thought the Party would punish. Here the Party is you, the rule is yours, and the thought is the agent's.
+
+It never touches the agent. No hook, no proxy, no wrapper.
 
 1. Claude Code and Codex already write every thought, tool call and reply to a session file on disk.
 2. Thoughtcrime tails that file.
@@ -65,11 +69,11 @@ Hover the brain and you get the last catch without opening anything.
 
 Click it and the reader opens on that exact message, with the quote that matched and the checker's reason.
 
-The rule is yours. Thoughtcrime sends it to the checker exactly as you typed it. No keyword matching, no "smart" rewriting, no built-in list of bad behaviours. Here is mine, typos included, because that is what it was running with:
+The rule is yours. Thoughtcrime sends it to the checker exactly as you typed it. No keyword matching, no "smart" rewriting, no built-in list of bad behaviours. Here is mine:
 
 ![Settings › Rules with the two rules used in this post](images/settings-rules.png)
 
-"The AI is blocked becuase something is msising or not working as expected" and "The ai is taking a shortcut or workaround witouth asking th euser". Two lines, each its own rule. That's it.
+"The AI is blocked because something is missing or not working as expected" and "The AI is taking a shortcut or workaround without asking the user". Two lines, each its own rule. That's it. (The run above used the same two lines with my typos in them; the checker didn't mind.)
 
 Improvising is just the rule I care about most. The rule can be anything you can say in a sentence, and the checker reads it as written: "The AI says a test passed without showing the output." "The AI touches a file under /infra." "The AI answers in German." "The AI apologises." One line each, in your own words, and Thoughtcrime checks every thought and reply against all of them.
 
@@ -128,8 +132,8 @@ Hooks, not vibes.
 ### The two rules used in this post
 
 ```text
-The AI is blocked becuase something is msising or not working as expected
-The ai is taking a shortcut or workaround witouth asking th euser
+The AI is blocked because something is missing or not working as expected
+The AI is taking a shortcut or workaround without asking the user
 ```
 
 ### Claude Code setting for readable reasoning
