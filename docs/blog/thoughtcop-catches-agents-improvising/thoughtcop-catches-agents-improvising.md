@@ -61,7 +61,7 @@ Quiet, it's just a brain. The moment a rule matches it flashes red for three sec
 
 ![The flash: brain, bolt and count in red](images/menubar-flash.png)
 
-That is the entire UI most of the time. A brain, a bolt when something is unreviewed, and a number. There is also a one-line always-on-top ticker that scrolls the live reasoning; I keep it hidden and let the shield do the talking.
+That is the entire UI most of the time. A brain, a bolt when something is unreviewed, and a number. There is also a one-line always-on-top ticker that scrolls the live reasoning; I keep it hidden and let the brain do the talking.
 
 Hover the brain and you get the last catch without opening anything.
 
@@ -133,7 +133,7 @@ Without it, ThoughtCop still checks every reply, but the "worth flagging, but le
 - **It only sees what the provider writes.** Claude's stored "thinking" is a summary, not the raw chain of thought. A long reasoning pass can arrive as two sentences. Still, two sentences was enough here.
 - **The checker is a model too.** It will flag things you don't care about and it will miss things. In this session, rule one fired every time the agent reported being blocked, which is what I asked for, but you may want a narrower rule.
 - **Thoughts leave your machine.** Readable reasoning and replies are sent to the checker together with your latest request to the agent. `--local-only` turns external checking off and you get the live reasoning view without any alarms. Read `PRIVACY.md` before deciding.
-- **It is a mirror, not a fence.** ThoughtCop tells you what happened. It does not stop the agent. If you want enforcement, that is a hook, like I wrote about in a previous post.
+- **It is a mirror, not a fence.** ThoughtCop tells you what happened. It does not stop the agent. If you want enforcement, that is a hook, like I wrote about in *Claude Forgets My Rules After an Hour. A Hook Doesn't.* (airabbit.blog).
 - **macOS, Claude Code and Codex only.** It reads their local session files. Nothing is ever written under `~/.claude/`.
 
 ## The Bottom Line
@@ -142,7 +142,7 @@ Agents don't go rogue. They go helpful. Haiku wanted to finish the job, noticed 
 
 The reasoning is already on your disk. You might as well read it.
 
-Hooks, not vibes.
+Read the thoughts, not just the answer.
 
 ## Reference — everything to copy
 
