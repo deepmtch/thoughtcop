@@ -1,10 +1,10 @@
 ---
-title: My Coding Agent Knew It Was Blocked and Kept Going. A Menu-Bar App Caught the Thought
-published: false
+title: Catch Your AI Agent Breaking Your Rules While It Thinks using ThoughtCop
+published: true
 description: ThoughtCop is an open-source macOS menu-bar app that reads Claude Code and Codex reasoning and flags the moment an agent decides to work around a block.
 tags: ai, claudecode, opensource, macos
 cover_image: https://storage.ghost.io/c/b6/58/b65880bb-2a06-491e-bb4d-a6abeb13a649/content/images/2026/10/cover-big-1.png
-canonical_url: https://airabbit.blog/thoughtcop-reads-your-agents-thoughts/
+canonical_url: https://airabbit.blog/thoughtcop-reads-your-agents-thoughts
 ---
 
 *This is a short version. The full write-up, with every screenshot, the exact setup and ten rules to copy, is on my blog: **[airabbit.blog](https://airabbit.blog/thoughtcop-reads-your-agents-thoughts/)**.*
