@@ -1,20 +1,25 @@
 # ThoughtCop
 
-**Big Brother for your coding agent.**
+**Know the moment your AI coding agent breaks your rules, not after.**
 
-ThoughtCop is a free, open-source macOS menu-bar app. It reads what Claude Code and Codex are thinking while they work, checks every thought and reply against rules you write in plain English, and puts a red lightning bolt in your menu bar the moment one breaks a rule.
+AI coding agents quietly break the rules you give them: they skip tests, touch files they shouldn't, read secrets, claim "done" without proof, or work around a problem instead of asking. You usually find out at the end, from a polished summary.
+
+ThoughtCop is a free, open-source macOS menu-bar app that watches Claude Code and Codex while they work. You write **any rule** in plain English. ThoughtCop checks every thought and every reply against your rules and puts a red lightning bolt in your menu bar, with the exact quote, the moment one is broken.
+
+- **Any rule:** if you can say it in a sentence, ThoughtCop can check it
+- **Catches it early:** it reads the agent's reasoning, so it sees the decision before the summary
+- **Nothing to change:** no hook, no proxy, no wrapper around the agent
+- **Cheap:** a whole session of checks costs under two cents
 
 ![How ThoughtCop works](docs/blog/thoughtcop-catches-agents-improvising/images/how-it-works.png)
 
-## Why
+## A real catch
 
-Coding agents break your rules quietly. They work around a missing database instead of asking, skip a test, claim "done" without proof. You find out later, from a polished summary.
-
-The decision is usually visible earlier, in the agent's own reasoning:
+In a real run, Claude Code was told to run the test suite before committing. The test database wasn't available. Before writing a line, it thought:
 
 > "Running the test suite likely won't work … worth flagging, but let me make the edit first."
 
-ThoughtCop flagged that thought about a second after Claude Code wrote it.
+ThoughtCop flagged that thought about a second after it was written. That one was a workaround. The same check works for every other rule you write.
 
 ## What it looks like
 
