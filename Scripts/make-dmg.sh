@@ -21,10 +21,18 @@ cp -R .build/ThoughtCop.app "$stage/ThoughtCop.app"
     -output "$stage/ThoughtCop.app/Contents/MacOS/thoughtcop"
 /usr/bin/codesign --force --deep --sign - "$stage/ThoughtCop.app"
 ln -s /Applications "$stage/Applications"
+# The mounted disk shows the app icon too.
+cp Resources/ThoughtCop.icns "$stage/.VolumeIcon.icns"
+/usr/bin/SetFile -a C "$stage" 2>/dev/null || true
 
 rm -f "$out/ThoughtCop.dmg"
+rw="$work/rw.dmg"
 /usr/bin/hdiutil create -quiet -volname "ThoughtCop" -srcfolder "$stage" \
-    -fs HFS+ -format UDZO "$out/ThoughtCop.dmg"
+    -fs HFS+ -format UDRW "$rw"
+mount=$(/usr/bin/hdiutil attach -nobrowse "$rw" | /usr/bin/awk -F'\t' '/Volumes/{print $NF}')
+/usr/bin/SetFile -a C "$mount"
+/usr/bin/hdiutil detach -quiet "$mount"
+/usr/bin/hdiutil convert -quiet "$rw" -format UDZO -o "$out/ThoughtCop.dmg"
 
 # Leave the local development build for this Mac's own architecture.
 ./build.sh >/dev/null
