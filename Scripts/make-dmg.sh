@@ -34,6 +34,14 @@ mount=$(/usr/bin/hdiutil attach -nobrowse "$rw" | /usr/bin/awk -F'\t' '/Volumes/
 /usr/bin/hdiutil detach -quiet "$mount"
 /usr/bin/hdiutil convert -quiet "$rw" -format UDZO -o "$out/ThoughtCop.dmg"
 
+# The .dmg file itself shows the app icon in Finder. (Browsers drop this
+# icon when the file is downloaded; the mounted disk keeps its own icon.)
+/usr/bin/swift - "$out/ThoughtCop.dmg" Resources/ThoughtCop.icns <<'SWIFT'
+import AppKit
+let args = CommandLine.arguments
+NSWorkspace.shared.setIcon(NSImage(contentsOfFile: args[2]), forFile: args[1], options: [])
+SWIFT
+
 # Leave the local development build for this Mac's own architecture.
 ./build.sh >/dev/null
 /usr/bin/lipo -archs "$stage/ThoughtCop.app/Contents/MacOS/thoughtcop"
