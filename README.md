@@ -43,27 +43,29 @@ The whole run, from task to catch:
 
 ## Install
 
-Requires macOS 13 or newer and the Xcode Command Line Tools.
+You need macOS 13 or newer, the Xcode Command Line Tools (`xcode-select --install`) and Homebrew.
 
 ```bash
 git clone https://github.com/deepmtch/thoughtcop
 cd thoughtcop
 brew install zstd
-./Scripts/test.sh
+./build.sh
 open .build/ThoughtCop.app
 ```
 
-Then:
+The brain icon appears in your menu bar. Then:
 
-1. Add a **Groq** or **Cerebras** API key in **Settings › Keys**. It is stored in the macOS Keychain.
-2. Write your rules in **Settings › Rules**.
-3. For readable Claude Code reasoning, add this to `~/.claude/settings.json`:
+1. **Add a checker key.** Get a free key from [Groq](https://console.groq.com/keys) or [Cerebras](https://cloud.cerebras.ai), then paste it into **Settings › Keys** (menu-bar brain › Settings…). It is stored in the macOS Keychain.
+2. **Write your rules** in **Settings › Rules**, one per line. See [Rules](#rules) below for ideas.
+3. **Let Claude Code save readable thoughts.** Open `~/.claude/settings.json` and add `"showThinkingSummaries": true` inside the braces, for example:
 
-```json
-{"showThinkingSummaries": true}
-```
+   ```json
+   {
+     "showThinkingSummaries": true
+   }
+   ```
 
-Without it, ThoughtCop still checks every reply, but newer models write no readable thoughts to disk.
+   Without it, ThoughtCop still checks every reply, but newer Claude models don't write readable thoughts to disk. Codex needs no setting.
 
 ## Rules
 
