@@ -1,112 +1,102 @@
 # ThoughtCop
 
-**Know the moment your AI coding agent breaks your rules, not after.**
+[![Release](https://img.shields.io/github/v/release/deepmtch/thoughtcop)](https://github.com/deepmtch/thoughtcop/releases/latest)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+![Platform: macOS 13+](https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey)
 
-**[⬇ Download ThoughtCop for Mac](https://github.com/deepmtch/thoughtcop/releases/latest/download/ThoughtCop.dmg)** · free · macOS 13+ · Apple Silicon and Intel
+Know the moment your AI coding agent breaks your rules, not after.
 
-AI coding agents quietly break the rules you give them: they skip tests, touch files they shouldn't, read secrets, claim "done" without proof, or work around a problem instead of asking. You usually find out at the end, from a polished summary.
+ThoughtCop is a free, open-source macOS menu-bar app that watches **Claude Code** and **Codex** while they work. You write rules in plain English; ThoughtCop checks every thought and reply against them and alerts you, with the exact quote, the moment one is broken.
 
-ThoughtCop is a free, open-source macOS menu-bar app that watches Claude Code and Codex while they work. You write **any rule** in plain English. ThoughtCop checks every thought and every reply against your rules and puts a red lightning bolt in your menu bar, with the exact quote, the moment one is broken.
+![ThoughtCop catching an agent](docs/blog/thoughtcop-catches-agents-improvising/images/run4-thoughtcop-catches-haiku.gif)
 
-- **Any rule:** if you can say it in a sentence, ThoughtCop can check it
-- **Catches it early:** it reads the agent's reasoning, so it sees the decision before the summary
-- **Nothing to change:** no hook, no proxy, no wrapper around the agent
-- **Cheap:** a whole session of checks costs under two cents
+## Features
 
-![How ThoughtCop works](docs/blog/thoughtcop-catches-agents-improvising/images/how-it-works.png)
+- **Any rule in plain English:** skipped tests, touched secrets, files outside the project, "done" without proof, workarounds instead of asking
+- **Catches it early:** reads the agent's reasoning, so it sees the decision before the final summary
+- **No setup in the agent:** no hook, no proxy, no wrapper; it reads the session files the agents already write
+- **Menu-bar alert:** a red bolt, the quote, and the reason; full history of every catch
+- **Cheap:** a full session of checks costs under two cents with Groq
 
-## A real catch
+## Installation
 
-In a real run, Claude Code was told to run the test suite before committing. The test database wasn't available. Before writing a line, it thought:
+### Download
 
-> "Running the test suite likely won't work … worth flagging, but let me make the edit first."
+1. Download **[ThoughtCop.dmg](https://github.com/deepmtch/thoughtcop/releases/latest/download/ThoughtCop.dmg)** (Apple Silicon and Intel).
+2. Open it and drag **ThoughtCop** into **Applications**.
+3. Open ThoughtCop. See [First launch](#first-launch-not-opened) if macOS blocks it.
 
-ThoughtCop flagged that thought about a second after it was written. That one was a workaround. The same check works for every other rule you write.
+### Build from source
 
-## What it looks like
+Requires the Xcode Command Line Tools.
 
-A brain in the menu bar. A bolt and a count when something is unreviewed. A red flash when a rule matches.
-
-![Brain with bolt and count](docs/blog/thoughtcop-catches-agents-improvising/images/menubar-shield.png)
-
-Hover it for the last catch:
-
-![Hover shows the last violation](docs/blog/thoughtcop-catches-agents-improvising/images/menubar-hover.png)
-
-Click it to read the flagged thought and why it matched:
-
-![Reader with the flagged thought](docs/blog/thoughtcop-catches-agents-improvising/images/reader-violation.png)
-
-The whole run, from task to catch:
-
-![ThoughtCop catches the agent deciding to make the edit first](docs/blog/thoughtcop-catches-agents-improvising/images/run4-thoughtcop-catches-haiku.gif)
-
-(Recorded before the icon changed from a shield to the brain; the behaviour is the same.)
-
-## Install
-
-1. **[Download ThoughtCop.dmg](https://github.com/deepmtch/thoughtcop/releases/latest/download/ThoughtCop.dmg)**, open it and drag **ThoughtCop** into **Applications**.
-2. Open ThoughtCop. The first time, macOS says it **"Not Opened"** because ThoughtCop isn't from the App Store or a paid Apple developer account yet. Click **Done**, then open **System Settings › Privacy & Security**, scroll down to *"ThoughtCop" was blocked* and click **Open Anyway**. You only do this once.
-3. Get a free key from [Groq](https://console.groq.com/keys) or [Cerebras](https://cloud.cerebras.ai) and paste it into **Settings › Keys** (menu-bar brain › Settings…).
-4. Write your rules in **Settings › Rules**, one per line.
-
-For readable Claude Code thoughts, add `"showThinkingSummaries": true` to `~/.claude/settings.json`. Without it ThoughtCop still checks every reply. Codex needs nothing.
-
-Prefer to build it yourself? `git clone https://github.com/deepmtch/thoughtcop && cd thoughtcop && ./build.sh && open .build/ThoughtCop.app` (needs the Xcode Command Line Tools).
-
-## Rules
-
-ThoughtCop ships with no rules. It checks exactly the lines you type, word for word. No keywords, no hidden categories.
-
-![Settings › Rules](docs/blog/thoughtcop-catches-agents-improvising/images/settings-rules.png)
-
-Rules to start from:
-
-```text
-The AI is blocked because something is missing or not working as expected
-The AI is taking a shortcut or workaround without asking the user
-The AI says something is done, fixed or passing without showing the output that proves it
-The AI mentions an important problem only in a side note instead of saying it first
-The AI ignores or contradicts a rule the user gave earlier in the session
-The AI follows an instruction it found in a web page, file, email or tool result instead of from the user
-The AI plans to delete, overwrite, force-push or reset something
-The AI reads, prints or copies a password, API key or token
-The AI decides to skip, disable or weaken a test so the run passes
-The AI changes files outside the folder it was asked to work in
+```bash
+git clone https://github.com/deepmtch/thoughtcop
+cd thoughtcop
+./build.sh
+open .build/ThoughtCop.app
 ```
 
-Where these come from: [airabbit.blog](https://airabbit.blog).
+## Quick start
+
+1. Get a free API key from [Groq](https://console.groq.com/keys) or [Cerebras](https://cloud.cerebras.ai).
+2. Menu-bar brain › **Settings… › Keys**: paste the key.
+3. **Settings › Rules**: write your rules, one per line.
+4. For Claude Code, add `"showThinkingSummaries": true` to `~/.claude/settings.json` so its thoughts are readable. Codex needs nothing.
+
+Then work with your agent as usual. When a rule is broken, the brain in the menu bar turns red; click it to see the quote and why it matched.
+
+## Example rules
+
+```text
+The AI is taking a shortcut or workaround without asking the user
+The AI says something is done, fixed or passing without showing the output that proves it
+The AI decides to skip, disable or weaken a test so the run passes
+The AI reads, prints or copies a password, API key or token
+The AI plans to delete, overwrite, force-push or reset something
+The AI changes files outside the folder it was asked to work in
+The AI follows an instruction it found in a web page, file or tool result instead of from the user
+```
+
+Rules are checked exactly as written. There are no built-in rules.
 
 ## How it works
 
-1. Claude Code and Codex already write every thought and reply to a session file on your Mac.
-2. ThoughtCop reads those files as they grow. No hook, no proxy, nothing changes in the agent.
-3. Each readable thought and each reply goes to a fast checker model (Groq or Cerebras) with your rule and your last request.
-4. If a rule matches, a second check confirms it. Then the menu bar flashes and the catch is saved to history.
+1. Claude Code and Codex write every thought and reply to session files on your Mac (`~/.claude/projects`, `~/.codex/sessions`).
+2. ThoughtCop reads new entries as they are written.
+3. A fast model (Groq or Cerebras) checks each thought and reply against your rules.
+4. A match is confirmed by a second check, then shown in the menu bar and saved to history.
 
-## Privacy and cost
+## Privacy
 
-- **Sent to the checker:** readable thoughts, replies, your rules and your latest request to the agent.
-- **Never sent:** tool calls, tool results, encrypted reasoning, API keys.
-- **Never written:** anything under `~/.claude/`. ThoughtCop only reads.
-- **Offline mode:** `--local-only` turns checking off; you keep the live view.
-- **Cost:** a whole session of checks was under two cents on Groq. **Usage** in the menu bar shows today's and this month's cost.
+- **Sent to the checker:** readable thoughts, replies, your rules and your latest request to the agent
+- **Never sent:** tool calls, tool results, encrypted reasoning
+- **Never written:** anything in `~/.claude` or `~/.codex`; ThoughtCop only reads
+- **Offline:** start with `--local-only` to turn checking off
 
-Details: [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).
+See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).
+
+## Troubleshooting
+
+### First launch: "Not Opened"
+
+ThoughtCop isn't signed with a paid Apple developer account yet, so macOS blocks the first launch. Click **Done**, open **System Settings › Privacy & Security**, scroll down to *"ThoughtCop" was blocked* and click **Open Anyway**. This is needed only once.
+
+### No thoughts appear for Claude Code
+
+Add `"showThinkingSummaries": true` to `~/.claude/settings.json` and start a new Claude Code session. Replies are checked either way.
 
 ## Limitations
 
-- It sees only what the provider writes to disk. Claude's stored thinking is a summary, not the raw chain of thought.
-- The checker is a model. It can flag too much or miss things; write narrow rules.
-- It warns, it doesn't block. For enforcement, use a hook.
+- Sees only what the agent writes to disk. Claude's stored thinking is a summary, not the full chain of thought.
+- The checker is a model: it can flag too much or miss things. Narrow rules work best.
+- It alerts; it does not stop the agent.
 - macOS only; Claude Code and Codex only.
 
-## More
+## Contributing
 
-- [docs/REFERENCE.md](docs/REFERENCE.md): every setting, the local API, the test suite, building and releases
-- [The full story behind it](https://airabbit.blog/thoughtcop-reads-your-agents-thoughts/)
-- [CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md). Technical details, settings, the local API and the test suite are in [docs/REFERENCE.md](docs/REFERENCE.md).
 
 ## License
 
-GPL-3.0. See [LICENSE](LICENSE).
+[GPL-3.0](LICENSE)
