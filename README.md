@@ -2,6 +2,8 @@
 
 **Know the moment your AI coding agent breaks your rules, not after.**
 
+**[⬇ Download ThoughtCop for Mac](https://github.com/deepmtch/thoughtcop/releases/latest/download/ThoughtCop.dmg)** · free · macOS 13+ · Apple Silicon and Intel
+
 AI coding agents quietly break the rules you give them: they skip tests, touch files they shouldn't, read secrets, claim "done" without proof, or work around a problem instead of asking. You usually find out at the end, from a polished summary.
 
 ThoughtCop is a free, open-source macOS menu-bar app that watches Claude Code and Codex while they work. You write **any rule** in plain English. ThoughtCop checks every thought and every reply against your rules and puts a red lightning bolt in your menu bar, with the exact quote, the moment one is broken.
@@ -43,29 +45,14 @@ The whole run, from task to catch:
 
 ## Install
 
-You need macOS 13 or newer, the Xcode Command Line Tools (`xcode-select --install`) and Homebrew.
+1. **[Download ThoughtCop.dmg](https://github.com/deepmtch/thoughtcop/releases/latest/download/ThoughtCop.dmg)**, open it and drag **ThoughtCop** into **Applications**.
+2. Open ThoughtCop. The first time, macOS asks whether to open an app from the internet: right-click ThoughtCop › **Open**. (If macOS still blocks it: System Settings › Privacy & Security › **Open Anyway**.)
+3. Get a free key from [Groq](https://console.groq.com/keys) or [Cerebras](https://cloud.cerebras.ai) and paste it into **Settings › Keys** (menu-bar brain › Settings…).
+4. Write your rules in **Settings › Rules**, one per line.
 
-```bash
-git clone https://github.com/deepmtch/thoughtcop
-cd thoughtcop
-brew install zstd
-./build.sh
-open .build/ThoughtCop.app
-```
+For readable Claude Code thoughts, add `"showThinkingSummaries": true` to `~/.claude/settings.json`. Without it ThoughtCop still checks every reply. Codex needs nothing.
 
-The brain icon appears in your menu bar. Then:
-
-1. **Add a checker key.** Get a free key from [Groq](https://console.groq.com/keys) or [Cerebras](https://cloud.cerebras.ai), then paste it into **Settings › Keys** (menu-bar brain › Settings…). It is stored in the macOS Keychain.
-2. **Write your rules** in **Settings › Rules**, one per line. See [Rules](#rules) below for ideas.
-3. **Let Claude Code save readable thoughts.** Open `~/.claude/settings.json` and add `"showThinkingSummaries": true` inside the braces, for example:
-
-   ```json
-   {
-     "showThinkingSummaries": true
-   }
-   ```
-
-   Without it, ThoughtCop still checks every reply, but newer Claude models don't write readable thoughts to disk. Codex needs no setting.
+Prefer to build it yourself? `git clone https://github.com/deepmtch/thoughtcop && cd thoughtcop && ./build.sh && open .build/ThoughtCop.app` (needs the Xcode Command Line Tools).
 
 ## Rules
 

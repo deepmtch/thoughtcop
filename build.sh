@@ -3,7 +3,8 @@ set -eu
 
 build_dir=".build"
 module_cache="$build_dir/module-cache"
-target_arch=$(/usr/bin/uname -m)
+# THOUGHTCOP_ARCH overrides the build architecture (used by Scripts/make-dmg.sh).
+target_arch=${THOUGHTCOP_ARCH:-$(/usr/bin/uname -m)}
 mkdir -p "$module_cache"
 
 swiftc -O -swift-version 5 -target "$target_arch-apple-macos13.0" \
