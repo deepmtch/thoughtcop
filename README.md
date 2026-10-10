@@ -46,7 +46,7 @@ The whole run, from task to catch:
 ## Install
 
 1. **[Download ThoughtCop.dmg](https://github.com/deepmtch/thoughtcop/releases/latest/download/ThoughtCop.dmg)**, open it and drag **ThoughtCop** into **Applications**.
-2. Open ThoughtCop. The first time, macOS asks whether to open an app from the internet: right-click ThoughtCop › **Open**. (If macOS still blocks it: System Settings › Privacy & Security › **Open Anyway**.)
+2. Open ThoughtCop. The first time, macOS says it **"Not Opened"** because ThoughtCop isn't from the App Store or a paid Apple developer account yet. Click **Done**, then open **System Settings › Privacy & Security**, scroll down to *"ThoughtCop" was blocked* and click **Open Anyway**. You only do this once.
 3. Get a free key from [Groq](https://console.groq.com/keys) or [Cerebras](https://cloud.cerebras.ai) and paste it into **Settings › Keys** (menu-bar brain › Settings…).
 4. Write your rules in **Settings › Rules**, one per line.
 
